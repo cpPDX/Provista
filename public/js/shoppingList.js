@@ -132,17 +132,18 @@ function openAddListItemModal() {
 
   const itemInput = document.getElementById('list-item-input');
   const itemDropdown = document.getElementById('list-item-dropdown');
+  const isAdmin = window.appAuth?.isAdmin();
   attachItemAutocomplete(itemInput, itemDropdown, {
     onSelect(item) {
       document.getElementById('list-item-id').value = item._id;
     },
-    onCreateNew(name) {
+    onCreateNew: isAdmin ? (name) => {
       promptCreateItem(name, (item) => {
         itemInput.value = item.name;
         document.getElementById('list-item-id').value = item._id;
         openAddListItemModal();
       });
-    }
+    } : null
   });
 
   document.getElementById('add-list-form').addEventListener('submit', async (e) => {

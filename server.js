@@ -1,13 +1,26 @@
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
+const cookieParser = require('cookie-parser');
 const path = require('path');
+
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is required');
+  process.exit(1);
+}
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Routes
+// Auth routes (no auth middleware - these set/clear the cookie)
+app.use('/api/auth', require('./routes/auth'));
+
+// Household management
+app.use('/api/household', require('./routes/household'));
+
+// Data routes (all require auth via route-level middleware)
 app.use('/api/items', require('./routes/items'));
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/prices', require('./routes/prices'));
@@ -15,29 +28,22 @@ app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/shopping-list', require('./routes/shoppingList'));
 app.use('/api/spend', require('./routes/spend'));
 
-// Catch-all: serve index.html for SPA
+// Serve login page for /join route (join via QR code link)
+app.get('/join', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-
-// Seed database with initial items if collection is empty
-async function seedIfEmpty() {
-  const Item = require('./models/Item');
-  const count = await Item.countDocuments();
-  if (count > 0) return;
-
-  const seedData = require('./seeds/items.json');
-  await Item.insertMany(seedData);
-  console.log(`Seeded ${seedData.length} items into the database.`);
-}
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocerytracker';
 const PORT = process.env.PORT || 3000;
 
 mongoose.connect(MONGODB_URI)
-  .then(async () => {
+  .then(() => {
     console.log('Connected to MongoDB');
-    await seedIfEmpty();
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Server running on port ${PORT}`);
     });

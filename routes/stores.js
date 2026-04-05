@@ -1,21 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const Store = require('../models/Store');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 
-// GET /api/stores
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
-    const stores = await Store.find().sort({ name: 1 });
+    const stores = await Store.find({ householdId: req.user.householdId }).sort({ name: 1 });
     res.json(stores);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/stores
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const store = new Store(req.body);
+    const store = new Store({ ...req.body, householdId: req.user.householdId });
     await store.save();
     res.status(201).json(store);
   } catch (err) {
@@ -23,10 +22,13 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/stores/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const store = await Store.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    const store = await Store.findOneAndUpdate(
+      { _id: req.params.id, householdId: req.user.householdId },
+      req.body,
+      { new: true, runValidators: true }
+    );
     if (!store) return res.status(404).json({ error: 'Store not found' });
     res.json(store);
   } catch (err) {
@@ -34,10 +36,9 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/stores/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const store = await Store.findByIdAndDelete(req.params.id);
+    const store = await Store.findOneAndDelete({ _id: req.params.id, householdId: req.user.householdId });
     if (!store) return res.status(404).json({ error: 'Store not found' });
     res.json({ success: true });
   } catch (err) {

@@ -1,32 +1,40 @@
 const express = require('express');
 const router = express.Router();
 const InventoryItem = require('../models/InventoryItem');
+const { requireAuth, requireAdmin } = require('../middleware/auth');
 
-// GET /api/inventory
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const items = await InventoryItem.find({ quantity: { $gt: 0 } })
+    const items = await InventoryItem.find({ householdId: req.user.householdId, quantity: { $gt: 0 } })
       .populate('itemId', 'name category unit')
-      .sort({ 'itemId.name': 1 });
+      .sort({ updatedAt: -1 });
     res.json(items);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// POST /api/inventory - add or update inventory item
-router.post('/', async (req, res) => {
+router.post('/', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { itemId, quantity, unit, notes } = req.body;
-    let inv = await InventoryItem.findOne({ itemId });
+    let inv = await InventoryItem.findOne({ householdId: req.user.householdId, itemId });
     if (inv) {
       inv.quantity = quantity !== undefined ? quantity : inv.quantity;
       if (unit !== undefined) inv.unit = unit;
       if (notes !== undefined) inv.notes = notes;
       inv.lastUpdated = new Date();
+      inv.lastUpdatedBy = req.user._id;
       await inv.save();
     } else {
-      inv = new InventoryItem({ itemId, quantity: quantity || 0, unit, notes, lastUpdated: new Date() });
+      inv = new InventoryItem({
+        householdId: req.user.householdId,
+        itemId,
+        quantity: quantity || 0,
+        unit,
+        notes,
+        lastUpdated: new Date(),
+        lastUpdatedBy: req.user._id
+      });
       await inv.save();
     }
     await inv.populate('itemId', 'name category unit');
@@ -36,12 +44,14 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/inventory/:id
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const update = { ...req.body, lastUpdated: new Date() };
-    const inv = await InventoryItem.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
-      .populate('itemId', 'name category unit');
+    const update = { ...req.body, lastUpdated: new Date(), lastUpdatedBy: req.user._id };
+    const inv = await InventoryItem.findOneAndUpdate(
+      { _id: req.params.id, householdId: req.user.householdId },
+      update,
+      { new: true, runValidators: true }
+    ).populate('itemId', 'name category unit');
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
     res.json(inv);
   } catch (err) {
@@ -49,10 +59,9 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/inventory/:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const inv = await InventoryItem.findByIdAndDelete(req.params.id);
+    const inv = await InventoryItem.findOneAndDelete({ _id: req.params.id, householdId: req.user.householdId });
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
     res.json({ success: true });
   } catch (err) {

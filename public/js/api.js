@@ -7,6 +7,13 @@ const api = {
     };
     if (body !== undefined) opts.body = JSON.stringify(body);
     const res = await fetch('/api' + path, opts);
+
+    // Redirect to login on auth failure
+    if (res.status === 401) {
+      window.location.href = '/login.html';
+      throw new Error('Not authenticated');
+    }
+
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
@@ -16,7 +23,6 @@ const api = {
   put: (path, body) => api.request('PUT', path, body),
   delete: (path) => api.request('DELETE', path),
 
-  // Convenience methods
   items: {
     search: (q) => api.get(`/items?search=${encodeURIComponent(q)}`),
     list: () => api.get('/items'),
@@ -37,7 +43,10 @@ const api = {
     },
     history: (itemId) => api.get(`/prices/history/${itemId}`),
     compare: (itemId) => api.get(`/prices/compare/${itemId}`),
+    pending: () => api.get('/prices/pending'),
     create: (data) => api.post('/prices', data),
+    approve: (id, edits) => api.put(`/prices/${id}/approve`, edits || {}),
+    reject: (id) => api.delete(`/prices/${id}/reject`),
     delete: (id) => api.delete(`/prices/${id}`)
   },
   inventory: {
@@ -56,5 +65,13 @@ const api = {
   spend: {
     month: (month) => api.get(`/spend?month=${month}`),
     summary: () => api.get('/spend/summary')
+  },
+  household: {
+    get: () => api.get('/household'),
+    update: (data) => api.put('/household', data),
+    getInvite: () => api.get('/household/invite'),
+    regenerateInvite: () => api.post('/household/invite', {}),
+    removeMember: (id) => api.delete(`/household/members/${id}`),
+    updateMemberRole: (id, role) => api.put(`/household/members/${id}`, { role })
   }
 };

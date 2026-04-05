@@ -30,7 +30,7 @@
       <div id="shopping-list" class="card-list"></div>
       <div class="list-actions">
         <button class="btn btn-outline btn-sm" id="btn-clear-checked">Clear Checked</button>
-        <button class="btn btn-danger btn-sm" id="btn-clear-all">Clear All</button>
+        <button class="btn btn-danger btn-sm admin-only" id="btn-clear-all">Clear All</button>
       </div>
     </section>
 
@@ -41,7 +41,7 @@
       </header>
       <div class="scan-container">
         <div class="scan-intro">
-          <p class="text-muted">Take a photo of your receipt or upload an image. Items are processed on your device — no data is sent anywhere.</p>
+          <p class="text-muted">Take a photo or upload an image. Processing happens on your device — nothing is sent to a server.</p>
         </div>
         <div class="scan-buttons">
           <button class="btn btn-primary btn-lg" id="btn-camera">📷 Use Camera</button>
@@ -65,11 +65,12 @@
                 <div class="autocomplete-dropdown" id="scan-store-dropdown"></div>
               </div>
             </label>
-            <label>Date
-              <input type="date" id="scan-date" />
-            </label>
+            <label>Date <input type="date" id="scan-date" /></label>
           </div>
           <div id="scan-line-items"></div>
+          <div id="scan-member-note" class="callout-box" style="display:none">
+            You're submitting as a member — these entries will be pending admin review before appearing in price history.
+          </div>
           <button class="btn btn-primary btn-full" id="btn-save-scan">Save Confirmed Items</button>
         </div>
       </div>
@@ -85,7 +86,7 @@
           <button class="btn btn-icon" id="btn-next-month">&#8250;</button>
         </div>
       </header>
-      <p class="text-muted text-sm disclaimer">Only reflects logged &amp; scanned purchases — not all spending.</p>
+      <p class="text-muted text-sm disclaimer">Only reflects logged &amp; scanned approved purchases.</p>
       <div id="spend-total-card" class="total-card"></div>
       <canvas id="spend-chart" height="180"></canvas>
       <h2 class="section-title">By Category</h2>
@@ -97,27 +98,52 @@
     <!-- Tab: More -->
     <section class="tab-panel" id="tab-more">
       <header class="page-header">
-        <h1>More</h1>
+        <div>
+          <h1>More</h1>
+          <div id="user-label" class="text-muted text-sm"></div>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btn-logout">Sign Out</button>
       </header>
       <div class="more-menu">
-        <button class="more-item" data-section="inventory">
+        <!-- Admin-only pending review -->
+        <button class="more-item admin-only" data-section="pending" id="pending-review-btn" style="display:none">
+          <span class="more-icon">⏳</span>
+          <span>Pending Review</span>
+          <span id="pending-badge" class="pending-badge" style="display:none"></span>
+          <span class="chevron">›</span>
+        </button>
+        <button class="more-item admin-only" data-section="inventory">
           <span class="more-icon">🧺</span>
           <span>Inventory</span>
           <span class="chevron">›</span>
         </button>
-        <button class="more-item" data-section="items">
+        <button class="more-item admin-only" data-section="items">
           <span class="more-icon">🏷️</span>
           <span>Item Catalog</span>
           <span class="chevron">›</span>
         </button>
-        <button class="more-item" data-section="stores">
+        <button class="more-item admin-only" data-section="stores">
           <span class="more-icon">🏪</span>
           <span>Stores</span>
           <span class="chevron">›</span>
         </button>
+        <button class="more-item" data-section="household">
+          <span class="more-icon">👥</span>
+          <span>Household</span>
+          <span class="chevron">›</span>
+        </button>
       </div>
 
-      <!-- Inventory sub-section -->
+      <!-- Pending Review sub-section (admin+) -->
+      <div id="section-pending" class="sub-section" style="display:none">
+        <div class="sub-header">
+          <button class="btn btn-icon back-btn">‹</button>
+          <h2>Pending Review</h2>
+        </div>
+        <div id="pending-list" class="card-list"></div>
+      </div>
+
+      <!-- Inventory sub-section (admin+) -->
       <div id="section-inventory" class="sub-section" style="display:none">
         <div class="sub-header">
           <button class="btn btn-icon back-btn">‹</button>
@@ -127,7 +153,7 @@
         <div id="inventory-list" class="card-list"></div>
       </div>
 
-      <!-- Item Catalog sub-section -->
+      <!-- Item Catalog sub-section (admin+) -->
       <div id="section-items" class="sub-section" style="display:none">
         <div class="sub-header">
           <button class="btn btn-icon back-btn">‹</button>
@@ -140,7 +166,7 @@
         <div id="catalog-list" class="card-list"></div>
       </div>
 
-      <!-- Stores sub-section -->
+      <!-- Stores sub-section (admin+) -->
       <div id="section-stores" class="sub-section" style="display:none">
         <div class="sub-header">
           <button class="btn btn-icon back-btn">‹</button>
@@ -148,6 +174,15 @@
           <button class="btn btn-primary btn-sm" id="btn-add-store">+ Add Store</button>
         </div>
         <div id="stores-list" class="card-list"></div>
+      </div>
+
+      <!-- Household sub-section (all roles) -->
+      <div id="section-household" class="sub-section" style="display:none">
+        <div class="sub-header">
+          <button class="btn btn-icon back-btn">‹</button>
+          <h2>Household</h2>
+        </div>
+        <div id="household-content" style="padding:0 1rem 1rem"></div>
       </div>
     </section>
   </div>
@@ -170,9 +205,10 @@
       <span class="nav-icon">📊</span>
       <span>Spend</span>
     </button>
-    <button class="nav-item" data-tab="more">
+    <button class="nav-item" data-tab="more" id="nav-more">
       <span class="nav-icon">⋯</span>
       <span>More</span>
+      <span id="nav-pending-dot" class="nav-pending-dot" style="display:none"></span>
     </button>
   </nav>
 
@@ -190,7 +226,7 @@
   <!-- Toast -->
   <div id="toast" class="toast" style="display:none"></div>
 
-  <!-- Price History / Store Compare Panel -->
+  <!-- Item Detail Panel -->
   <div id="item-detail-panel" class="slide-panel" style="display:none">
     <div class="slide-panel-header">
       <button class="btn btn-icon" id="close-detail">‹</button>
@@ -208,6 +244,8 @@
     </div>
   </div>
 
+  <!-- Scripts -->
+  <script src="/js/auth.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/ui.js"></script>
   <script src="/js/autocomplete.js"></script>

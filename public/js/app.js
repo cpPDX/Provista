@@ -1,6 +1,42 @@
-// Main app: tab navigation and initialization
+// Main app: auth check, tab navigation, initialization
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Auth check — redirects to /login.html if not authenticated
+  const ok = await window.appAuth.load();
+  if (!ok) return;
+
+  const { user, household } = window.appAuth;
+
+  // Apply role class to body for CSS visibility rules
+  document.body.classList.add('role-' + user.role);
+
+  // Show user + household info in More tab header
+  const userLabel = document.getElementById('user-label');
+  if (userLabel) {
+    userLabel.textContent = `${user.name} · ${household?.name || ''} · ${capitalizeRole(user.role)}`;
+  }
+
+  // Show admin-only items in More menu
+  if (window.appAuth.isAdmin()) {
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+    // Check pending count on load
+    try {
+      const pending = await api.prices.pending();
+      updatePendingBadge(pending.length);
+    } catch (_) {}
+  }
+
+  // Logout
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    if (confirm('Sign out?')) await window.appAuth.logout();
+  });
+
+  // Wire member-only scan note
+  if (window.appAuth.isMember()) {
+    const note = document.getElementById('scan-member-note');
+    if (note) note.style.display = '';
+  }
+
   initNavigation();
   initModal();
   initPricesTab();
@@ -13,32 +49,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadPricesTab();
 });
 
+function capitalizeRole(role) {
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
+
 function initNavigation() {
-  const navItems = document.querySelectorAll('.nav-item');
-  navItems.forEach(item => {
-    item.addEventListener('click', async () => {
-      const tabId = item.dataset.tab;
-      switchTab(tabId);
-      item.dataset.loaded = 'true';
-    });
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => switchTab(item.dataset.tab));
   });
 }
 
 async function switchTab(tabId) {
-  // Hide all panels
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-
-  // Show selected
   document.getElementById('tab-' + tabId).classList.add('active');
   document.querySelector(`.nav-item[data-tab="${tabId}"]`).classList.add('active');
 
-  // Reset More sub-sections
-  if (tabId !== 'more') {
-    hideMoreSection();
-  }
+  if (tabId !== 'more') hideMoreSection();
 
-  // Load data for tab
   switch (tabId) {
     case 'prices': await loadPricesTab(); break;
     case 'list': await loadShoppingListTab(); break;

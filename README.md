@@ -1,15 +1,18 @@
 # Grocery Tracker
 
-A browser-based grocery price tracker with shopping list, inventory management, receipt scanning, and spend analytics. Runs on mobile.
+A browser-based grocery price tracker with household sharing, JWT auth, shopping list, inventory management, receipt scanning, and spend analytics. Runs on mobile.
 
 ## Features
 
+- **Auth & Households** — JWT auth (httpOnly cookies), multi-user households with Owner/Admin/Member roles
+- **Invite System** — 6-character invite codes + QR codes; 48-hour expiry, admin-regeneratable
 - **Price Tracking** — Log prices per item per store, compare stores, view trends over time
+- **Pending Approval** — Members submit prices for admin review; admins see badge + review queue
 - **Receipt Scanning** — OCR-powered receipt parsing via Tesseract.js (runs entirely in-browser)
 - **Shopping List** — Persistent list with best-price-per-store suggestions
 - **Spend Analytics** — Monthly spend totals with breakdowns by category and store
-- **Inventory** — Basic in-stock tracking with quantity management
-- **Item Catalog** — ~200 seeded common US grocery items; fully editable
+- **Inventory** — Basic in-stock tracking with quantity management (admin only)
+- **Item Catalog** — ~200 seeded common US grocery items per household; fully editable
 
 ## Tech Stack
 
@@ -39,7 +42,8 @@ npm install
 
 # 3. Configure environment
 cp .env.example .env
-# Edit .env with your MongoDB URI if not using localhost
+# Required: set JWT_SECRET to a long random string (e.g. openssl rand -hex 32)
+# Optional: set MONGODB_URI if not using localhost
 
 # 4. Start the server
 npm start
@@ -47,9 +51,15 @@ npm start
 npm run dev
 ```
 
-The app will be available at `http://localhost:3000`.
+The app will be available at `http://localhost:3000`. Open it and register — the first user creates a household and ~200 seed items are loaded automatically.
 
-On first run, the database is automatically seeded with ~200 common grocery items.
+### Roles summary
+
+| Role | Can do |
+|------|--------|
+| **Owner** | Full access + manage admin roles + rename/delete household |
+| **Admin** | Approve prices, manage inventory/catalog/stores, view invite codes |
+| **Member** | Submit prices (pending review), manage shopping list, view data |
 
 ---
 
@@ -89,6 +99,8 @@ On first run, the database is automatically seeded with ~200 common grocery item
 |----------|---------|-------------|
 | `MONGODB_URI` | `mongodb://localhost:27017/grocerytracker` | MongoDB connection string |
 | `PORT` | `3000` | HTTP port (auto-set by Railway) |
+| `JWT_SECRET` | *(required)* | Long random secret for signing JWTs |
+| `NODE_ENV` | `development` | Set to `production` for secure cookies |
 
 ---
 

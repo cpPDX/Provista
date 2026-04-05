@@ -567,3 +567,105 @@ canvas { display: block; width: 100%; padding: 0 1rem; }
 .text-danger { color: var(--danger); }
 .text-warning { color: var(--warning); }
 .text-right { text-align: right; }
+
+/* ===== Pending badge (nav dot + More item badge) ===== */
+.nav-pending-dot {
+  position: absolute;
+  top: 6px;
+  right: calc(50% - 14px);
+  width: 8px;
+  height: 8px;
+  background: var(--danger);
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+}
+.nav-item { position: relative; }
+
+.pending-badge {
+  background: var(--danger);
+  color: white;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  margin-left: auto;
+  margin-right: 0.25rem;
+}
+
+/* ===== Role visibility helpers ===== */
+/* These are toggled by JS after auth loads */
+.admin-only { display: none; }
+.member-only { display: none; }
+body.role-admin .admin-only { display: flex; }
+body.role-owner .admin-only { display: flex; }
+body.role-member .member-only { display: flex; }
+
+/* ===== Pending entry styles ===== */
+.badge-pending { background: #fef3c7; color: #92400e; }
+.badge-approved { background: #d1fae5; color: #065f46; }
+
+/* ===== Household / member list ===== */
+.member-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  box-shadow: var(--shadow);
+}
+.member-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  font-size: 0.9375rem;
+  flex-shrink: 0;
+}
+.member-info { flex: 1; min-width: 0; }
+.member-name { font-weight: 600; font-size: 0.9375rem; }
+.member-role { font-size: var(--text-sm); color: var(--text-muted); }
+.member-actions { display: flex; gap: 0.375rem; flex-shrink: 0; }
+
+.invite-code-display {
+  background: var(--bg);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  text-align: center;
+  margin: 0.75rem 0;
+}
+.invite-code-value {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  color: var(--primary);
+  font-family: 'Courier New', monospace;
+}
+.invite-code-expiry { font-size: var(--text-sm); color: var(--text-muted); margin-top: 0.375rem; }
+
+#qr-canvas {
+  display: block;
+  margin: 0.75rem auto 0;
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Pending review card ===== */
+.pending-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+  margin-bottom: 0.625rem;
+  border-left: 3px solid var(--warning);
+}
+.pending-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+.pending-card-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
