@@ -1,5 +1,5 @@
 // Receipt Scanning tab logic
-// Uses Tesseract.js loaded from CDN (see app.js script injection)
+// Uses Tesseract.js loaded on demand from CDN
 
 let scanState = {
   parsedLines: [],
@@ -22,7 +22,7 @@ function initScanTab() {
   fileInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    fileInput.value = ''; // reset so same file can be re-selected
+    fileInput.value = '';
     await processReceiptFile(file);
   });
 
@@ -43,12 +43,95 @@ function initScanTab() {
     }
   });
 
-  // Default today's date
   document.getElementById('scan-date').value = new Date().toISOString().slice(0, 10);
 }
 
+// Called when switching to the scan tab — loads pending section for admins
+async function loadScanTab() {
+  if (window.appAuth?.isAdmin()) {
+    await loadScanPendingSection();
+  }
+}
+
+async function loadScanPendingSection() {
+  const section = document.getElementById('scan-pending-section');
+  const container = document.getElementById('scan-pending-list');
+  if (!section || !container) return;
+  section.style.display = '';
+
+  try {
+    const entries = await api.prices.pending();
+    updatePendingBadge(entries.length);
+
+    if (!entries.length) {
+      container.innerHTML = emptyState('✅', 'No entries pending review.');
+      return;
+    }
+
+    container.innerHTML = entries.map(e => {
+      const name = e.itemId?.name || 'Unknown item';
+      const unit = e.itemId?.unit || 'unit';
+      const store = e.storeId?.name || 'Unknown store';
+      const submitter = e.submittedBy?.name || 'Unknown';
+      const hasSale = e.salePrice != null;
+      const hasCoupon = e.couponAmount != null && e.couponAmount > 0;
+      return `
+        <div class="pending-card" id="scan-pending-${e._id}">
+          <div class="pending-card-header">
+            <div>
+              <div style="font-weight:600">${name}</div>
+              <div class="text-muted text-sm">${store} &middot; ${formatDate(e.date)} &middot; by ${submitter}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-weight:700;font-size:1.1rem">${formatCurrency(e.finalPrice)}</div>
+              <div class="text-muted text-sm">${formatPPU(e.pricePerUnit, unit)}</div>
+              ${hasSale ? `<span class="badge badge-sale">Sale</span>` : ''}
+              ${hasCoupon ? `<span class="badge badge-coupon">Coupon</span>` : ''}
+            </div>
+          </div>
+          ${e.notes ? `<div class="text-muted text-sm">${e.notes}</div>` : ''}
+          <div class="pending-card-actions">
+            <button class="btn btn-outline btn-sm" onclick="openApproveScanModal('${e._id}', ${JSON.stringify(e).replace(/"/g, '&quot;')})">Edit &amp; Approve</button>
+            <button class="btn btn-primary btn-sm" onclick="quickApproveScan('${e._id}')">Approve ✓</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectScanEntry('${e._id}')">Reject</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = emptyState('⚠️', 'Failed to load pending entries.');
+  }
+}
+
+async function quickApproveScan(id) {
+  try {
+    await api.prices.approve(id);
+    showToast('Entry approved');
+    await loadScanPendingSection();
+    await loadPricesTab();
+  } catch (err) {
+    handleError(err, 'Failed to approve entry');
+  }
+}
+
+function openApproveScanModal(id, entryRaw) {
+  openApproveModal(id, entryRaw, async () => {
+    await loadScanPendingSection();
+    await loadPricesTab();
+  });
+}
+
+async function rejectScanEntry(id) {
+  if (!confirm('Reject and delete this entry?')) return;
+  try {
+    await api.prices.reject(id);
+    showToast('Entry rejected');
+    await loadScanPendingSection();
+  } catch (err) {
+    handleError(err, 'Failed to reject entry');
+  }
+}
+
 async function processReceiptFile(file) {
-  // Show image preview
   const reader = new FileReader();
   reader.onload = (e) => {
     scanState.imageDataUrl = e.target.result;
@@ -57,7 +140,6 @@ async function processReceiptFile(file) {
   };
   reader.readAsDataURL(file);
 
-  // Show progress
   document.getElementById('scan-results').style.display = 'none';
   document.getElementById('scan-progress').style.display = '';
 
@@ -66,7 +148,6 @@ async function processReceiptFile(file) {
     const parsed = parseReceiptText(text);
     scanState.parsedLines = parsed.lines;
 
-    // Try to auto-fill store name
     if (parsed.storeName) {
       document.getElementById('scan-store').value = parsed.storeName;
     }
@@ -84,11 +165,9 @@ async function processReceiptFile(file) {
 }
 
 async function runOCR(file) {
-  // Dynamically load Tesseract.js if not already loaded
   if (!window.Tesseract) {
     await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
   }
-
   const statusEl = document.getElementById('scan-status');
   const worker = await Tesseract.createWorker('eng', 1, {
     logger: (m) => {
@@ -98,7 +177,6 @@ async function runOCR(file) {
       }
     }
   });
-
   const result = await worker.recognize(file);
   await worker.terminate();
   return result.data.text;
@@ -118,7 +196,6 @@ function parseReceiptText(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const result = { lines: [], storeName: null, date: null };
 
-  // Try to extract date (various formats)
   const datePatterns = [
     /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/,
     /(\w{3,9})\s+(\d{1,2})[,\s]+(\d{4})/
@@ -128,21 +205,14 @@ function parseReceiptText(text) {
       const m = line.match(pat);
       if (m) {
         const d = new Date(m[0]);
-        if (!isNaN(d.getTime())) {
-          result.date = d.toISOString().slice(0, 10);
-          break;
-        }
+        if (!isNaN(d.getTime())) { result.date = d.toISOString().slice(0, 10); break; }
       }
     }
     if (result.date) break;
   }
 
-  // Heuristic: first non-empty line is often store name
-  if (lines.length > 0 && lines[0].length < 40) {
-    result.storeName = lines[0];
-  }
+  if (lines.length > 0 && lines[0].length < 40) result.storeName = lines[0];
 
-  // Parse item lines: look for lines with a price at the end
   const priceLineRe = /^(.+?)\s+\$?([\d]+\.[\d]{2})\s*[a-zA-Z]?$/;
   const skipWords = /^(total|subtotal|tax|change|cash|credit|debit|balance|thank|welcome|receipt|store|tel|phone|date|time|item|qty|amount|sale|savings|you\s+saved)/i;
 
@@ -153,7 +223,6 @@ function parseReceiptText(text) {
     const price = parseFloat(m[2]);
     if (skipWords.test(name)) continue;
     if (name.length < 2 || price <= 0 || price > 500) continue;
-
     result.lines.push({ rawName: name, price, discard: false, itemId: null, itemName: name });
   }
 
@@ -189,17 +258,13 @@ function renderScanLineItems(lines) {
         </div>
         <div class="form-row">
           <div class="form-group" style="margin-bottom:0">
-            <label style="font-size:0.75rem;color:var(--text-muted)">Price ($)</label>
+            <label style="font-size:0.75rem;color:var(--text-muted)">Price Paid ($)</label>
             <input class="form-control" type="number" step="0.01" min="0" id="scan-line-price-${i}" value="${line.price.toFixed(2)}" />
           </div>
           <div class="form-group" style="margin-bottom:0">
             <label style="font-size:0.75rem;color:var(--text-muted)">Quantity</label>
             <input class="form-control" type="number" step="any" min="0.01" id="scan-line-qty-${i}" value="1" />
           </div>
-        </div>
-        <div class="checkbox-row" style="padding:0.25rem 0">
-          <input type="checkbox" id="scan-line-sale-${i}" />
-          <label for="scan-line-sale-${i}" style="font-size:var(--text-sm)">On sale</label>
         </div>
       </div>
     </div>`).join('');
@@ -258,39 +323,118 @@ async function saveScannedItems() {
       return;
     }
 
-    const price = parseFloat(document.getElementById(`scan-line-price-${i}`).value);
+    // For receipts we treat the price paid as regularPrice = finalPrice
+    const regularPrice = parseFloat(document.getElementById(`scan-line-price-${i}`).value);
     const quantity = parseFloat(document.getElementById(`scan-line-qty-${i}`).value);
-    const isOnSale = document.getElementById(`scan-line-sale-${i}`).checked;
 
-    toSave.push({ itemId, storeId, price, quantity, isOnSale, date, source: 'receipt' });
+    toSave.push({ itemId, storeId, regularPrice, finalPrice: regularPrice, quantity, date, source: 'receipt' });
   }
 
-  if (!toSave.length) {
-    showToast('No items to save');
-    return;
-  }
-
-  if (!storeId) {
-    showToast('Please select or add a store');
-    return;
-  }
+  if (!toSave.length) { showToast('No items to save'); return; }
+  if (!storeId) { showToast('Please select or add a store'); return; }
 
   try {
     await Promise.all(toSave.map(entry => api.prices.create(entry)));
     showToast(`Saved ${toSave.length} price${toSave.length !== 1 ? 's' : ''} from receipt`);
-    // Reset
     document.getElementById('scan-results').style.display = 'none';
     document.getElementById('scan-preview').style.display = 'none';
     scanState.parsedLines = [];
     storeInput.value = '';
     delete storeInput.dataset.storeId;
-    // Refresh prices tab if visible
     if (document.getElementById('tab-prices').classList.contains('active')) {
       await loadPricesTab();
     }
+    // Refresh pending section after scan save (new pending entries may exist)
+    if (window.appAuth?.isAdmin()) await loadScanPendingSection();
   } catch (err) {
     handleError(err, 'Failed to save some items');
   }
+}
+
+// Shared approve modal (used by scan tab and more tab)
+function openApproveModal(id, entryRaw, onSuccess) {
+  const bodyHTML = `
+    <form id="approve-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Regular Price ($)</label>
+          <input class="form-control" type="number" step="0.01" min="0" id="approve-reg-price" value="${entryRaw.regularPrice}" required />
+        </div>
+        <div class="form-group">
+          <label>Quantity</label>
+          <input class="form-control" type="number" step="any" min="0.01" id="approve-qty" value="${entryRaw.quantity}" required />
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="approve-sale" ${entryRaw.salePrice != null ? 'checked' : ''} />
+        <label for="approve-sale">On Sale</label>
+      </div>
+      <div id="approve-sale-group" style="${entryRaw.salePrice != null ? '' : 'display:none'}">
+        <div class="form-group">
+          <label>Sale Price ($)</label>
+          <input class="form-control" type="number" step="0.01" min="0" id="approve-sale-price" value="${entryRaw.salePrice || ''}" />
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="approve-coupon" ${entryRaw.couponAmount != null ? 'checked' : ''} />
+        <label for="approve-coupon">Used Coupon</label>
+      </div>
+      <div id="approve-coupon-group" style="${entryRaw.couponAmount != null ? '' : 'display:none'}">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Coupon Amount ($)</label>
+            <input class="form-control" type="number" step="0.01" min="0" id="approve-coupon-amount" value="${entryRaw.couponAmount || ''}" />
+          </div>
+          <div class="form-group">
+            <label>Coupon Label</label>
+            <input class="form-control" id="approve-coupon-code" value="${entryRaw.couponCode || ''}" placeholder="e.g. Ibotta" />
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input class="form-control" type="date" id="approve-date" value="${new Date(entryRaw.date).toISOString().slice(0,10)}" />
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input class="form-control" id="approve-notes" value="${entryRaw.notes || ''}" />
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Approve</button>
+      </div>
+    </form>`;
+
+  openModal('Edit & Approve', bodyHTML);
+
+  document.getElementById('approve-sale').addEventListener('change', (e) => {
+    document.getElementById('approve-sale-group').style.display = e.target.checked ? '' : 'none';
+  });
+  document.getElementById('approve-coupon').addEventListener('change', (e) => {
+    document.getElementById('approve-coupon-group').style.display = e.target.checked ? '' : 'none';
+  });
+
+  document.getElementById('approve-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saleOn = document.getElementById('approve-sale').checked;
+    const couponOn = document.getElementById('approve-coupon').checked;
+    try {
+      await api.prices.approve(id, {
+        regularPrice: parseFloat(document.getElementById('approve-reg-price').value),
+        quantity: parseFloat(document.getElementById('approve-qty').value),
+        salePrice: saleOn ? (parseFloat(document.getElementById('approve-sale-price').value) || null) : null,
+        couponAmount: couponOn ? (parseFloat(document.getElementById('approve-coupon-amount').value) || null) : null,
+        couponCode: couponOn ? document.getElementById('approve-coupon-code').value.trim() : null,
+        date: document.getElementById('approve-date').value,
+        notes: document.getElementById('approve-notes').value.trim()
+      });
+      closeModal();
+      showToast('Entry approved');
+      if (onSuccess) await onSuccess();
+    } catch (err) {
+      handleError(err, 'Failed to approve entry');
+    }
+  });
 }
 
 function escapeHtml(str) {

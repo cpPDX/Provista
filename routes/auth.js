@@ -116,4 +116,53 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// PUT /api/auth/profile - update name and/or email (requires auth cookie)
+router.put('/profile', async (req, res) => {
+  const token = req.cookies?.token;
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const { name, email } = req.body;
+    if (!name && !email) return res.status(400).json({ error: 'Nothing to update' });
+
+    const update = {};
+    if (name) update.name = name.trim();
+    if (email) {
+      const existing = await User.findOne({ email: email.toLowerCase(), _id: { $ne: payload.userId } });
+      if (existing) return res.status(409).json({ error: 'Email already in use' });
+      update.email = email.toLowerCase().trim();
+    }
+
+    const user = await User.findByIdAndUpdate(payload.userId, update, { new: true }).select('-passwordHash');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/auth/password - change password (requires auth cookie)
+router.put('/password', async (req, res) => {
+  const token = req.cookies?.token;
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+    if (newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+
+    const user = await User.findById(payload.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const match = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+
+    user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await user.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

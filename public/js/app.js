@@ -70,6 +70,7 @@ async function switchTab(tabId) {
   switch (tabId) {
     case 'prices': await loadPricesTab(); break;
     case 'list': await loadShoppingListTab(); break;
+    case 'scan': await loadScanTab(); break;
     case 'spend': await loadSpendTab(); break;
   }
 }

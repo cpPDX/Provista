@@ -1,4 +1,4 @@
-// More tab: Inventory, Item Catalog, Stores, Pending Review, Household
+// More tab: Inventory, Item Catalog, Stores, Household, Account
 
 // ===== Navigation =====
 function showMoreSection(sectionId) {
@@ -12,144 +12,75 @@ function hideMoreSection() {
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
 }
 
-// ===== Pending Review (admin+) =====
-async function loadPendingReview() {
-  const container = document.getElementById('pending-list');
+// ===== Account Settings (all roles) =====
+async function loadAccountSettings() {
+  const container = document.getElementById('account-content');
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
-  try {
-    const entries = await api.prices.pending();
-    updatePendingBadge(entries.length);
-    if (!entries.length) {
-      container.innerHTML = emptyState('✅', 'No entries pending review.');
-      return;
-    }
-    container.innerHTML = entries.map(e => {
-      const name = e.itemId?.name || 'Unknown item';
-      const unit = e.itemId?.unit || 'unit';
-      const store = e.storeId?.name || 'Unknown store';
-      const submitter = e.submittedBy?.name || 'Unknown';
-      return `
-        <div class="pending-card" id="pending-${e._id}">
-          <div class="pending-card-header">
-            <div>
-              <div style="font-weight:600">${name}</div>
-              <div class="text-muted text-sm">${store} &middot; ${formatDate(e.date)} &middot; by ${submitter}</div>
-            </div>
-            <div style="text-align:right">
-              <div style="font-weight:700;font-size:1.1rem">${formatCurrency(e.price)}</div>
-              <div class="text-muted text-sm">${formatPPU(e.pricePerUnit, unit)}</div>
-              ${e.isOnSale ? `<span class="badge badge-sale">${e.saleLabel || 'Sale'}</span>` : ''}
-            </div>
-          </div>
-          ${e.notes ? `<div class="text-muted text-sm">${e.notes}</div>` : ''}
-          <div class="pending-card-actions">
-            <button class="btn btn-outline btn-sm" onclick="openApproveModal('${e._id}', ${JSON.stringify(e).replace(/"/g, '&quot;')})">Edit &amp; Approve</button>
-            <button class="btn btn-primary btn-sm" onclick="quickApprove('${e._id}')">Approve ✓</button>
-            <button class="btn btn-danger btn-sm" onclick="rejectEntry('${e._id}')">Reject</button>
-          </div>
-        </div>`;
-    }).join('');
-  } catch (err) {
-    container.innerHTML = emptyState('⚠️', 'Failed to load pending entries.');
-  }
-}
+  const auth = window.appAuth;
+  const user = auth.user;
 
-function updatePendingBadge(count) {
-  const badge = document.getElementById('pending-badge');
-  const dot = document.getElementById('nav-pending-dot');
-  const btn = document.getElementById('pending-review-btn');
-
-  if (count > 0) {
-    if (badge) { badge.textContent = count; badge.style.display = ''; }
-    if (dot) dot.style.display = '';
-    if (btn) btn.style.display = '';
-  } else {
-    if (badge) badge.style.display = 'none';
-    if (dot) dot.style.display = 'none';
-    // Keep button visible even at 0 so admins can check the queue
-    if (btn) btn.style.display = '';
-  }
-}
-
-async function quickApprove(id) {
-  try {
-    await api.prices.approve(id);
-    showToast('Entry approved');
-    await loadPendingReview();
-    await loadPricesTab();
-  } catch (err) {
-    handleError(err, 'Failed to approve entry');
-  }
-}
-
-function openApproveModal(id, entryRaw) {
-  // entryRaw may be HTML-escaped; parse from DOM
-  const card = document.getElementById('pending-' + id);
-  const bodyHTML = `
-    <form id="approve-form">
-      <div class="form-row">
-        <div class="form-group">
-          <label>Price ($)</label>
-          <input class="form-control" type="number" step="0.01" min="0" id="approve-price" value="${entryRaw.price}" required />
-        </div>
-        <div class="form-group">
-          <label>Quantity</label>
-          <input class="form-control" type="number" step="any" min="0.01" id="approve-qty" value="${entryRaw.quantity}" required />
-        </div>
+  container.innerHTML = `
+    <h3 style="margin:0 0 0.75rem;font-size:1rem">Profile</h3>
+    <form id="profile-form" style="margin-bottom:1.5rem">
+      <div class="form-group">
+        <label>Name</label>
+        <input class="form-control" id="profile-name" value="${escapeAttr(user.name)}" required />
       </div>
       <div class="form-group">
-        <label>Date</label>
-        <input class="form-control" type="date" id="approve-date" value="${new Date(entryRaw.date).toISOString().slice(0,10)}" />
+        <label>Email</label>
+        <input class="form-control" type="email" id="profile-email" value="${escapeAttr(user.email)}" required />
       </div>
-      <div class="checkbox-row">
-        <input type="checkbox" id="approve-sale" ${entryRaw.isOnSale ? 'checked' : ''} />
-        <label for="approve-sale">On sale</label>
+      <button type="submit" class="btn btn-primary btn-full">Save Profile</button>
+    </form>
+
+    <h3 style="margin:0 0 0.75rem;font-size:1rem">Change Password</h3>
+    <form id="password-form">
+      <div class="form-group">
+        <label>Current Password</label>
+        <input class="form-control" type="password" id="pw-current" required autocomplete="current-password" />
       </div>
       <div class="form-group">
-        <label>Sale Label</label>
-        <input class="form-control" id="approve-sale-label" value="${entryRaw.saleLabel || ''}" placeholder="e.g. Member deal" />
+        <label>New Password</label>
+        <input class="form-control" type="password" id="pw-new" required autocomplete="new-password" minlength="8" />
       </div>
       <div class="form-group">
-        <label>Notes</label>
-        <input class="form-control" id="approve-notes" value="${entryRaw.notes || ''}" />
+        <label>Confirm New Password</label>
+        <input class="form-control" type="password" id="pw-confirm" required autocomplete="new-password" />
       </div>
-      <div class="form-actions">
-        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Approve</button>
-      </div>
+      <button type="submit" class="btn btn-primary btn-full">Change Password</button>
     </form>`;
-  openModal('Edit & Approve', bodyHTML);
 
-  document.getElementById('approve-form').addEventListener('submit', async (e) => {
+  document.getElementById('profile-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    const name = document.getElementById('profile-name').value.trim();
+    const email = document.getElementById('profile-email').value.trim();
     try {
-      await api.prices.approve(id, {
-        price: parseFloat(document.getElementById('approve-price').value),
-        quantity: parseFloat(document.getElementById('approve-qty').value),
-        date: document.getElementById('approve-date').value,
-        isOnSale: document.getElementById('approve-sale').checked,
-        saleLabel: document.getElementById('approve-sale-label').value.trim(),
-        notes: document.getElementById('approve-notes').value.trim()
-      });
-      closeModal();
-      showToast('Entry approved');
-      await loadPendingReview();
-      await loadPricesTab();
+      const { user: updated } = await api.auth.updateProfile({ name, email });
+      auth.user.name = updated.name;
+      auth.user.email = updated.email;
+      document.getElementById('user-label').textContent = updated.name;
+      showToast('Profile updated');
     } catch (err) {
-      handleError(err, 'Failed to approve entry');
+      handleError(err, 'Failed to update profile');
     }
   });
-}
 
-async function rejectEntry(id) {
-  if (!confirm('Reject and delete this entry?')) return;
-  try {
-    await api.prices.reject(id);
-    showToast('Entry rejected');
-    await loadPendingReview();
-  } catch (err) {
-    handleError(err, 'Failed to reject entry');
-  }
+  document.getElementById('password-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const newPw = document.getElementById('pw-new').value;
+    const confirm = document.getElementById('pw-confirm').value;
+    if (newPw !== confirm) { showToast('Passwords do not match'); return; }
+    try {
+      await api.auth.changePassword({
+        currentPassword: document.getElementById('pw-current').value,
+        newPassword: newPw
+      });
+      document.getElementById('password-form').reset();
+      showToast('Password changed');
+    } catch (err) {
+      handleError(err, 'Failed to change password');
+    }
+  });
 }
 
 // ===== Inventory (admin+) =====
@@ -611,11 +542,11 @@ function initMoreTab() {
     btn.addEventListener('click', async () => {
       const section = btn.dataset.section;
       showMoreSection(section);
-      if (section === 'pending') await loadPendingReview();
-      else if (section === 'inventory') await loadInventory();
+      if (section === 'inventory') await loadInventory();
       else if (section === 'items') await loadCatalog();
       else if (section === 'stores') await loadStores();
       else if (section === 'household') await loadHousehold();
+      else if (section === 'account') await loadAccountSettings();
     });
   });
 
