@@ -1,0 +1,114 @@
+/* Auth page styles */
+body.auth-page {
+  background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 50%, #2563eb 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0));
+}
+
+.auth-container {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.auth-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: white;
+}
+.auth-logo-icon { font-size: 3rem; }
+.auth-logo h1 { font-size: 1.75rem; font-weight: 800; }
+
+.auth-card {
+  background: white;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+}
+
+.auth-tabs {
+  display: flex;
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 3px;
+  margin-bottom: 1.5rem;
+}
+.auth-tab {
+  flex: 1;
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: all 0.15s;
+}
+.auth-tab.active {
+  background: white;
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.auth-form .form-group { margin-bottom: 1rem; }
+
+.auth-error {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-sm);
+  padding: 0.625rem 0.875rem;
+  font-size: var(--text-sm);
+  margin-bottom: 0.75rem;
+}
+
+.auth-step-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.auth-back {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--primary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.household-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.household-choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  cursor: pointer;
+  background: white;
+}
+.household-choice-btn:active {
+  border-color: var(--primary);
+  background: #eff6ff;
+}
+.choice-icon { font-size: 1.75rem; flex-shrink: 0; }
+.choice-title { font-weight: 600; font-size: 0.9375rem; }
+.choice-desc { font-size: var(--text-sm); color: var(--text-muted); margin-top: 2px; }
