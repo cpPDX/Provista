@@ -67,6 +67,11 @@ function emptyState(icon, text) {
   return `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${text}</p></div>`;
 }
 
+function updatePendingBadge(count) {
+  const dot = document.getElementById('nav-pending-dot');
+  if (dot) dot.style.display = count > 0 ? '' : 'none';
+}
+
 // Best price callout for comparing two sizes
 function buildCallout(entries) {
   if (!entries || entries.length < 2) return '';

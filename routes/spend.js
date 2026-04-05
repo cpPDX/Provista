@@ -13,7 +13,7 @@ router.get('/summary', requireAuth, async (req, res) => {
 
     const results = await PriceEntry.aggregate([
       { $match: { householdId: req.user.householdId, status: 'approved', date: { $gte: sixMonthsAgo } } },
-      { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$price' } } },
+      { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$finalPrice' } } },
       { $sort: { '_id.year': 1, '_id.month': 1 } }
     ]);
 
@@ -47,11 +47,11 @@ router.get('/', requireAuth, async (req, res) => {
     const byStore = {};
 
     for (const e of entries) {
-      total += e.price;
+      total += e.finalPrice;
       const cat = e.itemId?.category || 'Unknown';
       const store = e.storeId?.name || 'Unknown';
-      byCategory[cat] = (byCategory[cat] || 0) + e.price;
-      byStore[store] = (byStore[store] || 0) + e.price;
+      byCategory[cat] = (byCategory[cat] || 0) + e.finalPrice;
+      byStore[store] = (byStore[store] || 0) + e.finalPrice;
     }
 
     const round = v => Math.round(v * 100) / 100;
