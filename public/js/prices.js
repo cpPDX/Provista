@@ -10,6 +10,14 @@ async function loadPricesTab() {
     const entries = await api.prices.list();
     pricesState.entries = entries;
     renderPricesList(entries);
+
+    // Load pending count for badge (admin only)
+    if (window.appAuth?.isAdmin()) {
+      try {
+        const pending = await api.prices.pending();
+        updatePendingBadge(pending.length);
+      } catch (_) {}
+    }
   } catch (err) {
     handleError(err, 'Failed to load prices');
   }
@@ -18,7 +26,7 @@ async function loadPricesTab() {
 function renderPricesList(entries) {
   const container = document.getElementById('prices-list');
   if (!entries.length) {
-    container.innerHTML = emptyState('💰', 'No price entries yet. Tap "+ Add Price" to log your first one.');
+    container.innerHTML = emptyState('💰', 'No approved price entries yet. Tap "+ Add Price" to get started.');
     return;
   }
 
@@ -36,7 +44,7 @@ function renderPricesList(entries) {
     const unit = item?.unit || 'unit';
     const saleTag = latest.isOnSale ? `<span class="badge badge-sale">${latest.saleLabel || 'Sale'}</span>` : '';
     return `
-      <div class="card" data-item-id="${item?._id}" onclick="openItemDetail('${item?._id}', '${(item?.name || '').replace(/'/g, "\\'")}')">
+      <div class="card" onclick="openItemDetail('${item?._id}', '${(item?.name || '').replace(/'/g, "\\'")}')">
         <div class="card-body">
           <div class="card-title">${item?.name || 'Unknown item'}</div>
           <div class="card-subtitle">${item?.category || ''} &middot; ${storeName} &middot; ${formatDate(latest.date)}</div>
@@ -53,14 +61,9 @@ function renderPricesList(entries) {
 async function openItemDetail(itemId, itemName) {
   const panel = document.getElementById('item-detail-panel');
   document.getElementById('detail-item-name').textContent = itemName;
-  panel.classList.add('open');
   panel.style.display = 'block';
-
-  // Load all detail data
-  await Promise.all([
-    loadDetailHistory(itemId),
-    loadDetailCompare(itemId)
-  ]);
+  panel.classList.add('open');
+  await Promise.all([loadDetailHistory(itemId), loadDetailCompare(itemId)]);
 }
 
 async function loadDetailHistory(itemId) {
@@ -68,43 +71,40 @@ async function loadDetailHistory(itemId) {
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
     const entries = await api.prices.history(itemId);
-    if (!entries.length) {
-      container.innerHTML = emptyState('📋', 'No price history yet.');
-      return;
-    }
+    if (!entries.length) { container.innerHTML = emptyState('📋', 'No price history yet.'); return; }
 
     const unit = entries[0].itemId?.unit || 'unit';
-    const minPPU = Math.min(...entries.map(e => e.pricePerUnit));
+    const approvedEntries = entries.filter(e => e.status === 'approved');
+    const minPPU = approvedEntries.length ? Math.min(...approvedEntries.map(e => e.pricePerUnit)) : null;
 
-    // Callout for different package sizes
     const sizes = [...new Set(entries.map(e => e.quantity))];
-    let callout = '';
-    if (sizes.length > 1) {
-      callout = buildCallout(entries);
-    }
+    let callout = sizes.length > 1 ? buildCallout(approvedEntries) : '';
 
     container.innerHTML = callout + entries.map(e => {
-      const isBest = Math.abs(e.pricePerUnit - minPPU) < 0.001;
+      const isBest = minPPU !== null && e.status === 'approved' && Math.abs(e.pricePerUnit - minPPU) < 0.001;
+      const isPending = e.status === 'pending';
       const saleTag = e.isOnSale ? `<span class="badge badge-sale">${e.saleLabel || 'Sale'}</span> ` : '';
-      const bestTag = isBest ? `<span class="badge badge-best">Best</span>` : '';
+      const statusTag = isPending ? `<span class="badge badge-pending">Pending review</span>` : (isBest ? `<span class="badge badge-best">Best</span>` : '');
+      const submitterNote = isPending ? `<div class="text-muted text-sm">Submitted by ${e.submittedBy?.name || 'you'}</div>` : '';
+      const canDelete = window.appAuth?.isAdmin() && !isPending;
       return `
-        <div class="card" style="margin-bottom:0.5rem">
+        <div class="card" style="margin-bottom:0.5rem;${isPending ? 'opacity:0.8;border-left:3px solid var(--warning)' : ''}">
           <div class="card-body">
             <div class="card-title">${e.storeId?.name || 'Unknown'}</div>
             <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity}</div>
-            <div style="margin-top:4px">${saleTag}${bestTag}</div>
-            ${e.notes ? `<div class="text-muted text-sm" style="margin-top:4px">${e.notes}</div>` : ''}
+            <div style="margin-top:4px">${saleTag}${statusTag}</div>
+            ${submitterNote}
+            ${e.notes ? `<div class="text-muted text-sm">${e.notes}</div>` : ''}
           </div>
           <div class="card-meta">
             <div class="price-big ${isBest ? 'price-best' : ''}">${formatCurrency(e.price)}</div>
             <div class="price-unit">${formatPPU(e.pricePerUnit, unit)}</div>
-            <button class="btn btn-icon text-danger" onclick="deletePriceEntry('${e._id}','${itemId}')" style="font-size:1rem;min-height:32px;min-width:32px">✕</button>
+            ${canDelete ? `<button class="btn btn-icon text-danger" onclick="deletePriceEntry('${e._id}','${itemId}')" style="font-size:1rem;min-height:32px;min-width:32px">✕</button>` : ''}
           </div>
         </div>`;
     }).join('');
 
-    // Load trend chart too
-    loadDetailTrend(itemId, entries);
+    loadDetailTrend(itemId, approvedEntries);
   } catch (err) {
     container.innerHTML = emptyState('⚠️', 'Failed to load history.');
   }
@@ -115,42 +115,28 @@ async function loadDetailCompare(itemId) {
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
     const entries = await api.prices.compare(itemId);
-    if (!entries.length) {
-      container.innerHTML = emptyState('🏪', 'No store comparisons yet.');
-      return;
-    }
+    if (!entries.length) { container.innerHTML = emptyState('🏪', 'No approved price comparisons yet.'); return; }
     const unit = entries[0].item?.unit || 'unit';
-    const minPPU = entries[0].pricePerUnit; // already sorted asc
-
-    let callout = '';
-    if (entries.length > 1) {
-      callout = buildCallout(entries);
-    }
-
-    container.innerHTML = callout + entries.map((e, i) => {
-      const isBest = i === 0;
-      return `
-        <div class="card" style="margin-bottom:0.5rem">
-          <div class="card-body">
-            <div class="card-title">${e.store?.name || 'Unknown'}</div>
-            <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity}</div>
-            ${isBest ? `<span class="badge badge-best">Best price</span>` : ''}
-          </div>
-          <div class="card-meta">
-            <div class="price-big ${isBest ? 'price-best' : ''}">${formatCurrency(e.price)}</div>
-            <div class="price-unit">${formatPPU(e.pricePerUnit, unit)}</div>
-          </div>
-        </div>`;
-    }).join('');
+    let callout = entries.length > 1 ? buildCallout(entries) : '';
+    container.innerHTML = callout + entries.map((e, i) => `
+      <div class="card" style="margin-bottom:0.5rem">
+        <div class="card-body">
+          <div class="card-title">${e.store?.name || 'Unknown'}</div>
+          <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity}</div>
+          ${i === 0 ? `<span class="badge badge-best">Best price</span>` : ''}
+        </div>
+        <div class="card-meta">
+          <div class="price-big ${i === 0 ? 'price-best' : ''}">${formatCurrency(e.price)}</div>
+          <div class="price-unit">${formatPPU(e.pricePerUnit, unit)}</div>
+        </div>
+      </div>`).join('');
   } catch (err) {
     container.innerHTML = emptyState('⚠️', 'Failed to load comparison.');
   }
 }
 
 function loadDetailTrend(itemId, entries) {
-  if (!entries || entries.length === 0) return;
-
-  // Group by store
+  if (!entries || !entries.length) return;
   const byStore = {};
   entries.forEach(e => {
     const sid = e.storeId?._id || e.storeId;
@@ -158,13 +144,7 @@ function loadDetailTrend(itemId, entries) {
     if (!byStore[sid]) byStore[sid] = { label: sname, points: [] };
     byStore[sid].points.push({ x: e.date, y: e.pricePerUnit, sale: e.isOnSale });
   });
-
-  const datasets = Object.values(byStore).map(s => ({
-    label: s.label,
-    points: s.points.sort((a, b) => new Date(a.x) - new Date(b.x))
-  }));
-
-  // Draw after tab is shown
+  const datasets = Object.values(byStore).map(s => ({ label: s.label, points: s.points.sort((a, b) => new Date(a.x) - new Date(b.x)) }));
   setTimeout(() => drawLineChart('trend-chart', datasets), 50);
 }
 
@@ -182,6 +162,8 @@ async function deletePriceEntry(entryId, itemId) {
 }
 
 function openAddPriceModal(prefillItem) {
+  const isAdmin = window.appAuth?.isAdmin();
+  const submitLabel = isAdmin ? 'Save Entry' : 'Submit for Review';
   const bodyHTML = `
     <form id="add-price-form">
       <div class="form-group">
@@ -228,20 +210,19 @@ function openAddPriceModal(prefillItem) {
         <label>Notes (optional)</label>
         <input class="form-control" id="price-notes" placeholder="e.g. Store brand" />
       </div>
+      ${!isAdmin ? `<div class="callout-box" style="margin-bottom:0.75rem">As a member, your entry will be pending admin review before it appears in price history.</div>` : ''}
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save Entry</button>
+        <button type="submit" class="btn btn-primary">${submitLabel}</button>
       </div>
     </form>`;
 
-  openModal('Log Price', bodyHTML);
+  openModal(isAdmin ? 'Log Price' : 'Submit Price', bodyHTML);
 
-  // On sale toggle
   document.getElementById('price-on-sale').addEventListener('change', (e) => {
     document.getElementById('sale-label-group').style.display = e.target.checked ? '' : 'none';
   });
 
-  // Item autocomplete
   const itemInput = document.getElementById('price-item-input');
   const itemDropdown = document.getElementById('price-item-dropdown');
   attachItemAutocomplete(itemInput, itemDropdown, {
@@ -249,32 +230,28 @@ function openAddPriceModal(prefillItem) {
       document.getElementById('price-item-id').value = item._id;
       document.getElementById('price-item-unit').value = item.unit;
     },
-    onCreateNew(name) {
+    onCreateNew: isAdmin ? (name) => {
       promptCreateItem(name, (item) => {
         itemInput.value = item.name;
         document.getElementById('price-item-id').value = item._id;
         document.getElementById('price-item-unit').value = item.unit;
         openAddPriceModal(item);
       });
-    }
+    } : null
   });
 
-  // Store autocomplete
   const storeInput = document.getElementById('price-store-input');
   const storeDropdown = document.getElementById('price-store-dropdown');
   attachStoreAutocomplete(storeInput, storeDropdown, {
-    onSelect(store) {
-      document.getElementById('price-store-id').value = store._id;
-    },
-    onCreateNew(name) {
+    onSelect(store) { document.getElementById('price-store-id').value = store._id; },
+    onCreateNew: isAdmin ? (name) => {
       promptCreateStore(name, (store) => {
         storeInput.value = store.name;
         document.getElementById('price-store-id').value = store._id;
       });
-    }
+    } : null
   });
 
-  // Form submit
   document.getElementById('add-price-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const itemId = document.getElementById('price-item-id').value;
@@ -282,13 +259,10 @@ function openAddPriceModal(prefillItem) {
     if (!itemId) { showToast('Please select an item from the list'); return; }
     if (!storeId) { showToast('Please select a store from the list'); return; }
 
-    const price = parseFloat(document.getElementById('price-amount').value);
-    const quantity = parseFloat(document.getElementById('price-qty').value);
     const data = {
-      itemId,
-      storeId,
-      price,
-      quantity,
+      itemId, storeId,
+      price: parseFloat(document.getElementById('price-amount').value),
+      quantity: parseFloat(document.getElementById('price-qty').value),
       isOnSale: document.getElementById('price-on-sale').checked,
       saleLabel: document.getElementById('price-sale-label').value.trim(),
       date: document.getElementById('price-date').value,
@@ -296,10 +270,14 @@ function openAddPriceModal(prefillItem) {
       source: 'manual'
     };
     try {
-      await api.prices.create(data);
+      const result = await api.prices.create(data);
       closeModal();
-      showToast('Price entry saved');
-      await loadPricesTab();
+      if (result.status === 'pending') {
+        showToast('Submitted for review');
+      } else {
+        showToast('Price entry saved');
+        await loadPricesTab();
+      }
     } catch (err) {
       handleError(err, 'Failed to save price entry');
     }
@@ -309,7 +287,6 @@ function openAddPriceModal(prefillItem) {
 function initPricesTab() {
   document.getElementById('btn-add-price').addEventListener('click', () => openAddPriceModal(null));
 
-  // Search filtering
   document.getElementById('price-search').addEventListener('input', (e) => {
     const q = e.target.value.toLowerCase();
     const filtered = pricesState.entries.filter(entry =>
@@ -320,7 +297,6 @@ function initPricesTab() {
     renderPricesList(filtered);
   });
 
-  // Detail panel tabs
   document.querySelectorAll('.detail-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.detail-tab').forEach(b => b.classList.remove('active'));
@@ -328,15 +304,9 @@ function initPricesTab() {
       btn.classList.add('active');
       const target = document.getElementById('detail-' + btn.dataset.detail);
       if (target) target.classList.add('active');
-      if (btn.dataset.detail === 'trend') {
-        // Redraw trend chart
-        const canvas = document.getElementById('trend-chart');
-        if (canvas && canvas._datasets) drawLineChart('trend-chart', canvas._datasets);
-      }
     });
   });
 
-  // Close detail panel
   document.getElementById('close-detail').addEventListener('click', () => {
     const panel = document.getElementById('item-detail-panel');
     panel.classList.remove('open');

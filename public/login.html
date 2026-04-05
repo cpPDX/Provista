@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Grocery Tracker — Sign In</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/auth.css" />
+</head>
+<body class="auth-page">
+  <div class="auth-container">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">🛒</div>
+      <h1>Grocery Tracker</h1>
+    </div>
+
+    <!-- Step 1: Login / Register choice -->
+    <div class="auth-card" id="step-mode">
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-mode="login">Sign In</button>
+        <button class="auth-tab" data-mode="register">Create Account</button>
+      </div>
+
+      <!-- Login form -->
+      <form id="login-form" class="auth-form">
+        <div class="form-group">
+          <label>Email</label>
+          <input class="form-control" type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input class="form-control" type="password" name="password" required placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div id="login-error" class="auth-error" style="display:none"></div>
+        <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+      </form>
+
+      <!-- Register form -->
+      <form id="register-form" class="auth-form" style="display:none">
+        <div class="form-group">
+          <label>Your Name</label>
+          <input class="form-control" type="text" name="name" required placeholder="Jane Smith" autocomplete="name" />
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input class="form-control" type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="form-group">
+          <label>Password <span class="text-muted text-sm">(min. 8 chars)</span></label>
+          <input class="form-control" type="password" name="password" required minlength="8" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+        <div id="register-error" class="auth-error" style="display:none"></div>
+        <button type="submit" class="btn btn-primary btn-full">Continue</button>
+      </form>
+    </div>
+
+    <!-- Step 2: Create or Join household -->
+    <div class="auth-card" id="step-household" style="display:none">
+      <h2 class="auth-step-title">Set up your household</h2>
+      <p class="text-muted text-sm" style="margin-bottom:1.25rem">A household lets you share prices and shopping lists with family or housemates.</p>
+      <div class="household-choice">
+        <button class="household-choice-btn" id="btn-create-household">
+          <span class="choice-icon">🏠</span>
+          <div>
+            <div class="choice-title">Create a household</div>
+            <div class="choice-desc">Start fresh as the household owner</div>
+          </div>
+        </button>
+        <button class="household-choice-btn" id="btn-join-household">
+          <span class="choice-icon">🔗</span>
+          <div>
+            <div class="choice-title">Join a household</div>
+            <div class="choice-desc">Enter an invite code from a household member</div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Step 3a: Create household -->
+    <div class="auth-card" id="step-create" style="display:none">
+      <button class="auth-back" id="back-from-create">‹ Back</button>
+      <h2 class="auth-step-title">Name your household</h2>
+      <form id="create-household-form" class="auth-form">
+        <div class="form-group">
+          <label>Household Name</label>
+          <input class="form-control" type="text" name="householdName" required placeholder="e.g. The Smith Family" autocomplete="off" />
+        </div>
+        <div id="create-error" class="auth-error" style="display:none"></div>
+        <button type="submit" class="btn btn-primary btn-full">Create Household</button>
+      </form>
+    </div>
+
+    <!-- Step 3b: Join household -->
+    <div class="auth-card" id="step-join" style="display:none">
+      <button class="auth-back" id="back-from-join">‹ Back</button>
+      <h2 class="auth-step-title">Enter invite code</h2>
+      <p class="text-muted text-sm" style="margin-bottom:1.25rem">Ask a household admin for their 6-character invite code.</p>
+      <form id="join-household-form" class="auth-form">
+        <div class="form-group">
+          <label>Invite Code</label>
+          <input class="form-control invite-code-input" type="text" name="inviteCode" required
+            placeholder="XXXXXX" maxlength="6" autocomplete="off"
+            style="text-transform:uppercase;letter-spacing:0.2em;font-size:1.5rem;text-align:center" />
+        </div>
+        <div id="join-error" class="auth-error" style="display:none"></div>
+        <button type="submit" class="btn btn-primary btn-full">Join Household</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Prefill invite code from URL param (QR code link)
+    const urlCode = new URLSearchParams(window.location.search).get('code');
+
+    let pendingUser = null; // { name, email, password } from register step
+
+    // Tab switching
+    document.querySelectorAll('.auth-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const mode = tab.dataset.mode;
+        document.getElementById('login-form').style.display = mode === 'login' ? '' : 'none';
+        document.getElementById('register-form').style.display = mode === 'register' ? '' : 'none';
+        clearErrors();
+      });
+    });
+
+    function clearErrors() {
+      document.querySelectorAll('.auth-error').forEach(el => el.style.display = 'none');
+    }
+
+    function showError(id, msg) {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.style.display = '';
+    }
+
+    function showStep(id) {
+      ['step-mode', 'step-household', 'step-create', 'step-join'].forEach(s => {
+        document.getElementById(s).style.display = s === id ? '' : 'none';
+      });
+    }
+
+    async function postJSON(url, body) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Something went wrong');
+      return data;
+    }
+
+    // Login
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors();
+      const form = e.target;
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      try {
+        await postJSON('/api/auth/login', {
+          email: form.email.value,
+          password: form.password.value
+        });
+        window.location.href = '/';
+      } catch (err) {
+        showError('login-error', err.message);
+        btn.disabled = false;
+        btn.textContent = 'Sign In';
+      }
+    });
+
+    // Register step 1
+    document.getElementById('register-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      clearErrors();
+      const form = e.target;
+      if (form.password.value.length < 8) {
+        showError('register-error', 'Password must be at least 8 characters');
+        return;
+      }
+      pendingUser = {
+        name: form.name.value.trim(),
+        email: form.email.value.trim(),
+        password: form.password.value
+      };
+      // If code in URL, go straight to join step
+      if (urlCode) {
+        showStep('step-join');
+        document.querySelector('[name=inviteCode]').value = urlCode.toUpperCase();
+      } else {
+        showStep('step-household');
+      }
+    });
+
+    // Create / Join choice
+    document.getElementById('btn-create-household').addEventListener('click', () => showStep('step-create'));
+    document.getElementById('btn-join-household').addEventListener('click', () => showStep('step-join'));
+    document.getElementById('back-from-create').addEventListener('click', () => showStep('step-household'));
+    document.getElementById('back-from-join').addEventListener('click', () => {
+      showStep(urlCode ? 'step-mode' : 'step-household');
+    });
+
+    // Create household
+    document.getElementById('create-household-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors();
+      const btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      btn.textContent = 'Creating…';
+      try {
+        await postJSON('/api/auth/register', {
+          ...pendingUser,
+          action: 'create',
+          householdName: e.target.householdName.value.trim()
+        });
+        window.location.href = '/';
+      } catch (err) {
+        showError('create-error', err.message);
+        btn.disabled = false;
+        btn.textContent = 'Create Household';
+      }
+    });
+
+    // Join household
+    document.getElementById('join-household-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearErrors();
+      const btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      btn.textContent = 'Joining…';
+      try {
+        await postJSON('/api/auth/register', {
+          ...pendingUser,
+          action: 'join',
+          inviteCode: e.target.inviteCode.value.trim()
+        });
+        window.location.href = '/';
+      } catch (err) {
+        showError('join-error', err.message);
+        btn.disabled = false;
+        btn.textContent = 'Join Household';
+      }
+    });
+
+    // Force uppercase on invite code input
+    document.querySelector('[name=inviteCode]').addEventListener('input', function() {
+      this.value = this.value.toUpperCase();
+    });
+  </script>
+</body>
+</html>
