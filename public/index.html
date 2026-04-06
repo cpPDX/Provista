@@ -14,13 +14,22 @@
     <!-- Tab: Prices -->
     <section class="tab-panel active" id="tab-prices">
       <header class="page-header">
-        <h1>Prices</h1>
-        <button class="btn btn-primary btn-sm" id="btn-add-price">+ Add Price</button>
+        <h1>Product Prices</h1>
+        <div class="price-add-actions">
+          <button class="btn btn-primary btn-sm" id="btn-add-price">+ Log Price</button>
+          <button class="btn btn-outline btn-sm" id="btn-scan-receipt">📷 Scan</button>
+          <button class="btn btn-outline btn-sm" id="btn-open-csv-import">📂 Import</button>
+        </div>
       </header>
       <div class="search-bar">
         <input type="text" id="price-search" placeholder="Search items..." autocomplete="off" />
       </div>
       <div id="prices-list" class="card-list"></div>
+      <!-- Pending Review section (admin+ only) -->
+      <div id="scan-pending-section" class="admin-only" style="display:none; padding: 0 0 1rem;">
+        <h2 class="section-title">Pending Review</h2>
+        <div id="scan-pending-list" class="card-list"></div>
+      </div>
     </section>
 
     <!-- Tab: Shopping List -->
@@ -37,9 +46,10 @@
       </div>
     </section>
 
-    <!-- Tab: Scan -->
+    <!-- Tab: Scan (not in nav — accessed via Prices tab Scan button) -->
     <section class="tab-panel" id="tab-scan">
       <header class="page-header">
+        <button class="btn btn-icon" id="btn-scan-back">‹</button>
         <h1>Scan Receipt</h1>
       </header>
       <div class="scan-container">
@@ -92,11 +102,6 @@
         </div>
       </div>
 
-      <!-- Pending Review section (admin+ only, shown below scan UI) -->
-      <div id="scan-pending-section" class="admin-only" style="display:none; padding: 0 0 1rem;">
-        <h2 class="section-title">Pending Review</h2>
-        <div id="scan-pending-list" class="card-list"></div>
-      </div>
     </section>
 
     <!-- Tab: Spend -->
@@ -135,7 +140,7 @@
         </button>
         <button class="more-item admin-only" data-section="items">
           <span class="more-icon">🏷️</span>
-          <span>Item Catalog</span>
+          <span>Product Catalog</span>
           <span class="chevron">›</span>
         </button>
         <button class="more-item admin-only" data-section="stores">
@@ -158,6 +163,11 @@
           <span>Continue Setup</span>
           <span class="chevron">›</span>
         </button>
+        <button class="more-item admin-only" id="btn-more-csv-import">
+          <span class="more-icon">📂</span>
+          <span>Import Prices from CSV</span>
+          <span class="chevron">›</span>
+        </button>
         <button class="more-item" id="btn-app-tour">
           <span class="more-icon">🗺️</span>
           <span>App Tour</span>
@@ -175,11 +185,11 @@
         <div id="inventory-list" class="card-list"></div>
       </div>
 
-      <!-- Item Catalog sub-section (admin+) -->
+      <!-- Product Catalog sub-section (admin+) -->
       <div id="section-items" class="sub-section" style="display:none">
         <div class="sub-header">
           <button class="btn btn-icon back-btn">‹</button>
-          <h2>Item Catalog</h2>
+          <h2>Product Catalog</h2>
           <button class="btn btn-primary btn-sm" id="btn-add-item-catalog">+ Add Item</button>
         </div>
         <div class="search-bar">
@@ -222,16 +232,12 @@
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="prices">
       <span class="nav-icon">💰</span>
-      <span>Prices</span>
+      <span>Product Prices</span>
+      <span id="nav-pending-dot" class="nav-pending-dot" style="display:none"></span>
     </button>
     <button class="nav-item" data-tab="list">
       <span class="nav-icon">📋</span>
-      <span>List</span>
-    </button>
-    <button class="nav-item" data-tab="scan">
-      <span class="nav-icon">📷</span>
-      <span>Scan</span>
-      <span id="nav-pending-dot" class="nav-pending-dot" style="display:none"></span>
+      <span>Shopping List</span>
     </button>
     <button class="nav-item" data-tab="spend">
       <span class="nav-icon">📊</span>

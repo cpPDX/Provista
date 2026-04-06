@@ -102,6 +102,11 @@ a { color: var(--primary); text-decoration: none; }
   font-weight: 800;
   letter-spacing: -0.03em;
 }
+.price-add-actions {
+  display: flex;
+  gap: 0.375rem;
+  flex-shrink: 0;
+}
 
 /* ===== Bottom Navigation ===== */
 .bottom-nav {
@@ -236,6 +241,7 @@ a { color: var(--primary); text-decoration: none; }
 .badge-sale    { background: rgba(251,191,36,0.12);  color: #fbbf24; }
 .badge-coupon  { background: rgba(192,132,252,0.12); color: #c084fc; }
 .badge-best    { background: rgba(52,211,153,0.12);  color: #34d399; }
+.badge-organic { background: rgba(52,211,153,0.12);  color: #34d399; }
 .badge-no-data { background: rgba(255,255,255,0.06); color: var(--text-muted); }
 
 /* ===== Price display ===== */
@@ -862,8 +868,8 @@ body.role-member .member-only { display: flex; }
   50% { box-shadow: 0 0 0 8px rgba(168,85,247,0); }
 }
 
-/* Wizard tooltip variant */
-.wizard-tooltip { z-index: 501; }
+/* Wizard tooltip variant — below modal (200) so dialogs appear above it */
+.wizard-tooltip { z-index: 110; }
 .wizard-step-badge {
   display: inline-block;
   background: var(--primary-bg);

@@ -11,11 +11,10 @@ async function loadPricesTab() {
     pricesState.entries = entries;
     renderPricesList(entries);
 
-    // Load pending count for badge (admin only)
+    // Load pending review section (moved from scan tab) and badge count
     if (window.appAuth?.isAdmin()) {
       try {
-        const pending = await api.prices.pending();
-        updatePendingBadge(pending.length);
+        await loadScanPendingSection();
       } catch (_) {}
     }
   } catch (err) {
@@ -44,7 +43,9 @@ function renderPricesList(entries) {
     const unit = item?.unit || 'unit';
     const hasSale = latest.salePrice != null;
     const hasCoupon = latest.couponAmount != null && latest.couponAmount > 0;
+    const isOrganic = item?.isOrganic;
     const badges = [
+      isOrganic ? `<span class="badge badge-organic">Organic</span>` : '',
       hasSale ? `<span class="badge badge-sale">Sale</span>` : '',
       hasCoupon ? `<span class="badge badge-coupon">Coupon</span>` : ''
     ].filter(Boolean).join(' ');

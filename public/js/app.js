@@ -49,12 +49,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadPricesTab();
 
   // Setup wizard for new household owners
+  const resumeBtn = document.getElementById('btn-resume-setup');
   if (shouldShowSetupWizard()) {
-    // Show resume button in More menu
-    const resumeBtn = document.getElementById('btn-resume-setup');
+    // First login after household creation — auto-start and show resume button
     if (resumeBtn) resumeBtn.style.display = '';
-    // Auto-start wizard on first load
     setTimeout(() => startSetupWizard(), 500);
+  } else if (shouldShowResumeButton()) {
+    // Wizard not done but not a fresh creation — just show resume button
+    if (resumeBtn) resumeBtn.style.display = '';
   }
 });
 
@@ -66,13 +68,20 @@ function initNavigation() {
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => switchTab(item.dataset.tab));
   });
+
+  // Scan tab accessed via Prices header — not in bottom nav
+  document.getElementById('btn-scan-receipt')?.addEventListener('click', () => switchTab('scan'));
+  document.getElementById('btn-scan-back')?.addEventListener('click', () => switchTab('prices'));
+  document.getElementById('btn-open-csv-import')?.addEventListener('click', () => openCsvImportModal());
 }
 
 async function switchTab(tabId) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + tabId).classList.add('active');
-  document.querySelector(`.nav-item[data-tab="${tabId}"]`).classList.add('active');
+  // Scan tab has no nav button — skip nav highlight for it
+  const navBtn = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
+  if (navBtn) navBtn.classList.add('active');
 
   if (tabId !== 'more') hideMoreSection();
 

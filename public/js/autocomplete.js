@@ -172,6 +172,10 @@ async function promptCreateItem(name, onCreated) {
           </datalist>
         </div>
       </div>
+      <div class="form-group" style="display:flex;align-items:center;gap:0.5rem">
+        <input type="checkbox" name="isOrganic" id="new-item-organic" />
+        <label for="new-item-organic" style="margin:0;font-weight:500">Organic product</label>
+      </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary">Create Item</button>
@@ -187,6 +191,7 @@ async function promptCreateItem(name, onCreated) {
       name: form.name.value.trim(),
       category: form.category.value.trim(),
       unit: form.unit.value.trim(),
+      isOrganic: form.isOrganic.checked,
       isSeeded: false
     };
     try {

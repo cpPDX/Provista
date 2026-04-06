@@ -1,22 +1,22 @@
-// CSV Price Import — parser, importer, and template download
+// CSV Price Import — parser, importer, template download, and modal UI
 
-const CSV_COLUMNS = ['item_name', 'store_name', 'regular_price', 'sale_price', 'coupon_amount', 'coupon_code', 'quantity', 'date', 'notes'];
+const CSV_COLUMNS = ['item_name', 'category', 'unit', 'store_name', 'regular_price',
+  'sale_price', 'coupon_amount', 'coupon_code', 'quantity', 'date', 'notes', 'is_organic'];
 
 const CSV_EXAMPLE_ROWS = [
-  ['Whole Milk 1gal', 'Costco', '4.99', '', '', '', '1', '2026-04-01', ''],
-  ['Sourdough Bread', 'Trader Joes', '3.49', '2.99', '0.50', 'Ibotta', '2', '2026-04-01', 'On sale this week'],
+  ['Whole Milk 1gal', 'Dairy', 'gal', 'Costco', '4.99', '', '', '', '1', '2026-04-01', '', 'false'],
+  ['Sourdough Bread', 'Bakery', 'loaf', 'Trader Joes', '3.49', '2.99', '0.50', 'Ibotta', '2', '2026-04-01', 'On sale this week', 'false'],
+  ['Organic Carrots', 'Produce', 'lb', 'Fred Meyer', '2.49', '', '', '', '1', '2026-04-01', '', 'true'],
 ];
 
 /**
  * Parse CSV text into an array of row objects.
  * Handles quoted fields and basic CSV edge cases.
- * Returns [{ item_name, store_name, regular_price, sale_price, coupon_amount, coupon_code, quantity, date, notes, _rowNum }]
  */
 function parseCsvPrices(text) {
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   if (lines.length < 2) return [];
 
-  // Parse a single CSV line respecting quoted fields
   function parseLine(line) {
     const fields = [];
     let cur = '';
@@ -37,7 +37,6 @@ function parseCsvPrices(text) {
     return fields;
   }
 
-  // Normalize header names
   const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, '_'));
 
   const rows = [];
@@ -59,9 +58,7 @@ function parseCsvPrices(text) {
 function parseRowDate(raw) {
   if (!raw || !raw.trim()) return new Date();
   const v = raw.trim();
-  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v + 'T12:00:00');
-  // MM/DD/YYYY
   if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v)) {
     const [m, d, y] = v.split('/');
     return new Date(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}T12:00:00`);
@@ -71,30 +68,36 @@ function parseRowDate(raw) {
 
 /**
  * Import parsed CSV rows into the app.
- * Admin/owner can create missing items and stores; members get a row error instead.
- * Returns { imported: N, errors: [{ row, reason }] }
+ * All users can auto-create stores. Items require admin to auto-create.
+ * Skips duplicate entries (same item + store + date).
+ * Returns { imported: N, errors: [{ row, reason }], newStores: [name] }
  */
 async function importCsvPrices(rows) {
   const auth = window.appAuth;
-  const canCreate = auth.isAdmin();
+  const canCreateItem = auth.isAdmin();
 
-  // Fetch existing items and stores once
-  const [itemsData, storesData] = await Promise.all([
+  // Fetch existing items, stores, and prices once
+  const [itemsData, storesData, existingPrices] = await Promise.all([
     api.items.list(),
-    api.stores.list()
+    api.stores.list(),
+    api.request('GET', '/prices')
   ]);
 
-  // Build lookup maps (lower-cased name → object)
   const itemMap = new Map(itemsData.map(i => [i.name.toLowerCase(), i]));
   const storeMap = new Map(storesData.map(s => [s.name.toLowerCase(), s]));
 
+  // Build dedup set: itemId|storeId|dateString
+  const dupSet = new Set(existingPrices.map(p =>
+    `${p.itemId._id || p.itemId}|${p.storeId._id || p.storeId}|${new Date(p.date).toDateString()}`
+  ));
+
   const imported = [];
   const errors = [];
+  const newStores = [];
 
   for (const row of rows) {
     const rowNum = row._rowNum;
 
-    // --- Validate required fields ---
     const itemName = (row.item_name || '').trim();
     const storeName = (row.store_name || '').trim();
     const regularPriceRaw = (row.regular_price || '').trim();
@@ -111,36 +114,45 @@ async function importCsvPrices(rows) {
     // --- Resolve item ---
     let item = itemMap.get(itemName.toLowerCase());
     if (!item) {
-      if (!canCreate) {
+      if (!canCreateItem) {
         errors.push({ row: rowNum, reason: `Item "${itemName}" not found. Ask an admin to add it first.` }); continue;
       }
       try {
-        item = await api.items.create({ name: itemName });
+        const category = (row.category || '').trim() || 'Other';
+        const unit = (row.unit || '').trim() || 'unit';
+        const isOrganic = (row.is_organic || '').trim().toLowerCase() === 'true';
+        item = await api.items.create({ name: itemName, category, unit, isOrganic });
         itemMap.set(item.name.toLowerCase(), item);
       } catch (e) {
         errors.push({ row: rowNum, reason: `Could not create item "${itemName}": ${e.message}` }); continue;
       }
     }
 
-    // --- Resolve store ---
+    // --- Resolve store (all users can auto-create) ---
     let store = storeMap.get(storeName.toLowerCase());
     if (!store) {
-      if (!canCreate) {
-        errors.push({ row: rowNum, reason: `Store "${storeName}" not found. Ask an admin to add it first.` }); continue;
-      }
       try {
         store = await api.stores.create({ name: storeName });
         storeMap.set(store.name.toLowerCase(), store);
+        newStores.push(store.name);
       } catch (e) {
         errors.push({ row: rowNum, reason: `Could not create store "${storeName}": ${e.message}` }); continue;
       }
     }
 
-    // --- Build price payload ---
+    // --- Dedup check ---
+    const rowDate = parseRowDate(row.date);
+    const dupKey = `${item._id}|${store._id}|${rowDate.toDateString()}`;
+    if (dupSet.has(dupKey)) {
+      errors.push({ row: rowNum, reason: `Duplicate: ${itemName} at ${storeName} on that date already exists — skipped` });
+      continue;
+    }
+    dupSet.add(dupKey);
+
+    // --- Build payload ---
     const salePrice = row.sale_price ? parseFloat(row.sale_price) : undefined;
     const couponAmount = row.coupon_amount ? parseFloat(row.coupon_amount) : undefined;
     const quantity = row.quantity ? parseInt(row.quantity, 10) : 1;
-    const date = parseRowDate(row.date);
     const notes = (row.notes || '').trim() || undefined;
     const couponCode = (row.coupon_code || '').trim() || undefined;
 
@@ -148,7 +160,7 @@ async function importCsvPrices(rows) {
       itemId: item._id,
       storeId: store._id,
       regularPrice,
-      date: date.toISOString(),
+      date: rowDate.toISOString(),
       quantity: isNaN(quantity) || quantity < 1 ? 1 : quantity,
     };
     if (salePrice !== undefined && !isNaN(salePrice)) payload.salePrice = salePrice;
@@ -156,7 +168,6 @@ async function importCsvPrices(rows) {
     if (couponCode) payload.couponCode = couponCode;
     if (notes) payload.notes = notes;
 
-    // --- Submit ---
     try {
       await api.prices.create(payload);
       imported.push(rowNum);
@@ -165,7 +176,7 @@ async function importCsvPrices(rows) {
     }
   }
 
-  return { imported: imported.length, errors };
+  return { imported: imported.length, errors, newStores };
 }
 
 /**
@@ -192,4 +203,78 @@ function downloadCsvTemplate() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/**
+ * Handle CSV file input change — reads, parses, imports, shows summary.
+ * statusEl: DOM element to render results into.
+ */
+async function processCsvFile(file, statusEl) {
+  if (!file) return;
+  statusEl.innerHTML = '<p class="text-muted text-sm">Importing…</p>';
+  try {
+    const text = await file.text();
+    const rows = parseCsvPrices(text);
+    if (!rows.length) {
+      statusEl.innerHTML = '<p class="csv-import-error">No data rows found. Make sure the file has a header row and at least one data row.</p>';
+      return;
+    }
+    const result = await importCsvPrices(rows);
+    renderCsvImportResult(result, statusEl);
+  } catch (e) {
+    statusEl.innerHTML = `<p class="csv-import-error">Import failed: ${e.message}</p>`;
+  }
+}
+
+function renderCsvImportResult(result, statusEl) {
+  let html = '';
+  if (result.imported > 0) {
+    html += `<p class="csv-import-success">✓ Imported ${result.imported} price${result.imported !== 1 ? 's' : ''}.`;
+    if (result.newStores && result.newStores.length > 0) {
+      html += ` ${result.newStores.length} new store${result.newStores.length !== 1 ? 's' : ''} created (${result.newStores.join(', ')}).`;
+    }
+    html += '</p>';
+  } else {
+    html += '<p class="csv-import-error">No prices imported.</p>';
+  }
+  if (result.errors.length > 0) {
+    html += `<details class="csv-import-result"><summary class="csv-import-error">${result.errors.length} row${result.errors.length !== 1 ? 's' : ''} skipped</summary>`;
+    html += result.errors.map(e => `<p class="csv-import-error text-sm">Row ${e.row}: ${e.reason}</p>`).join('');
+    html += '</details>';
+  }
+  statusEl.innerHTML = html;
+}
+
+/** Scan-tab CSV import (existing collapsible section) */
+function handleCsvFileSelect(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const statusEl = document.getElementById('csv-import-status');
+  processCsvFile(file, statusEl);
+  e.target.value = '';
+}
+
+/** Modal-based CSV import (from Prices header and More menu) */
+function openCsvImportModal() {
+  openModal('Import Prices from CSV', `
+    <p class="text-muted text-sm" style="margin-bottom:0.75rem">
+      Upload a spreadsheet of prices.
+      <button onclick="downloadCsvTemplate()" class="btn-link">Download template</button>
+    </p>
+    <input type="file" id="csv-modal-file-input" accept=".csv,text/csv" style="display:none" />
+    <button class="btn btn-outline btn-full" id="btn-csv-modal-upload">Choose CSV File</button>
+    <div id="csv-modal-status" style="margin-top:0.75rem"></div>
+  `);
+
+  document.getElementById('btn-csv-modal-upload').addEventListener('click', () => {
+    document.getElementById('csv-modal-file-input').click();
+  });
+
+  document.getElementById('csv-modal-file-input').addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const statusEl = document.getElementById('csv-modal-status');
+    processCsvFile(file, statusEl);
+    e.target.value = '';
+  });
 }

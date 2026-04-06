@@ -12,7 +12,7 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAuth, requireAdmin, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const store = new Store({ ...req.body, householdId: req.user.householdId });
     await store.save();
