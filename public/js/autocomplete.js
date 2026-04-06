@@ -10,11 +10,6 @@ function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
   const minChars = opts.minChars ?? 2;
   let debounceTimer;
 
-  inputEl.addEventListener('focus', () => {
-    // On mobile, scroll input into view when keyboard opens
-    setTimeout(() => inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
-  });
-
   inputEl.addEventListener('input', () => {
     clearTimeout(debounceTimer);
     const val = inputEl.value.trim();
@@ -91,8 +86,6 @@ function attachStoreAutocomplete(inputEl, dropdownEl, opts = {}) {
 
   inputEl.addEventListener('focus', () => {
     loadStores();
-    // On mobile, scroll input into view when keyboard opens
-    setTimeout(() => inputEl.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
   });
 
   inputEl.addEventListener('input', async () => {

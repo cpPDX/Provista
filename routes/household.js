@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt');
 const Household = require('../models/Household');
 const User = require('../models/User');
+const PriceEntry = require('../models/PriceEntry');
+const Item = require('../models/Item');
+const Store = require('../models/Store');
+const InventoryItem = require('../models/InventoryItem');
+const ShoppingListItem = require('../models/ShoppingListItem');
 const { requireAuth, requireAdmin, requireOwner } = require('../middleware/auth');
 
 // GET /api/household - household info + member list
@@ -105,6 +111,41 @@ router.put('/members/:id', requireAuth, requireOwner, async (req, res) => {
 
     const updated = await User.findByIdAndUpdate(req.params.id, { role }, { new: true }).select('-passwordHash');
     res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/household - delete household and all data (owner only)
+router.delete('/', requireAuth, requireOwner, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Password is required to confirm deletion' });
+
+    const user = await User.findById(req.user._id);
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Incorrect password' });
+
+    const householdId = req.user.householdId;
+
+    // Cascade delete all household data
+    await Promise.all([
+      PriceEntry.deleteMany({ householdId }),
+      Item.deleteMany({ householdId }),
+      Store.deleteMany({ householdId }),
+      InventoryItem.deleteMany({ householdId }),
+      ShoppingListItem.deleteMany({ householdId }),
+      User.updateMany({ householdId }, { $set: { householdId: null, role: 'member' } }),
+    ]);
+    await Household.findByIdAndDelete(householdId);
+
+    // Clear the owner's auth cookie
+    res.clearCookie('token', {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production'
+    });
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

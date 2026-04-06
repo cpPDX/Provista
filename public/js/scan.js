@@ -44,6 +44,22 @@ function initScanTab() {
   });
 
   document.getElementById('scan-date').value = new Date().toISOString().slice(0, 10);
+
+  // CSV Import section
+  const csvToggleHeader = document.getElementById('btn-toggle-csv-import');
+  const csvImportBody = document.getElementById('csv-import-body');
+  if (csvToggleHeader && csvImportBody) {
+    csvToggleHeader.addEventListener('click', () => {
+      const open = csvImportBody.style.display !== 'none';
+      csvImportBody.style.display = open ? 'none' : '';
+      csvToggleHeader.classList.toggle('open', !open);
+    });
+  }
+
+  const csvFileInput = document.getElementById('csv-file-input');
+  document.getElementById('btn-csv-upload')?.addEventListener('click', () => csvFileInput?.click());
+  csvFileInput?.addEventListener('change', handleCsvFileSelect);
+  document.getElementById('btn-csv-template')?.addEventListener('click', downloadCsvTemplate);
 }
 
 // Called when switching to the scan tab — loads pending section for admins
@@ -439,4 +455,65 @@ function openApproveModal(id, entryRaw, onSuccess) {
 
 function escapeHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+async function handleCsvFileSelect(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  const statusEl = document.getElementById('csv-import-status');
+  if (statusEl) statusEl.innerHTML = `<div class="csv-import-result">Reading file...</div>`;
+
+  const text = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => resolve(ev.target.result);
+    reader.onerror = reject;
+    reader.readAsText(file);
+  });
+
+  let rows;
+  try {
+    rows = parseCsvPrices(text);
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<div class="csv-import-result csv-import-error">Could not parse CSV: ${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  if (!rows.length) {
+    if (statusEl) statusEl.innerHTML = `<div class="csv-import-result csv-import-error">No data rows found. Check the file format and try again.</div>`;
+    return;
+  }
+
+  if (statusEl) statusEl.innerHTML = `<div class="csv-import-result">Importing ${rows.length} row${rows.length !== 1 ? 's' : ''}...</div>`;
+
+  try {
+    const result = await importCsvPrices(rows);
+    let html = `<div class="csv-import-result">`;
+    if (result.imported > 0) {
+      html += `<div class="csv-import-success">✓ Imported ${result.imported} price${result.imported !== 1 ? 's' : ''} successfully.</div>`;
+    }
+    if (result.errors.length > 0) {
+      html += `<div class="csv-import-error">✗ ${result.errors.length} row${result.errors.length !== 1 ? 's' : ''} had errors:</div>`;
+      html += `<ul class="csv-import-errors-list">`;
+      result.errors.forEach(({ row, reason }) => {
+        html += `<li>Row ${row}: ${escapeHtml(reason)}</li>`;
+      });
+      html += `</ul>`;
+    }
+    if (result.imported === 0 && result.errors.length === 0) {
+      html += `<div class="text-muted">No rows to import.</div>`;
+    }
+    html += `</div>`;
+    if (statusEl) statusEl.innerHTML = html;
+
+    if (result.imported > 0) {
+      showToast(`Imported ${result.imported} price${result.imported !== 1 ? 's' : ''} from CSV`);
+      if (document.getElementById('tab-prices')?.classList.contains('active')) {
+        await loadPricesTab();
+      }
+    }
+  } catch (err) {
+    if (statusEl) statusEl.innerHTML = `<div class="csv-import-result csv-import-error">Import failed: ${escapeHtml(err.message)}</div>`;
+  }
 }
