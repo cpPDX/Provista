@@ -180,11 +180,38 @@ async function processReceiptFile(file) {
   }
 }
 
+async function preprocessReceiptImage(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      // Scale to max 2400px on longest dimension — Tesseract works best at ~300dpi
+      const maxDim = 2400;
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      // Grayscale + contrast boost for thermal paper receipts
+      ctx.filter = 'grayscale(1) contrast(1.8) brightness(1.05)';
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
 async function runOCR(file) {
   if (!window.Tesseract) {
     await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
   }
   const statusEl = document.getElementById('scan-status');
+  statusEl.textContent = 'Preparing image...';
+
+  const canvas = await preprocessReceiptImage(file);
+
   const worker = await Tesseract.createWorker('eng', 1, {
     logger: (m) => {
       if (m.status === 'recognizing text') {
@@ -193,7 +220,10 @@ async function runOCR(file) {
       }
     }
   });
-  const result = await worker.recognize(file);
+  // PSM 6: SINGLE_BLOCK — treat the entire image as one uniform block of text.
+  // Far more reliable for single-column receipt layouts than the default auto-detect (PSM 3).
+  await worker.setParameters({ tessedit_pageseg_mode: '6' });
+  const result = await worker.recognize(canvas);
   await worker.terminate();
   return result.data.text;
 }
@@ -229,8 +259,10 @@ function parseReceiptText(text) {
 
   if (lines.length > 0 && lines[0].length < 40) result.storeName = lines[0];
 
-  const priceLineRe = /^(.+?)\s+\$?([\d]+\.[\d]{2})\s*[a-zA-Z]?$/;
-  const skipWords = /^(total|subtotal|tax|change|cash|credit|debit|balance|thank|welcome|receipt|store|tel|phone|date|time|item|qty|amount|sale|savings|you\s+saved)/i;
+  // Require 2+ spaces before price (reduces false positives like "0.9% MILK 1GAL")
+  // Allow 1–2 decimal digits (handles OCR dropping trailing zero: 4.9 vs 4.99)
+  const priceLineRe = /^(.+?)\s{2,}\$?([\d]+\.[\d]{1,2})\s*[A-Za-z]?\s*$/;
+  const skipWords = /^(total|subtotal|tax|change|cash|credit|debit|balance|thank|welcome|receipt|store|tel|phone|date|time|item|qty|amount|sale|savings|you\s+saved|fuel|digital|rewards|member|coupon|discount)/i;
 
   for (const line of lines) {
     const m = line.match(priceLineRe);
