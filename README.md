@@ -1,36 +1,89 @@
 # Grocery Tracker
 
-A browser-based grocery price tracker with household sharing, JWT auth, shopping list, inventory management, receipt scanning, and spend analytics. Runs on mobile.
+A browser-based grocery price tracker for households — log prices, scan receipts, compare stores, and see where your grocery budget is actually going.
+
+---
+
+## The Problem
+
+Grocery prices change constantly, vary by store, and go on sale in unpredictable cycles. Most people have no idea whether the price they're paying for something is good, bad, or they missed a sale last week. And when you're shopping for a household, that knowledge lives in one person's head (if anywhere).
+
+**Common frustrations:**
+- "Was this cheaper at the other store?"
+- "I think this went on sale recently but I can't remember the price"
+- "We already have three of those at home — why did you buy more?"
+- "How much are we actually spending on groceries each month?"
+
+## How We're Solving It
+
+Grocery Tracker gives households a shared, running log of prices — tied to specific stores, with sale prices, coupon tracking, and a price-per-unit breakdown so you can compare apples to apples (literally).
+
+- **Receipt scanning** captures prices without manual entry
+- **Shopping list** shows the best-known price and which store to go to for each item
+- **Spend analytics** break down monthly spend by category and store
+- **Inventory tracking** prevents over-buying
+- **Household sharing** with roles means everyone in the house has the same information, and a lightweight approval flow keeps the data clean when non-admin members submit prices
+
+---
 
 ## Features
 
 - **Auth & Households** — JWT auth (httpOnly cookies), multi-user households with Owner/Admin/Member roles
 - **Invite System** — 6-character invite codes + QR codes; 48-hour expiry, admin-regeneratable
-- **Price Tracking** — Log prices per item per store, compare stores, view trends over time
-- **Pending Approval** — Members submit prices for admin review; admins see badge + review queue
-- **Receipt Scanning** — OCR-powered receipt parsing via Tesseract.js (runs entirely in-browser)
-- **Shopping List** — Persistent list with best-price-per-store suggestions
+- **Price Tracking** — Log prices per item per store with regular price, sale price, and coupon breakdown; compare stores; view trends over time
+- **Pending Approval** — Members submit prices for admin review; admins see a badge and inline review queue in the Scan tab
+- **Receipt Scanning** — OCR-powered receipt parsing via Tesseract.js (runs entirely in-browser, no API key)
+- **Shopping List** — Persistent list with best-price-per-store suggestions and "added by" attribution
 - **Spend Analytics** — Monthly spend totals with breakdowns by category and store
 - **Inventory** — Basic in-stock tracking with quantity management (admin only)
 - **Item Catalog** — ~200 seeded common US grocery items per household; fully editable
+- **Account Settings** — Each user can update their name, email, and password
 
 ## Tech Stack
 
 - **Backend**: Node.js + Express
-- **Database**: MongoDB (Atlas or local)
-- **Frontend**: Vanilla HTML/CSS/JavaScript (mobile-first, no frameworks)
-- **OCR**: Tesseract.js (client-side, no API key needed)
+- **Database**: MongoDB (Atlas free tier or local)
+- **Frontend**: Vanilla HTML/CSS/JavaScript — mobile-first, no frameworks, no build step
+- **OCR**: Tesseract.js v5 (client-side, loaded on demand from CDN)
+- **Auth**: JWT stored in httpOnly cookies, bcrypt password hashing
 
 ---
 
-## Local Setup
+## Setup
 
-### Prerequisites
+### What You Need
 
-- Node.js 18+
-- MongoDB running locally, or a MongoDB Atlas connection string
+**Sign up for (both free):**
+- [MongoDB Atlas](https://www.mongodb.com/atlas) — free M0 cluster for the database
+- [Railway](https://railway.app) — only if you want to host it online (optional; local is fine for home use)
 
-### Steps
+**Install on your PC:**
+- [Node.js 18+](https://nodejs.org) — download the LTS version
+- [Git](https://git-scm.com) — to clone the repo
+
+---
+
+### MongoDB Atlas Setup
+
+1. Create a free account at [mongodb.com/atlas](https://www.mongodb.com/atlas)
+2. Create a new project and click **Build a Cluster** → choose **M0 Free Tier**
+3. Under **Database Access**: add a user with a username and password
+4. Under **Network Access**: add your IP address (or `0.0.0.0/0` to allow any IP while testing)
+5. Go to your cluster → **Connect** → **Drivers** → copy the connection string
+
+It looks like:
+```
+mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
+```
+
+Add `/grocery-tracker` before the `?` to set the database name:
+```
+mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/grocery-tracker?retryWrites=true&w=majority
+```
+
+---
+
+### Local Setup
 
 ```bash
 # 1. Clone the repo
@@ -40,56 +93,75 @@ cd grocerytracker
 # 2. Install dependencies
 npm install
 
-# 3. Configure environment
-cp .env.example .env
-# Required: set JWT_SECRET to a long random string (e.g. openssl rand -hex 32)
-# Optional: set MONGODB_URI if not using localhost
+# 3. Create environment file
+```
 
+Create a `.env` file in the project root:
+
+```env
+MONGODB_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/grocery-tracker?retryWrites=true&w=majority
+JWT_SECRET=any-long-random-string-you-make-up
+PORT=3000
+```
+
+- `MONGODB_URI` — paste your Atlas connection string from above
+- `JWT_SECRET` — any long random string (e.g. `mySuperSecretKey12345abc`); used to sign login tokens
+- `PORT` — `3000` works fine locally
+
+```bash
 # 4. Start the server
 npm start
-# or for auto-reload during development:
+
+# Or with auto-reload during development:
 npm run dev
 ```
 
-The app will be available at `http://localhost:3000`. Open it and register — the first user creates a household and ~200 seed items are loaded automatically.
+Open **http://localhost:3000** in your browser.
 
-### Roles summary
+**First run:** Register an account → Create a household. You'll be the Owner and ~200 seed grocery items load automatically.
+
+---
+
+### Use It on Your Phone (Same Wi-Fi)
+
+Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1.50:3000` on your phone's browser. It's mobile-first and works well as a pinned web app — use "Add to Home Screen" from your browser menu.
+
+---
+
+### Invite Household Members
+
+1. Go to **More → Household → Show Invite Code & QR**
+2. Share the 6-character code or QR code with family members
+3. They open the app, register, and enter the code to join your household
+4. New members start as **Member** role — owners can promote to Admin
+
+---
+
+## Roles
 
 | Role | Can do |
 |------|--------|
-| **Owner** | Full access + manage admin roles + rename/delete household |
+| **Owner** | Everything — manage roles, rename household, approve/reject prices |
 | **Admin** | Approve prices, manage inventory/catalog/stores, view invite codes |
-| **Member** | Submit prices (pending review), manage shopping list, view data |
+| **Member** | Submit prices (pending admin review), manage shopping list, view data |
 
 ---
 
 ## Deployment on Railway
 
-### Prerequisites
-
-- A [Railway](https://railway.app) account
-- A [MongoDB Atlas](https://www.mongodb.com/atlas) free-tier cluster
-
-### Steps
-
-1. **MongoDB Atlas setup**
-   - Create a free cluster
-   - Create a database user with read/write access
-   - Whitelist `0.0.0.0/0` in Network Access (Railway IPs are dynamic)
-   - Copy the connection string: `mongodb+srv://<user>:<pass>@cluster0.xxxxx.mongodb.net/grocerytracker?retryWrites=true&w=majority`
+1. **Atlas setup** — follow the MongoDB Atlas steps above; whitelist `0.0.0.0/0` since Railway IPs are dynamic
 
 2. **Deploy to Railway**
    - Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
-   - Select this repository
-   - Railway auto-detects Node.js and runs `npm start`
+   - Select this repository — Railway auto-detects Node.js and runs `npm start`
 
 3. **Set environment variables in Railway**
    - `MONGODB_URI` — your Atlas connection string
-   - `PORT` — Railway injects this automatically; no need to set it manually
+   - `JWT_SECRET` — your secret string
+   - `NODE_ENV` — set to `production` (enables secure cookies)
+   - `PORT` is injected automatically; don't set it manually
 
-4. **Deploy**
-   - Push to the connected branch; Railway deploys automatically
-   - The app will be available at your Railway-generated domain
+4. Push to the connected branch — Railway deploys automatically and gives you a public URL
 
 ---
 
@@ -107,67 +179,98 @@ The app will be available at `http://localhost:3000`. Open it and register — t
 ## Project Structure
 
 ```
-├── server.js              # Express server + MongoDB connection + seed logic
+├── server.js              # Express server, MongoDB connection
 ├── models/
+│   ├── User.js
+│   ├── Household.js
 │   ├── Item.js
 │   ├── Store.js
-│   ├── PriceEntry.js
+│   ├── PriceEntry.js      # regularPrice, salePrice, couponAmount, finalPrice, pricePerUnit
 │   ├── InventoryItem.js
 │   └── ShoppingListItem.js
 ├── routes/
+│   ├── auth.js            # Register, login, logout, profile, password
+│   ├── household.js       # Members, roles, invite codes
 │   ├── items.js
 │   ├── stores.js
-│   ├── prices.js
+│   ├── prices.js          # Price CRUD, compare, history, pending approval
 │   ├── inventory.js
 │   ├── shoppingList.js
 │   └── spend.js
+├── middleware/
+│   └── auth.js            # requireAuth, requireAdmin, requireOwner
+├── utils/
+│   └── seed.js            # seedHousehold() — called on household creation
 ├── seeds/
 │   └── items.json         # ~200 seeded grocery items
 └── public/
     ├── index.html
-    ├── css/style.css
+    ├── login.html
+    ├── css/
+    │   ├── style.css
+    │   └── auth.css
     └── js/
-        ├── api.js         # Fetch wrapper
-        ├── ui.js          # Shared UI utilities + charting
-        ├── autocomplete.js
-        ├── prices.js
-        ├── shoppingList.js
-        ├── scan.js
-        ├── spend.js
-        ├── more.js
-        └── app.js         # Tab navigation + init
+        ├── api.js          # Fetch wrapper for all API calls
+        ├── auth.js         # window.appAuth singleton
+        ├── ui.js           # Shared utilities, formatting, charting
+        ├── autocomplete.js # Reusable item + store autocomplete
+        ├── prices.js       # Price log tab
+        ├── shoppingList.js # Shopping list tab
+        ├── scan.js         # Receipt OCR + pending review queue
+        ├── spend.js        # Analytics tab
+        ├── more.js         # Inventory, catalog, stores, household, account
+        └── app.js          # Tab navigation + initialization
 ```
+
+---
 
 ## API Reference
 
 ```
-GET    /api/items                   list items (search param supported)
-POST   /api/items                   create item
-PUT    /api/items/:id               update item
-DELETE /api/items/:id               delete item
+POST   /api/auth/register             create account
+POST   /api/auth/login                login
+POST   /api/auth/logout               clear cookie
+GET    /api/auth/me                   current user + household
+PUT    /api/auth/profile              update name/email
+PUT    /api/auth/password             change password
 
-GET    /api/stores                  list stores
-POST   /api/stores                  create store
-PUT    /api/stores/:id              update store
-DELETE /api/stores/:id              delete store
+GET    /api/household                 members list
+PUT    /api/household                 rename household (owner only)
+GET    /api/household/invite          get current invite code + QR data
+POST   /api/household/invite          regenerate invite code
+DELETE /api/household/members/:id     remove member
+PUT    /api/household/members/:id     update member role
 
-GET    /api/prices                  list price entries (filter: itemId, storeId, startDate, endDate)
-POST   /api/prices                  create price entry
-DELETE /api/prices/:id              delete price entry
-GET    /api/prices/compare/:itemId  latest price per store for an item
-GET    /api/prices/history/:itemId  full price history for an item
+GET    /api/items                     list items (search param supported)
+POST   /api/items                     create item
+PUT    /api/items/:id                 update item
+DELETE /api/items/:id                 delete item
 
-GET    /api/inventory               list inventory (quantity > 0)
-POST   /api/inventory               add or update inventory item
-PUT    /api/inventory/:id           update quantity/notes
-DELETE /api/inventory/:id           remove from inventory
+GET    /api/stores                    list stores
+POST   /api/stores                    create store
+PUT    /api/stores/:id                update store
+DELETE /api/stores/:id                delete store
 
-GET    /api/shopping-list           get list with best-price context per item
-POST   /api/shopping-list           add item to list
-PUT    /api/shopping-list/:id       update item (checked, quantity)
-DELETE /api/shopping-list/:id       remove item
-DELETE /api/shopping-list           clear list (add ?checkedOnly=true to clear only checked)
+GET    /api/prices                    list price entries
+POST   /api/prices                    create price entry
+PUT    /api/prices/:id/approve        approve + optionally edit a pending entry
+DELETE /api/prices/:id/reject         reject a pending entry
+GET    /api/prices/pending            list pending entries (admin+)
+GET    /api/prices/compare/:itemId    latest approved price per store for an item
+GET    /api/prices/history/:itemId    full approved price history for an item
+GET    /api/prices/last-purchased/:itemId  most recent approved entry per store
 
-GET    /api/spend?month=YYYY-MM     monthly spend breakdown
-GET    /api/spend/summary           monthly totals for last 6 months
+GET    /api/inventory                 list inventory (quantity > 0)
+POST   /api/inventory                 add or update inventory item
+PUT    /api/inventory/:id             update quantity/notes
+DELETE /api/inventory/:id             remove from inventory
+
+GET    /api/shopping-list             list with best-price context per item
+POST   /api/shopping-list             add item to list
+PUT    /api/shopping-list/:id         update item (checked, quantity)
+DELETE /api/shopping-list/:id         remove item
+DELETE /api/shopping-list             clear list (?checkedOnly=true to clear only checked)
+
+GET    /api/spend?month=YYYY-MM       monthly spend breakdown by category + store
+GET    /api/spend/summary             monthly totals for the last 6 months
 ```
