@@ -367,6 +367,7 @@ function openAddPriceModal(prefillItem) {
     try {
       const result = await api.prices.create(data);
       closeModal();
+      window.onWizardActionComplete?.('add-price');
       if (result.status === 'pending') {
         showToast('Submitted for review');
       } else {

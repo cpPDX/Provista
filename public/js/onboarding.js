@@ -35,18 +35,20 @@ const WIZARD_STEPS = [
     section: 'stores',
     sectionLoader: async () => { await loadStores(); },
     targetId: 'btn-add-store',
+    actionId: 'add-store',
     title: 'Step 1 of 5 — Add your stores',
-    text: 'Start by adding the grocery stores you shop at (Costco, Trader Joe\'s, Safeway…). Tap + Add Store, or tap Next to continue.',
-    nextLabel: 'Next'
+    text: 'Start by adding the grocery stores you shop at (Costco, Trader Joe\'s, Safeway…). Tap + Add Store — the wizard advances automatically when you save.',
+    nextLabel: 'Skip'
   },
   {
     tab: 'prices',
     section: null,
     sectionLoader: null,
     targetId: 'btn-add-price',
+    actionId: 'add-price',
     title: 'Step 2 of 5 — Log a price',
-    text: 'Use the Prices tab to record what you paid for each item. Tap + Add Price to try it now, or tap Next to continue.',
-    nextLabel: 'Next'
+    text: 'Use the Prices tab to record what you paid for each item. Tap + Add Price and fill it in — the wizard advances automatically when you save.',
+    nextLabel: 'Skip'
   },
   {
     tab: 'scan',
@@ -104,6 +106,7 @@ function runWizard(startStep) {
   // Elements
   const backdrop = document.createElement('div');
   backdrop.className = 'tour-backdrop';
+  backdrop.style.pointerEvents = 'none'; // allow tapping through to highlighted elements
   document.body.appendChild(backdrop);
 
   const tooltip = document.createElement('div');
@@ -148,6 +151,14 @@ function runWizard(startStep) {
       }
     }
 
+    // Register auto-advance hook for actionable steps
+    window.onWizardActionComplete = step.actionId ? (completedId) => {
+      if (completedId === step.actionId && wizardActive) {
+        current++;
+        renderStep();
+      }
+    } : null;
+
     // Update tooltip content
     document.getElementById('wizard-title').textContent = step.title;
     document.getElementById('wizard-text').textContent = step.text;
@@ -185,6 +196,7 @@ function runWizard(startStep) {
 
   function close() {
     wizardActive = false;
+    window.onWizardActionComplete = null;
     document.querySelectorAll('.wizard-highlight').forEach(el => el.classList.remove('wizard-highlight'));
     backdrop.classList.remove('visible');
     tooltip.classList.remove('visible');
