@@ -19,6 +19,10 @@ async function loadAccountSettings() {
   const auth = window.appAuth;
   const user = auth.user;
 
+  const ownerWarning = auth.isOwner()
+    ? `<p class="text-sm" style="color:var(--warning);margin-bottom:0.5rem">You are a household owner. Delete your household first before deleting your account.</p>`
+    : '';
+
   container.innerHTML = `
     <h3 style="margin:0 0 0.75rem;font-size:1rem">Profile</h3>
     <form id="profile-form" style="margin-bottom:1.5rem">
@@ -34,7 +38,7 @@ async function loadAccountSettings() {
     </form>
 
     <h3 style="margin:0 0 0.75rem;font-size:1rem">Change Password</h3>
-    <form id="password-form">
+    <form id="password-form" style="margin-bottom:1.5rem">
       <div class="form-group">
         <label>Current Password</label>
         <input class="form-control" type="password" id="pw-current" required autocomplete="current-password" />
@@ -48,7 +52,14 @@ async function loadAccountSettings() {
         <input class="form-control" type="password" id="pw-confirm" required autocomplete="new-password" />
       </div>
       <button type="submit" class="btn btn-primary btn-full">Change Password</button>
-    </form>`;
+    </form>
+
+    <div class="danger-zone">
+      <h3>Danger Zone</h3>
+      ${ownerWarning}
+      <p>Deleting your account is permanent and cannot be undone. All your personal data will be removed.</p>
+      <button class="btn btn-danger btn-full" id="btn-delete-account"${auth.isOwner() ? ' disabled title="Delete your household first"' : ''}>Delete My Account</button>
+    </div>`;
 
   document.getElementById('profile-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -81,6 +92,47 @@ async function loadAccountSettings() {
       handleError(err, 'Failed to change password');
     }
   });
+
+  const deleteAccountBtn = document.getElementById('btn-delete-account');
+  if (deleteAccountBtn && !auth.isOwner()) {
+    deleteAccountBtn.addEventListener('click', () => {
+      openModal('Delete Account', `
+        <p style="margin-bottom:1rem">This will permanently delete your account and remove all your personal data. This cannot be undone.</p>
+        <form id="delete-account-form">
+          <div class="form-group">
+            <label>Enter your password to confirm</label>
+            <input class="form-control" type="password" id="da-password" required autocomplete="current-password" />
+          </div>
+          <div class="checkbox-row" style="margin-bottom:1rem">
+            <input type="checkbox" id="da-confirm" required />
+            <label for="da-confirm">I understand this is permanent and cannot be undone</label>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button type="submit" class="btn btn-danger">Delete Account</button>
+          </div>
+        </form>`);
+
+      document.getElementById('delete-account-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!document.getElementById('da-confirm').checked) {
+          showToast('Please check the confirmation box');
+          return;
+        }
+        const btn = e.target.querySelector('button[type=submit]');
+        btn.disabled = true;
+        btn.textContent = 'Deleting…';
+        try {
+          await api.auth.deleteAccount({ password: document.getElementById('da-password').value });
+          window.location.href = '/login.html';
+        } catch (err) {
+          handleError(err, 'Failed to delete account');
+          btn.disabled = false;
+          btn.textContent = 'Delete Account';
+        }
+      });
+    });
+  }
 }
 
 // ===== Inventory (admin+) =====
@@ -397,10 +449,68 @@ async function loadHousehold() {
         </div>`;
     }
 
+    // Danger zone — delete household (owner only)
+    if (auth.isOwner()) {
+      html += `
+        <div class="danger-zone" style="margin:1.5rem 0 0">
+          <h3>Danger Zone</h3>
+          <p>Permanently deletes the household and all its price history, items, stores, and inventory. All members will lose access.</p>
+          <button class="btn btn-danger btn-full" id="btn-delete-household">Delete Household &amp; All Data</button>
+        </div>`;
+    }
+
     container.innerHTML = html;
 
     if (auth.isAdmin()) {
       document.getElementById('btn-show-invite').addEventListener('click', loadInviteCode);
+    }
+
+    if (auth.isOwner()) {
+      document.getElementById('btn-delete-household').addEventListener('click', () => {
+        const hhName = household.name;
+        openModal('Delete Household', `
+          <p style="margin-bottom:1rem"><strong>This will permanently delete:</strong></p>
+          <ul style="font-size:var(--text-sm);color:var(--text-muted);margin:0 0 1rem 1.25rem;line-height:1.8">
+            <li>All price entries and history</li>
+            <li>All items and stores</li>
+            <li>Inventory and shopping list</li>
+            <li>All member accounts will be unlinked</li>
+          </ul>
+          <form id="delete-household-form">
+            <div class="form-group">
+              <label>Type the household name to confirm: <strong>${hhName}</strong></label>
+              <input class="form-control" id="dh-name-confirm" required autocomplete="off" placeholder="${hhName}" />
+            </div>
+            <div class="form-group">
+              <label>Enter your password</label>
+              <input class="form-control" type="password" id="dh-password" required autocomplete="current-password" />
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+              <button type="submit" class="btn btn-danger">Delete Everything</button>
+            </div>
+          </form>`);
+
+        document.getElementById('delete-household-form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const typed = document.getElementById('dh-name-confirm').value.trim();
+          if (typed !== hhName) {
+            showToast('Household name does not match');
+            return;
+          }
+          const btn = e.target.querySelector('button[type=submit]');
+          btn.disabled = true;
+          btn.textContent = 'Deleting…';
+          try {
+            await api.household.deleteHousehold({ password: document.getElementById('dh-password').value });
+            window.location.href = '/login.html';
+          } catch (err) {
+            handleError(err, 'Failed to delete household');
+            btn.disabled = false;
+            btn.textContent = 'Delete Everything';
+          }
+        });
+      });
     }
   } catch (err) {
     container.innerHTML = emptyState('⚠️', 'Failed to load household info.');
