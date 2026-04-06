@@ -33,6 +33,7 @@ router.put('/', requireAuth, requireOwner, async (req, res) => {
 router.get('/invite', requireAuth, requireAdmin, async (req, res) => {
   try {
     const household = await Household.findById(req.user.householdId);
+    if (!household) return res.status(404).json({ error: 'Household not found' });
     if (!household.isInviteCodeValid()) {
       // Auto-generate if none/expired
       household.refreshInviteCode();
@@ -51,6 +52,7 @@ router.get('/invite', requireAuth, requireAdmin, async (req, res) => {
 router.post('/invite', requireAuth, requireAdmin, async (req, res) => {
   try {
     const household = await Household.findById(req.user.householdId);
+    if (!household) return res.status(404).json({ error: 'Household not found' });
     household.refreshInviteCode();
     await household.save();
     res.json({

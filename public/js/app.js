@@ -50,7 +50,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Setup wizard for new household owners
   if (shouldShowSetupWizard()) {
-    setTimeout(startSetupWizard, 500);
+    // Show resume button in More menu
+    const resumeBtn = document.getElementById('btn-resume-setup');
+    if (resumeBtn) resumeBtn.style.display = '';
+    // Auto-start wizard on first load
+    setTimeout(() => startSetupWizard(), 500);
   }
 });
 

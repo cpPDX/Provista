@@ -1,155 +1,237 @@
-// Onboarding: Setup wizard (for new owners) + App walkthrough (for all users)
+// Onboarding: Interactive Setup Wizard + App Tour
 
-// ===== Setup Wizard =====
-// Shown once after a new household owner's first login.
-// Guides them through: adding their first store, understanding the tabs.
+// ===== Setup Wizard Persistence =====
+
+function wizardStepKey() { return 'gt_wizard_step_' + window.appAuth.user._id; }
+function wizardDoneKey()  { return 'gt_wizard_done_' + window.appAuth.user._id; }
 
 function shouldShowSetupWizard() {
-  const auth = window.appAuth;
-  if (!auth.isOwner()) return false;
-  return !localStorage.getItem('gt_wizard_done_' + auth.user._id);
+  if (!window.appAuth.isOwner()) return false;
+  return !localStorage.getItem(wizardDoneKey());
+}
+
+function savedWizardStep() {
+  return parseInt(localStorage.getItem(wizardStepKey()) || '0', 10);
+}
+
+function saveWizardStep(step) {
+  localStorage.setItem(wizardStepKey(), String(step));
 }
 
 function markWizardDone() {
-  localStorage.setItem('gt_wizard_done_' + window.appAuth.user._id, '1');
+  localStorage.setItem(wizardDoneKey(), '1');
+  localStorage.removeItem(wizardStepKey());
+  // Hide the "Continue Setup" button in More menu
+  const btn = document.getElementById('btn-resume-setup');
+  if (btn) btn.style.display = 'none';
 }
 
-function startSetupWizard() {
-  const name = window.appAuth.user.name?.split(' ')[0] || 'there';
-  const steps = [
-    {
-      title: 'Welcome, ' + name + '!',
-      body: `
-        <p>Your household is all set up and loaded with ~200 common grocery items.</p>
-        <p style="margin-top:0.75rem">Let's walk through a few things to get you started.</p>`,
-      icon: '👋'
-    },
-    {
-      title: 'Add your stores',
-      body: `
-        <p>Start by adding the stores you shop at. You can do this from <strong>More → Stores</strong>, or on-the-fly when logging a price.</p>
-        <p style="margin-top:0.5rem">Examples: Costco, Trader Joe's, Safeway, etc.</p>`,
-      icon: '🏪'
-    },
-    {
-      title: 'Log a price',
-      body: `
-        <p>Head to the <strong>Prices</strong> tab and tap <strong>+ Add Price</strong>. Pick an item, pick a store, and enter what you paid.</p>
-        <p style="margin-top:0.5rem">You can also <strong>scan receipts</strong> to log multiple items at once — just head to the <strong>Scan</strong> tab.</p>`,
-      icon: '💰'
-    },
-    {
-      title: 'Invite your household',
-      body: `
-        <p>Go to <strong>More → Household → Show Invite Code</strong> to get a QR code or 6-digit code.</p>
-        <p style="margin-top:0.5rem">Share it with family or housemates. They'll see the same prices, shopping list, and inventory.</p>`,
-      icon: '👥'
-    },
-    {
-      title: 'You\'re all set!',
-      body: `
-        <p>That's the basics. You can revisit the app tour anytime from <strong>More → App Tour</strong>.</p>
-        <p style="margin-top:0.5rem">Happy tracking!</p>`,
-      icon: '🎉'
-    }
-  ];
+// ===== Setup Wizard Steps =====
+// Each step navigates the app and highlights a specific element.
 
-  showWizardOverlay(steps, () => {
-    markWizardDone();
-  });
+const WIZARD_STEPS = [
+  {
+    tab: 'more',
+    section: 'stores',
+    sectionLoader: async () => { await loadStores(); },
+    targetId: 'btn-add-store',
+    title: 'Step 1 of 5 — Add your stores',
+    text: 'Start by adding the grocery stores you shop at (Costco, Trader Joe\'s, Safeway…). Tap + Add Store, or tap Next to continue.',
+    nextLabel: 'Next'
+  },
+  {
+    tab: 'prices',
+    section: null,
+    sectionLoader: null,
+    targetId: 'btn-add-price',
+    title: 'Step 2 of 5 — Log a price',
+    text: 'Use the Prices tab to record what you paid for each item. Tap + Add Price to try it now, or tap Next to continue.',
+    nextLabel: 'Next'
+  },
+  {
+    tab: 'scan',
+    section: null,
+    sectionLoader: null,
+    targetId: 'btn-camera',
+    title: 'Step 3 of 5 — Scan receipts',
+    text: 'Point your camera at a receipt and the app reads prices using OCR — all on your device. No data is sent to a server.',
+    nextLabel: 'Next'
+  },
+  {
+    tab: 'more',
+    section: 'household',
+    sectionLoader: async () => {
+      await loadHousehold();
+      // Auto-expand invite section after a short delay
+      setTimeout(async () => {
+        const btn = document.getElementById('btn-show-invite');
+        if (btn) {
+          btn.style.display = 'none'; // hide the button, show inline
+          await loadInviteCode();
+        }
+      }, 400);
+    },
+    targetId: 'household-content',
+    title: 'Step 4 of 5 — Invite your household',
+    text: 'Share your invite code or QR code with family. They\'ll join your household and see prices, the shopping list, and inventory.',
+    nextLabel: 'Next'
+  },
+  {
+    tab: 'prices',
+    section: null,
+    sectionLoader: null,
+    targetId: null,
+    title: 'You\'re all set! 🎉',
+    text: 'Keep logging prices and the app builds a picture of where to find the best deals. You can revisit this tour anytime from More → App Tour.',
+    nextLabel: 'Get Started'
+  }
+];
+
+// ===== Interactive Wizard =====
+
+let wizardActive = false;
+
+async function startSetupWizard(fromStep) {
+  if (wizardActive) return;
+  const startStep = fromStep ?? savedWizardStep();
+  runWizard(startStep);
 }
 
-function showWizardOverlay(steps, onComplete) {
-  let current = 0;
-  const overlay = document.createElement('div');
-  overlay.className = 'wizard-overlay';
-  overlay.innerHTML = `
-    <div class="wizard-card">
-      <div class="wizard-icon" id="wizard-icon"></div>
-      <h2 class="wizard-title" id="wizard-title"></h2>
-      <div class="wizard-body" id="wizard-body"></div>
-      <div class="wizard-dots" id="wizard-dots"></div>
-      <div class="wizard-actions">
-        <button class="btn btn-outline" id="wizard-skip">Skip</button>
-        <button class="btn btn-primary" id="wizard-next">Next</button>
-      </div>
+function runWizard(startStep) {
+  wizardActive = true;
+  let current = startStep;
+
+  // Elements
+  const backdrop = document.createElement('div');
+  backdrop.className = 'tour-backdrop';
+  document.body.appendChild(backdrop);
+
+  const tooltip = document.createElement('div');
+  tooltip.className = 'tour-tooltip wizard-tooltip';
+  tooltip.innerHTML = `
+    <div class="wizard-step-badge" id="wizard-badge"></div>
+    <div class="tour-tooltip-title" id="wizard-title"></div>
+    <div class="tour-tooltip-text" id="wizard-text"></div>
+    <div class="tour-tooltip-footer">
+      <button class="btn btn-outline btn-sm" id="wizard-skip">Skip Setup</button>
+      <button class="btn btn-primary btn-sm" id="wizard-next">Next</button>
     </div>`;
-  document.body.appendChild(overlay);
-  // Force reflow for animation
-  requestAnimationFrame(() => overlay.classList.add('visible'));
+  document.body.appendChild(tooltip);
 
-  function render() {
-    const step = steps[current];
-    document.getElementById('wizard-icon').textContent = step.icon;
+  requestAnimationFrame(() => {
+    backdrop.classList.add('visible');
+    tooltip.classList.add('visible');
+  });
+
+  async function renderStep() {
+    const step = WIZARD_STEPS[current];
+    saveWizardStep(current);
+
+    // Remove previous highlight
+    document.querySelectorAll('.wizard-highlight').forEach(el => el.classList.remove('wizard-highlight'));
+
+    // Navigate to the right tab/section
+    if (step.tab === 'more' && step.section) {
+      await switchTab('more');
+      showMoreSection(step.section);
+      if (step.sectionLoader) await step.sectionLoader();
+    } else {
+      await switchTab(step.tab);
+    }
+
+    // Highlight target element
+    if (step.targetId) {
+      const target = document.getElementById(step.targetId);
+      if (target) {
+        target.classList.add('wizard-highlight');
+        setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+      }
+    }
+
+    // Update tooltip content
     document.getElementById('wizard-title').textContent = step.title;
-    document.getElementById('wizard-body').innerHTML = step.body;
-    document.getElementById('wizard-dots').innerHTML = steps.map((_, i) =>
-      `<span class="wizard-dot ${i === current ? 'active' : ''}"></span>`
-    ).join('');
-    document.getElementById('wizard-next').textContent = current === steps.length - 1 ? 'Get Started' : 'Next';
-    document.getElementById('wizard-skip').style.display = current === steps.length - 1 ? 'none' : '';
+    document.getElementById('wizard-text').textContent = step.text;
+    document.getElementById('wizard-next').textContent = step.nextLabel;
+
+    const badge = document.getElementById('wizard-badge');
+    badge.style.display = current < WIZARD_STEPS.length - 1 ? '' : 'none';
+
+    // Position tooltip above nav bar
+    const navRect = document.querySelector('.bottom-nav').getBoundingClientRect();
+    tooltip.style.bottom = (window.innerHeight - navRect.top + 12) + 'px';
   }
 
-  document.getElementById('wizard-next').addEventListener('click', () => {
-    if (current < steps.length - 1) {
+  document.getElementById('wizard-next').addEventListener('click', async () => {
+    if (current < WIZARD_STEPS.length - 1) {
       current++;
-      render();
+      await renderStep();
     } else {
-      close();
+      complete();
     }
   });
 
-  document.getElementById('wizard-skip').addEventListener('click', close);
+  document.getElementById('wizard-skip').addEventListener('click', skip);
+
+  function skip() {
+    close();
+    // Don't mark as done — leave resume button visible
+  }
+
+  function complete() {
+    markWizardDone();
+    close();
+    switchTab('prices');
+  }
 
   function close() {
-    overlay.classList.remove('visible');
-    setTimeout(() => overlay.remove(), 300);
-    if (onComplete) onComplete();
+    wizardActive = false;
+    document.querySelectorAll('.wizard-highlight').forEach(el => el.classList.remove('wizard-highlight'));
+    backdrop.classList.remove('visible');
+    tooltip.classList.remove('visible');
+    setTimeout(() => { backdrop.remove(); tooltip.remove(); }, 300);
   }
 
-  render();
+  renderStep();
 }
 
-// ===== App Walkthrough =====
-// Step-by-step tooltip tour highlighting each tab.
+// ===== App Tour =====
 
 function startAppTour() {
   const steps = [
     {
       tab: 'prices',
       title: 'Prices',
-      text: 'This is your price log. Every item you buy gets tracked here with its regular price, sale price, and coupons. Tap any item to see its full history and compare stores.',
+      text: 'Your price log. Every item you buy gets tracked here with its regular price, sale price, and coupons. Tap any item to see its full history and compare stores.',
       anchor: '[data-tab="prices"]'
     },
     {
       tab: 'list',
       title: 'Shopping List',
-      text: 'Build your shopping list here. Each item automatically shows the best known price and which store to go to. Share the list with your whole household.',
+      text: 'Build your shopping list here. Each item shows the best known price and which store to go to. The whole household shares the same list.',
       anchor: '[data-tab="list"]'
     },
     {
       tab: 'scan',
       title: 'Scan Receipts',
-      text: 'Take a photo of your receipt and the app reads it using OCR — right on your phone, no data sent anywhere. It pulls out item names and prices for you to review and save.',
+      text: 'Take a photo of a receipt and the app reads it using OCR — right on your phone, nothing sent to a server. It pulls out item names and prices for you to review.',
       anchor: '[data-tab="scan"]'
     },
     {
       tab: 'spend',
       title: 'Spend Analytics',
-      text: 'See where your money goes — broken down by month, category, and store. Tracks only what you\'ve logged, so the more you use it, the more useful this gets.',
+      text: 'See where your money goes — broken down by month, category, and store. The more you log, the more useful this gets.',
       anchor: '[data-tab="spend"]'
     },
     {
       tab: 'more',
       title: 'More',
-      text: 'Manage your inventory, item catalog, stores, household members, and account settings. Admins can also review pending price submissions here.',
+      text: 'Manage inventory, item catalog, stores, household members, and your account. Admins can also review pending price submissions here.',
       anchor: '[data-tab="more"]'
     }
   ];
 
   let current = 0;
 
-  // Create tour elements
   const backdrop = document.createElement('div');
   backdrop.className = 'tour-backdrop';
   document.body.appendChild(backdrop);
@@ -175,11 +257,8 @@ function startAppTour() {
 
   function render() {
     const step = steps[current];
-
-    // Switch to the tab
     switchTab(step.tab);
 
-    // Highlight the nav item
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('tour-highlight'));
     const anchor = document.querySelector(step.anchor);
     if (anchor) anchor.classList.add('tour-highlight');
@@ -190,7 +269,6 @@ function startAppTour() {
     document.getElementById('tour-next').textContent = current === steps.length - 1 ? 'Done' : 'Next';
     document.getElementById('tour-skip').style.display = current === steps.length - 1 ? 'none' : '';
 
-    // Position tooltip above nav bar
     const navRect = document.querySelector('.bottom-nav').getBoundingClientRect();
     tooltip.style.bottom = (window.innerHeight - navRect.top + 12) + 'px';
   }
@@ -211,11 +289,7 @@ function startAppTour() {
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('tour-highlight'));
     backdrop.classList.remove('visible');
     tooltip.classList.remove('visible');
-    setTimeout(() => {
-      backdrop.remove();
-      tooltip.remove();
-    }, 300);
-    // Return to prices tab
+    setTimeout(() => { backdrop.remove(); tooltip.remove(); }, 300);
     switchTab('prices');
   }
 
