@@ -74,6 +74,12 @@
           <button class="btn btn-primary btn-full" id="btn-save-scan">Save Confirmed Items</button>
         </div>
       </div>
+
+      <!-- Pending Review section (admin+ only, shown below scan UI) -->
+      <div id="scan-pending-section" class="admin-only" style="display:none; padding: 0 0 1rem;">
+        <h2 class="section-title">Pending Review</h2>
+        <div id="scan-pending-list" class="card-list"></div>
+      </div>
     </section>
 
     <!-- Tab: Spend -->
@@ -105,13 +111,6 @@
         <button class="btn btn-outline btn-sm" id="btn-logout">Sign Out</button>
       </header>
       <div class="more-menu">
-        <!-- Admin-only pending review -->
-        <button class="more-item admin-only" data-section="pending" id="pending-review-btn" style="display:none">
-          <span class="more-icon">⏳</span>
-          <span>Pending Review</span>
-          <span id="pending-badge" class="pending-badge" style="display:none"></span>
-          <span class="chevron">›</span>
-        </button>
         <button class="more-item admin-only" data-section="inventory">
           <span class="more-icon">🧺</span>
           <span>Inventory</span>
@@ -132,15 +131,11 @@
           <span>Household</span>
           <span class="chevron">›</span>
         </button>
-      </div>
-
-      <!-- Pending Review sub-section (admin+) -->
-      <div id="section-pending" class="sub-section" style="display:none">
-        <div class="sub-header">
-          <button class="btn btn-icon back-btn">‹</button>
-          <h2>Pending Review</h2>
-        </div>
-        <div id="pending-list" class="card-list"></div>
+        <button class="more-item" data-section="account">
+          <span class="more-icon">👤</span>
+          <span>My Account</span>
+          <span class="chevron">›</span>
+        </button>
       </div>
 
       <!-- Inventory sub-section (admin+) -->
@@ -184,6 +179,15 @@
         </div>
         <div id="household-content" style="padding:0 1rem 1rem"></div>
       </div>
+
+      <!-- Account sub-section (all roles) -->
+      <div id="section-account" class="sub-section" style="display:none">
+        <div class="sub-header">
+          <button class="btn btn-icon back-btn">‹</button>
+          <h2>My Account</h2>
+        </div>
+        <div id="account-content" style="padding:0 1rem 1rem"></div>
+      </div>
     </section>
   </div>
 
@@ -200,15 +204,15 @@
     <button class="nav-item" data-tab="scan">
       <span class="nav-icon">📷</span>
       <span>Scan</span>
+      <span id="nav-pending-dot" class="nav-pending-dot" style="display:none"></span>
     </button>
     <button class="nav-item" data-tab="spend">
       <span class="nav-icon">📊</span>
       <span>Spend</span>
     </button>
-    <button class="nav-item" data-tab="more" id="nav-more">
+    <button class="nav-item" data-tab="more">
       <span class="nav-icon">⋯</span>
       <span>More</span>
-      <span id="nav-pending-dot" class="nav-pending-dot" style="display:none"></span>
     </button>
   </nav>
 

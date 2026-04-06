@@ -187,6 +187,7 @@ a { color: var(--primary); text-decoration: none; }
   font-weight: 500;
 }
 .badge-sale { background: #fef3c7; color: #92400e; }
+.badge-coupon { background: #ede9fe; color: #5b21b6; }
 .badge-best { background: #d1fae5; color: #065f46; }
 .badge-no-data { background: #f3f4f6; color: var(--text-muted); }
 
@@ -194,6 +195,24 @@ a { color: var(--primary); text-decoration: none; }
 .price-big { font-size: 1.125rem; font-weight: 700; }
 .price-unit { font-size: var(--text-sm); color: var(--text-muted); }
 .price-best { color: var(--success); }
+
+/* Price breakdown rows (history cards) */
+.price-breakdown { font-size: var(--text-sm); margin-top: 0.25rem; }
+.price-breakdown-reg { color: var(--text-muted); }
+.price-breakdown-sale { color: #92400e; }
+.price-breakdown-coupon { color: #5b21b6; }
+
+/* Live price calculation preview (add price form) */
+.price-calc-preview {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  min-height: 2.25rem;
+}
+.price-calc-preview strong { color: var(--text); }
 .callout-box {
   background: #eff6ff;
   border: 1px solid #bfdbfe;

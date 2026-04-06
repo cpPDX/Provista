@@ -47,7 +47,8 @@ const api = {
     create: (data) => api.post('/prices', data),
     approve: (id, edits) => api.put(`/prices/${id}/approve`, edits || {}),
     reject: (id) => api.delete(`/prices/${id}/reject`),
-    delete: (id) => api.delete(`/prices/${id}`)
+    delete: (id) => api.delete(`/prices/${id}`),
+    lastPurchased: (itemId) => api.get(`/prices/last-purchased/${itemId}`)
   },
   inventory: {
     list: () => api.get('/inventory'),
@@ -65,6 +66,10 @@ const api = {
   spend: {
     month: (month) => api.get(`/spend?month=${month}`),
     summary: () => api.get('/spend/summary')
+  },
+  auth: {
+    updateProfile: (data) => api.put('/auth/profile', data),
+    changePassword: (data) => api.put('/auth/password', data)
   },
   household: {
     get: () => api.get('/household'),
