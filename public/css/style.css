@@ -323,11 +323,12 @@ a { color: var(--primary); text-decoration: none; }
   border-radius: 20px 20px 0 0;
   width: 100%;
   max-width: 600px;
-  max-height: 90vh;
+  max-height: min(90vh, 90dvh);
   overflow-y: auto;
   padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0));
   animation: slideUp 0.25s cubic-bezier(0.32, 0.72, 0, 1);
   box-shadow: var(--shadow-lg);
+  transition: margin-bottom 0.15s ease;
 }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
 .modal-header {
@@ -842,3 +843,81 @@ body.role-member .member-only { display: flex; }
   border-radius: 999px;
   margin-bottom: 0.5rem;
 }
+
+/* ===== Danger Zone ===== */
+.danger-zone {
+  border: 1.5px solid var(--danger);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-top: 1.5rem;
+}
+.danger-zone h3 {
+  color: var(--danger);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.375rem;
+}
+.danger-zone p {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+.danger-zone .owner-warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: var(--text-sm);
+  color: #9a3412;
+  margin-bottom: 0.75rem;
+}
+
+/* ===== CSV Import (Scan tab) ===== */
+.scan-import-section {
+  background: var(--surface);
+  border-radius: var(--radius);
+  border: 1.5px dashed var(--border);
+  overflow: hidden;
+}
+.scan-import-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1rem;
+  cursor: pointer;
+  font-weight: 500;
+  user-select: none;
+}
+.scan-import-header:active { background: var(--bg); }
+.scan-import-header .chevron {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  display: inline-block;
+}
+.scan-import-header.open .chevron { transform: rotate(90deg); }
+.scan-import-body { padding: 0 1rem 1rem; }
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+.btn-link:hover { opacity: 0.8; }
+.csv-import-result {
+  font-size: var(--text-sm);
+  padding: 0.75rem 0;
+}
+.csv-import-error { color: var(--danger); }
+.csv-import-success { color: var(--success, #16a34a); }
+.csv-import-errors-list {
+  margin-top: 0.5rem;
+  padding-left: 1rem;
+  color: var(--danger);
+}
+.csv-import-errors-list li { margin-bottom: 0.2rem; }

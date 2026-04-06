@@ -78,6 +78,20 @@
         </div>
       </div>
 
+      <!-- CSV Import section -->
+      <div class="scan-import-section" style="margin: 0 0 1rem;">
+        <div class="scan-import-header" id="btn-toggle-csv-import">
+          <span>📂 Import from CSV</span>
+          <span class="chevron">›</span>
+        </div>
+        <div id="csv-import-body" class="scan-import-body" style="display:none">
+          <p class="text-muted text-sm" style="margin-bottom:0.75rem">Upload a spreadsheet of prices. <button id="btn-csv-template" class="btn-link">Download template</button></p>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none" />
+          <button class="btn btn-outline btn-full" id="btn-csv-upload">Choose CSV File</button>
+          <div id="csv-import-status"></div>
+        </div>
+      </div>
+
       <!-- Pending Review section (admin+ only, shown below scan UI) -->
       <div id="scan-pending-section" class="admin-only" style="display:none; padding: 0 0 1rem;">
         <h2 class="section-title">Pending Review</h2>
@@ -268,6 +282,7 @@
   <script src="/js/autocomplete.js"></script>
   <script src="/js/prices.js"></script>
   <script src="/js/shoppingList.js"></script>
+  <script src="/js/csvImport.js"></script>
   <script src="/js/scan.js"></script>
   <script src="/js/spend.js"></script>
   <script src="/js/more.js"></script>

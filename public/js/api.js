@@ -69,7 +69,8 @@ const api = {
   },
   auth: {
     updateProfile: (data) => api.put('/auth/profile', data),
-    changePassword: (data) => api.put('/auth/password', data)
+    changePassword: (data) => api.put('/auth/password', data),
+    deleteAccount: (data) => api.request('DELETE', '/auth/account', data)
   },
   household: {
     get: () => api.get('/household'),
@@ -77,6 +78,7 @@ const api = {
     getInvite: () => api.get('/household/invite'),
     regenerateInvite: () => api.post('/household/invite', {}),
     removeMember: (id) => api.delete(`/household/members/${id}`),
-    updateMemberRole: (id, role) => api.put(`/household/members/${id}`, { role })
+    updateMemberRole: (id, role) => api.put(`/household/members/${id}`, { role }),
+    deleteHousehold: (data) => api.request('DELETE', '/household', data)
   }
 };

@@ -48,11 +48,34 @@ function openModal(title, bodyHTML, onConfirm) {
       });
     }
   }
+
+  // Push modal above keyboard on mobile using visualViewport API
+  if (window.visualViewport) {
+    const vpHandler = () => {
+      const modal = document.querySelector('.modal');
+      if (!modal) return;
+      const offsetFromBottom = window.innerHeight
+        - (window.visualViewport.height + window.visualViewport.offsetTop);
+      modal.style.marginBottom = Math.max(0, offsetFromBottom) + 'px';
+    };
+    window.visualViewport.addEventListener('resize', vpHandler);
+    window.visualViewport.addEventListener('scroll', vpHandler);
+    window._modalVpHandler = vpHandler;
+  }
 }
 
 function closeModal() {
   document.getElementById('modal-overlay').style.display = 'none';
   document.getElementById('modal-body').innerHTML = '';
+
+  // Clean up keyboard listener and reset margin
+  if (window.visualViewport && window._modalVpHandler) {
+    window.visualViewport.removeEventListener('resize', window._modalVpHandler);
+    window.visualViewport.removeEventListener('scroll', window._modalVpHandler);
+    delete window._modalVpHandler;
+  }
+  const modal = document.querySelector('.modal');
+  if (modal) modal.style.marginBottom = '';
 }
 
 // Error display helper
