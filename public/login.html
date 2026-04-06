@@ -216,11 +216,15 @@
       btn.disabled = true;
       btn.textContent = 'Creating…';
       try {
-        await postJSON('/api/auth/register', {
+        const data = await postJSON('/api/auth/register', {
           ...pendingUser,
           action: 'create',
           householdName: e.target.householdName.value.trim()
         });
+        // Flag so wizard auto-starts only on this first login
+        if (data.user && data.user._id) {
+          localStorage.setItem('gt_new_household_' + data.user._id, '1');
+        }
         window.location.href = '/';
       } catch (err) {
         showError('create-error', err.message);

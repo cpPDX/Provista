@@ -2,10 +2,16 @@
 
 // ===== Setup Wizard Persistence =====
 
-function wizardStepKey() { return 'gt_wizard_step_' + window.appAuth.user._id; }
-function wizardDoneKey()  { return 'gt_wizard_done_' + window.appAuth.user._id; }
+function wizardStepKey()      { return 'gt_wizard_step_'      + window.appAuth.user._id; }
+function wizardDoneKey()      { return 'gt_wizard_done_'      + window.appAuth.user._id; }
+function newHouseholdKey()    { return 'gt_new_household_'    + window.appAuth.user._id; }
 
 function shouldShowSetupWizard() {
+  if (!window.appAuth.isOwner()) return false;
+  return !!localStorage.getItem(newHouseholdKey()); // one-shot: only after household creation
+}
+
+function shouldShowResumeButton() {
   if (!window.appAuth.isOwner()) return false;
   return !localStorage.getItem(wizardDoneKey());
 }
@@ -51,12 +57,12 @@ const WIZARD_STEPS = [
     nextLabel: 'Skip'
   },
   {
-    tab: 'scan',
+    tab: 'prices',
     section: null,
     sectionLoader: null,
-    targetId: 'btn-camera',
+    targetId: 'btn-scan-receipt',
     title: 'Step 3 of 5 — Scan receipts',
-    text: 'Point your camera at a receipt and the app reads prices using OCR — all on your device. No data is sent to a server.',
+    text: 'Tap "Scan" to photograph a receipt and the app reads prices using OCR — all on your device.',
     nextLabel: 'Next'
   },
   {
@@ -95,6 +101,7 @@ let wizardActive = false;
 
 async function startSetupWizard(fromStep) {
   if (wizardActive) return;
+  localStorage.removeItem(newHouseholdKey()); // clear one-shot trigger
   const startStep = fromStep ?? savedWizardStep();
   runWizard(startStep);
 }
@@ -107,7 +114,9 @@ function runWizard(startStep) {
   const backdrop = document.createElement('div');
   backdrop.className = 'tour-backdrop';
   backdrop.style.pointerEvents = 'none'; // allow tapping through to highlighted elements
+  backdrop.style.background = 'transparent'; // no dark tint — wizard is non-blocking
   document.body.appendChild(backdrop);
+  // Do NOT add 'visible' class — keep backdrop fully transparent for wizard
 
   const tooltip = document.createElement('div');
   tooltip.className = 'tour-tooltip wizard-tooltip';
@@ -122,7 +131,7 @@ function runWizard(startStep) {
   document.body.appendChild(tooltip);
 
   requestAnimationFrame(() => {
-    backdrop.classList.add('visible');
+    // Only show tooltip, not backdrop (backdrop stays transparent for wizard)
     tooltip.classList.add('visible');
   });
 
@@ -212,8 +221,8 @@ function startAppTour() {
   const steps = [
     {
       tab: 'prices',
-      title: 'Prices',
-      text: 'Your price log. Every item you buy gets tracked here with its regular price, sale price, and coupons. Tap any item to see its full history and compare stores.',
+      title: 'Product Prices',
+      text: 'Your price log. Log prices, scan receipts, or import from CSV. Tap any item to see its full history and compare stores.',
       anchor: '[data-tab="prices"]'
     },
     {
@@ -221,12 +230,6 @@ function startAppTour() {
       title: 'Shopping List',
       text: 'Build your shopping list here. Each item shows the best known price and which store to go to. The whole household shares the same list.',
       anchor: '[data-tab="list"]'
-    },
-    {
-      tab: 'scan',
-      title: 'Scan Receipts',
-      text: 'Take a photo of a receipt and the app reads it using OCR — right on your phone, nothing sent to a server. It pulls out item names and prices for you to review.',
-      anchor: '[data-tab="scan"]'
     },
     {
       tab: 'spend',
@@ -237,7 +240,7 @@ function startAppTour() {
     {
       tab: 'more',
       title: 'More',
-      text: 'Manage inventory, item catalog, stores, household members, and your account. Admins can also review pending price submissions here.',
+      text: 'Manage inventory, product catalog, stores, household members, and your account. Admins can also review pending price submissions here.',
       anchor: '[data-tab="more"]'
     }
   ];

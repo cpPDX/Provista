@@ -1,4 +1,4 @@
-// More tab: Inventory, Item Catalog, Stores, Household, Account
+// More tab: Inventory, Product Catalog, Stores, Household, Account
 
 // ===== Navigation =====
 function showMoreSection(sectionId) {
@@ -264,7 +264,7 @@ function openAddInventoryModal() {
   });
 }
 
-// ===== Item Catalog (admin+) =====
+// ===== Product Catalog (admin+) =====
 let catalogState = { items: [], filtered: [] };
 
 async function loadCatalog() {
@@ -287,17 +287,17 @@ function renderCatalog() {
   container.innerHTML = items.map(item => `
     <div class="card">
       <div class="card-body">
-        <div class="card-title">${item.name}</div>
+        <div class="card-title">${item.name}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
         <div class="card-subtitle">${item.category} &middot; ${item.unit}</div>
       </div>
       <div class="card-actions">
-        <button class="btn btn-outline btn-sm" onclick="openEditItemModal('${item._id}','${escapeAttr(item.name)}','${escapeAttr(item.category)}','${escapeAttr(item.unit)}')">Edit</button>
+        <button class="btn btn-outline btn-sm" onclick="openEditItemModal('${item._id}','${escapeAttr(item.name)}','${escapeAttr(item.category)}','${escapeAttr(item.unit)}',${!!item.isOrganic})">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteItem('${item._id}')">✕</button>
       </div>
     </div>`).join('');
 }
 
-function openEditItemModal(id, name, category, unit) {
+function openEditItemModal(id, name, category, unit, isOrganic = false) {
   const bodyHTML = `
     <form id="edit-item-form">
       <div class="form-group">
@@ -325,6 +325,10 @@ function openEditItemModal(id, name, category, unit) {
           </datalist>
         </div>
       </div>
+      <div class="form-group" style="display:flex;align-items:center;gap:0.5rem">
+        <input type="checkbox" name="isOrganic" id="edit-item-organic" ${isOrganic ? 'checked' : ''} />
+        <label for="edit-item-organic" style="margin:0;font-weight:500">Organic product</label>
+      </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary">Save</button>
@@ -335,7 +339,12 @@ function openEditItemModal(id, name, category, unit) {
     e.preventDefault();
     const form = e.target;
     try {
-      await api.items.update(id, { name: form.name.value.trim(), category: form.category.value.trim(), unit: form.unit.value.trim() });
+      await api.items.update(id, {
+        name: form.name.value.trim(),
+        category: form.category.value.trim(),
+        unit: form.unit.value.trim(),
+        isOrganic: form.isOrganic.checked
+      });
       closeModal();
       showToast('Item updated');
       await loadCatalog();
@@ -687,6 +696,10 @@ function initMoreTab() {
 
   document.getElementById('btn-app-tour').addEventListener('click', () => {
     startAppTour();
+  });
+
+  document.getElementById('btn-more-csv-import')?.addEventListener('click', () => {
+    openCsvImportModal();
   });
 
   const resumeBtn = document.getElementById('btn-resume-setup');

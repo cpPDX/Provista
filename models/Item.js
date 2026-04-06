@@ -6,6 +6,7 @@ const itemSchema = new mongoose.Schema({
   category: { type: String, required: true, trim: true },
   unit: { type: String, required: true, trim: true },
   barcode: { type: String, trim: true },
+  isOrganic: { type: Boolean, default: false },
   isSeeded: { type: Boolean, default: false }
 }, { timestamps: true });
 
