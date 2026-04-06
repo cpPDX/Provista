@@ -485,7 +485,6 @@ async function loadInviteCode() {
   try {
     const { inviteCode, expiresAt } = await api.household.getInvite();
     const expStr = new Date(expiresAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    // Build join URL
     const joinUrl = `${window.location.origin}/join?code=${inviteCode}`;
 
     section.innerHTML = `
@@ -496,14 +495,19 @@ async function loadInviteCode() {
       </div>
       <button class="btn btn-outline btn-full" id="btn-regen-invite" style="margin-top:0.5rem">Regenerate Code</button>`;
 
-    // Generate QR code client-side
-    await generateQR('qr-canvas', joinUrl);
-
     document.getElementById('btn-regen-invite').addEventListener('click', async () => {
       await api.household.regenerateInvite();
       showToast('New invite code generated');
       await loadInviteCode();
     });
+
+    // QR code is optional — if the CDN is unavailable the code is still shown
+    try {
+      await generateQR('qr-canvas', joinUrl);
+    } catch (_) {
+      const canvas = document.getElementById('qr-canvas');
+      if (canvas) canvas.remove();
+    }
   } catch (err) {
     section.innerHTML = `<p class="text-danger text-sm">Failed to load invite code.</p>`;
   }
@@ -574,4 +578,11 @@ function initMoreTab() {
   document.getElementById('btn-app-tour').addEventListener('click', () => {
     startAppTour();
   });
+
+  const resumeBtn = document.getElementById('btn-resume-setup');
+  if (resumeBtn) {
+    resumeBtn.addEventListener('click', () => {
+      startSetupWizard();
+    });
+  }
 }

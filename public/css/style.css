@@ -817,3 +817,28 @@ body.role-member .member-only { display: flex; }
   background: rgba(79,70,229,0.08);
   pointer-events: none;
 }
+
+/* Wizard interactive highlight (non-nav elements) */
+.wizard-highlight {
+  position: relative;
+  z-index: 402;
+  border-radius: var(--radius-sm);
+  animation: wizardPulse 1.5s ease-in-out infinite;
+}
+@keyframes wizardPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(79,70,229,0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(79,70,229,0); }
+}
+
+/* Wizard tooltip variant */
+.wizard-tooltip { z-index: 501; }
+.wizard-step-badge {
+  display: inline-block;
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  margin-bottom: 0.5rem;
+}
