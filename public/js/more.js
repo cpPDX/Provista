@@ -538,7 +538,7 @@ function openAddCatalogItemModal() {
 
 // ===== Init =====
 function initMoreTab() {
-  document.querySelectorAll('.more-item').forEach(btn => {
+  document.querySelectorAll('.more-item[data-section]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const section = btn.dataset.section;
       showMoreSection(section);
@@ -569,5 +569,9 @@ function initMoreTab() {
       item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q)
     );
     renderCatalog();
+  });
+
+  document.getElementById('btn-app-tour').addEventListener('click', () => {
+    startAppTour();
   });
 }

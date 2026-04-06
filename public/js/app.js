@@ -47,6 +47,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load default tab
   await loadPricesTab();
+
+  // Setup wizard for new household owners
+  if (shouldShowSetupWizard()) {
+    setTimeout(startSetupWizard, 500);
+  }
 });
 
 function capitalizeRole(role) {
