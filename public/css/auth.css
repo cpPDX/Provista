@@ -1,6 +1,6 @@
-/* Auth page styles */
+/* Auth page styles — Railway dark theme */
 body.auth-page {
-  background: linear-gradient(135deg, #312e81 0%, #4338ca 40%, #6366f1 100%);
+  background: linear-gradient(135deg, #1a0a2e 0%, #0e0e18 50%, #0b0b0b 100%);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -28,10 +28,12 @@ body.auth-page {
 .auth-logo h1 { font-size: 1.75rem; font-weight: 800; }
 
 .auth-card {
-  background: white;
-  border-radius: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
   padding: 1.75rem;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  color: var(--text);
 }
 
 .auth-tabs {
@@ -51,17 +53,17 @@ body.auth-page {
   transition: all 0.15s;
 }
 .auth-tab.active {
-  background: white;
+  background: var(--surface-raised);
   color: var(--text);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .auth-form .form-group { margin-bottom: 1rem; }
 
 .auth-error {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: rgba(248,113,113,0.08);
+  color: var(--danger);
+  border: 1px solid rgba(248,113,113,0.2);
   border-radius: var(--radius-sm);
   padding: 0.625rem 0.875rem;
   font-size: var(--text-sm);
@@ -99,15 +101,16 @@ body.auth-page {
   gap: 1rem;
   padding: 1rem;
   border-radius: var(--radius);
-  border: 2px solid var(--border);
+  border: 1.5px solid var(--border-strong);
   text-align: left;
   transition: border-color 0.15s, background 0.15s;
   cursor: pointer;
-  background: white;
+  background: var(--surface-raised);
+  color: var(--text);
 }
 .household-choice-btn:active {
   border-color: var(--primary);
-  background: #eff6ff;
+  background: var(--primary-bg);
 }
 .choice-icon { font-size: 1.75rem; flex-shrink: 0; }
 .choice-title { font-weight: 600; font-size: 0.9375rem; }
