@@ -86,7 +86,7 @@ function buildCallout(entries) {
 }
 
 // Draw a simple bar chart on a canvas
-function drawBarChart(canvasId, labels, values, color = '#2563eb') {
+function drawBarChart(canvasId, labels, values, color = '#4f46e5') {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -186,7 +186,7 @@ function drawLineChart(canvasId, datasets) {
     ctx.fillText('$' + v.toFixed(2), padL - 4, y + 4);
   }
 
-  const colors = ['#2563eb', '#16a34a', '#d97706', '#dc2626', '#7c3aed'];
+  const colors = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
   datasets.forEach((ds, di) => {
     if (ds.points.length === 0) return;
     const col = colors[di % colors.length];

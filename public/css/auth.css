@@ -1,6 +1,6 @@
 /* Auth page styles */
 body.auth-page {
-  background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 50%, #2563eb 100%);
+  background: linear-gradient(135deg, #312e81 0%, #4338ca 40%, #6366f1 100%);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -29,9 +29,9 @@ body.auth-page {
 
 .auth-card {
   background: white;
-  border-radius: 16px;
-  padding: 1.5rem;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  border-radius: 20px;
+  padding: 1.75rem;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
 }
 
 .auth-tabs {
