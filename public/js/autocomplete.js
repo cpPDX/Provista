@@ -229,6 +229,7 @@ async function promptCreateStore(name, onCreated) {
     try {
       const store = await api.stores.create(data);
       closeModal();
+      window.onWizardActionComplete?.('add-store');
       if (onCreated) onCreated(store);
     } catch (err) {
       handleError(err, 'Failed to add store');
