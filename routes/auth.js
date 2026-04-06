@@ -4,6 +4,9 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Household = require('../models/Household');
+const PriceEntry = require('../models/PriceEntry');
+const InventoryItem = require('../models/InventoryItem');
+const ShoppingListItem = require('../models/ShoppingListItem');
 const { seedHousehold } = require('../utils/seed');
 
 const SALT_ROUNDS = 12;
@@ -159,6 +162,51 @@ router.put('/password', async (req, res) => {
 
     user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     await user.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/auth/account - permanently delete own account
+router.delete('/account', async (req, res) => {
+  const token = req.cookies?.token;
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(payload.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { password } = req.body;
+    if (!password) return res.status(400).json({ error: 'Password is required to confirm deletion' });
+
+    const match = await bcrypt.compare(password, user.passwordHash);
+    if (!match) return res.status(401).json({ error: 'Incorrect password' });
+
+    // Owners must delete or transfer their household before deleting their account
+    if (user.role === 'owner' && user.householdId) {
+      return res.status(400).json({
+        error: 'You are a household owner. Please delete your household or transfer ownership before deleting your account.'
+      });
+    }
+
+    const userId = user._id;
+
+    // Null out user references in shared data (preserve history for the household)
+    await Promise.all([
+      PriceEntry.updateMany(
+        { $or: [{ submittedBy: userId }, { reviewedBy: userId }] },
+        { $unset: { submittedBy: '', reviewedBy: '' } }
+      ),
+      InventoryItem.updateMany({ lastUpdatedBy: userId }, { $unset: { lastUpdatedBy: '' } }),
+      ShoppingListItem.updateMany(
+        { $or: [{ addedBy: userId }, { removedBy: userId }] },
+        { $unset: { addedBy: '', removedBy: '' } }
+      ),
+    ]);
+
+    await User.findByIdAndDelete(userId);
+    res.clearCookie('token', COOKIE_OPTS);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
