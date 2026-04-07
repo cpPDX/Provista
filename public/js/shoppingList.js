@@ -43,7 +43,8 @@ function renderShoppingList() {
         </div>
         <div class="card-body">
           <div class="card-title">${name}</div>
-          <div class="card-subtitle">${cat} &middot; qty ${item.quantity}${unit ? ' ' + unit : ''} &middot; Added by ${item.addedBy?.name || 'unknown'}</div>
+          <div class="list-item-meta">${cat}${cat && unit ? ' &middot; ' : ''}qty ${item.quantity}${unit ? ' ' + unit : ''}</div>
+          <div class="list-item-meta">Added by ${item.addedBy?.name || 'unknown'}</div>
           ${priceInfo}
         </div>
         <button class="btn btn-icon text-danger" onclick="removeListItem('${item._id}')" style="font-size:1rem;min-height:32px;min-width:32px">✕</button>

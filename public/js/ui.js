@@ -108,56 +108,81 @@ function buildCallout(entries) {
   </div>`;
 }
 
+// Calculate a "nice" axis ceiling and step that gives clean round-number labels
+function niceAxisScale(maxVal, steps = 4) {
+  if (maxVal <= 0) return { ceil: steps, step: 1 };
+  const rawStep = maxVal / steps;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const nice = [1, 2, 2.5, 5, 10].map(f => f * mag).find(n => n >= rawStep) || rawStep;
+  const ceil = nice * steps;
+  return { ceil, step: nice };
+}
+
 // Draw a simple bar chart on a canvas
-function drawBarChart(canvasId, labels, values, color = '#4f46e5') {
+function drawBarChart(canvasId, labels, values, color = '#a855f7') {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
-  const displayW = canvas.offsetWidth || 320;
-  const displayH = canvas.height;
+
+  // Always measure from the parent so we get the true layout width,
+  // even when the canvas element itself is 0 (e.g. first paint)
+  const displayW = canvas.parentElement
+    ? Math.floor(canvas.parentElement.clientWidth) || canvas.offsetWidth || 320
+    : canvas.offsetWidth || 320;
+  const displayH = 200; // fixed logical pixel height
+
+  // Update canvas buffer size
   canvas.width = displayW * dpr;
   canvas.height = displayH * dpr;
+  canvas.style.width  = displayW + 'px';
+  canvas.style.height = displayH + 'px';
   ctx.scale(dpr, dpr);
 
-  const padL = 52, padR = 12, padT = 12, padB = 36;
+  const padL = 54, padR = 12, padT = 14, padB = 34;
   const W = displayW - padL - padR;
   const H = displayH - padT - padB;
-  const max = Math.max(...values, 0.01);
-  const barW = Math.max((W / labels.length) - 8, 4);
+
+  const rawMax = Math.max(...values, 0.01);
+  const { ceil: axisMax, step } = niceAxisScale(rawMax);
+  const steps = Math.round(axisMax / step);
+  const barW = Math.max(Math.floor(W / labels.length) - 6, 4);
 
   ctx.clearRect(0, 0, displayW, displayH);
 
   // Gridlines + y-axis labels
-  ctx.strokeStyle = '#e5e7eb';
-  ctx.fillStyle = '#6b7280';
+  ctx.lineWidth = 1;
   ctx.font = '11px system-ui, sans-serif';
   ctx.textAlign = 'right';
-  const steps = 4;
   for (let i = 0; i <= steps; i++) {
-    const val = (max / steps) * i;
-    const y = padT + H - (H * i / steps);
+    const val = step * i;
+    const y = padT + H - (H * val / axisMax);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
     ctx.beginPath();
     ctx.moveTo(padL, y);
     ctx.lineTo(padL + W, y);
     ctx.stroke();
-    ctx.fillText('$' + val.toFixed(0), padL - 4, y + 4);
+    ctx.fillStyle = '#71717a';
+    ctx.fillText('$' + (val >= 1000 ? (val / 1000).toFixed(1) + 'k' : val.toFixed(0)), padL - 5, y + 4);
   }
 
   // Bars
   labels.forEach((label, i) => {
-    const barH = (values[i] / max) * H;
+    const barH = Math.max((values[i] / axisMax) * H, values[i] > 0 ? 2 : 0);
     const x = padL + i * (W / labels.length) + (W / labels.length - barW) / 2;
     const y = padT + H - barH;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.roundRect(x, y, barW, barH, 4);
+    ctx.roundRect(x, y, barW, barH, [3, 3, 0, 0]);
     ctx.fill();
 
-    // X label
-    ctx.fillStyle = '#6b7280';
+    // X label: show last 2 chars of month (e.g. '03' → '03') or abbreviate
+    ctx.fillStyle = '#71717a';
     ctx.textAlign = 'center';
-    ctx.fillText(label.slice(5), x + barW / 2, padT + H + 18);
+    // label format is YYYY-MM; show abbreviated month
+    const [, mm] = label.split('-');
+    const monthAbbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mm, 10) - 1] || mm;
+    ctx.fillText(monthAbbr, x + barW / 2, padT + H + 20);
   });
 }
 
