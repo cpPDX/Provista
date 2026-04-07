@@ -104,6 +104,7 @@ async function loadDetailHistory(itemId) {
           ${hasCoupon ? `<span class="price-breakdown-coupon">− ${formatCurrency(e.couponAmount)} coupon${e.couponCode ? ` (${e.couponCode})` : ''}</span>` : ''}
         </div>` : '';
 
+      const organicBadge = e.isOrganic ? `<span class="badge badge-organic">Organic</span> ` : '';
       const saleBadge = hasSale ? `<span class="badge badge-sale">Sale</span> ` : '';
       const couponBadge = hasCoupon ? `<span class="badge badge-coupon">Coupon</span> ` : '';
       const canDelete = window.appAuth?.isAdmin() && !isPending;
@@ -113,7 +114,7 @@ async function loadDetailHistory(itemId) {
           <div class="card-body">
             <div class="card-title">${e.storeId?.name || 'Unknown'}</div>
             <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity} &middot; by ${e.submittedBy?.name || '—'}</div>
-            <div style="margin-top:4px">${saleBadge}${couponBadge}${statusBadge}</div>
+            <div style="margin-top:4px">${organicBadge}${saleBadge}${couponBadge}${statusBadge}</div>
             ${priceLine}
             ${e.notes ? `<div class="text-muted text-sm" style="margin-top:4px">${e.notes}</div>` : ''}
           </div>
@@ -212,7 +213,7 @@ function recalcPricePreview() {
   }
 }
 
-function openAddPriceModal(prefillItem) {
+function openAddPriceModal(prefillItem, onSaved) {
   const isAdmin = window.appAuth?.isAdmin();
   const submitLabel = isAdmin ? 'Save Entry' : 'Submit for Review';
   const bodyHTML = `
@@ -277,6 +278,11 @@ function openAddPriceModal(prefillItem) {
       </div>
 
       <div id="price-calc-preview" class="price-calc-preview" style="display:none"></div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="price-organic" />
+        <label for="price-organic">Organic</label>
+      </div>
 
       <div class="form-group" style="margin-top:0.5rem">
         <label>Notes (optional)</label>
@@ -361,6 +367,7 @@ function openAddPriceModal(prefillItem) {
       couponAmount,
       couponCode,
       quantity,
+      isOrganic: document.getElementById('price-organic').checked,
       date: document.getElementById('price-date').value,
       notes: document.getElementById('price-notes').value.trim(),
       source: 'manual'
@@ -369,7 +376,9 @@ function openAddPriceModal(prefillItem) {
       const result = await api.prices.create(data);
       closeModal();
       window.onWizardActionComplete?.('add-price');
-      if (result.status === 'pending') {
+      if (onSaved) {
+        onSaved(result);
+      } else if (result.status === 'pending') {
         showToast('Submitted for review');
       } else {
         showToast('Price entry saved');
@@ -381,7 +390,178 @@ function openAddPriceModal(prefillItem) {
   });
 }
 
-function initPricesTab() {
+// =============================================================
+// Pending Review (admin+) — rendered in the Prices tab
+// =============================================================
+
+async function loadScanPendingSection() {
+  const section = document.getElementById('scan-pending-section');
+  const container = document.getElementById('scan-pending-list');
+  if (!section || !container) return;
+  section.style.display = '';
+
+  try {
+    const entries = await api.prices.pending();
+    updatePendingBadge(entries.length);
+
+    if (!entries.length) {
+      container.innerHTML = emptyState('✅', 'No entries pending review.');
+      return;
+    }
+
+    container.innerHTML = entries.map(e => {
+      const name = e.itemId?.name || 'Unknown item';
+      const unit = e.itemId?.unit || 'unit';
+      const store = e.storeId?.name || 'Unknown store';
+      const submitter = e.submittedBy?.name || 'Unknown';
+      const hasSale = e.salePrice != null;
+      const hasCoupon = e.couponAmount != null && e.couponAmount > 0;
+      const isOrganic = e.isOrganic;
+      return `
+        <div class="pending-card" id="pending-${e._id}">
+          <div class="pending-card-header">
+            <div>
+              <div style="font-weight:600">${name}${isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
+              <div class="text-muted text-sm">${store} &middot; ${formatDate(e.date)} &middot; by ${submitter}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-weight:700;font-size:1.1rem">${formatCurrency(e.finalPrice)}</div>
+              <div class="text-muted text-sm">${formatPPU(e.pricePerUnit, unit)}</div>
+              ${hasSale ? `<span class="badge badge-sale">Sale</span>` : ''}
+              ${hasCoupon ? `<span class="badge badge-coupon">Coupon</span>` : ''}
+            </div>
+          </div>
+          ${e.notes ? `<div class="text-muted text-sm">${e.notes}</div>` : ''}
+          <div class="pending-card-actions">
+            <button class="btn btn-outline btn-sm" onclick="openApprovePriceModal('${e._id}', ${JSON.stringify(e).replace(/"/g, '&quot;')})">Edit &amp; Approve</button>
+            <button class="btn btn-primary btn-sm" onclick="quickApprovePrice('${e._id}')">Approve ✓</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectPriceEntry('${e._id}')">Reject</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = emptyState('⚠️', 'Failed to load pending entries.');
+  }
+}
+
+async function quickApprovePrice(id) {
+  try {
+    await api.prices.approve(id);
+    showToast('Entry approved');
+    await loadScanPendingSection();
+    await loadPricesTab();
+  } catch (err) {
+    handleError(err, 'Failed to approve entry');
+  }
+}
+
+function openApprovePriceModal(id, entryRaw) {
+  openApproveModal(id, entryRaw, async () => {
+    await loadScanPendingSection();
+    await loadPricesTab();
+  });
+}
+
+async function rejectPriceEntry(id) {
+  if (!confirm('Reject and delete this entry?')) return;
+  try {
+    await api.prices.reject(id);
+    showToast('Entry rejected');
+    await loadScanPendingSection();
+  } catch (err) {
+    handleError(err, 'Failed to reject entry');
+  }
+}
+
+function openApproveModal(id, entryRaw, onSuccess) {
+  const bodyHTML = `
+    <form id="approve-form">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Regular Price ($)</label>
+          <input class="form-control" type="number" step="0.01" min="0" id="approve-reg-price" value="${entryRaw.regularPrice}" required />
+        </div>
+        <div class="form-group">
+          <label>Quantity</label>
+          <input class="form-control" type="number" step="any" min="0.01" id="approve-qty" value="${entryRaw.quantity}" required />
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="approve-organic" ${entryRaw.isOrganic ? 'checked' : ''} />
+        <label for="approve-organic">Organic</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="approve-sale" ${entryRaw.salePrice != null ? 'checked' : ''} />
+        <label for="approve-sale">On Sale</label>
+      </div>
+      <div id="approve-sale-group" style="${entryRaw.salePrice != null ? '' : 'display:none'}">
+        <div class="form-group">
+          <label>Sale Price ($)</label>
+          <input class="form-control" type="number" step="0.01" min="0" id="approve-sale-price" value="${entryRaw.salePrice || ''}" />
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="approve-coupon" ${entryRaw.couponAmount != null ? 'checked' : ''} />
+        <label for="approve-coupon">Used Coupon</label>
+      </div>
+      <div id="approve-coupon-group" style="${entryRaw.couponAmount != null ? '' : 'display:none'}">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Coupon Amount ($)</label>
+            <input class="form-control" type="number" step="0.01" min="0" id="approve-coupon-amount" value="${entryRaw.couponAmount || ''}" />
+          </div>
+          <div class="form-group">
+            <label>Coupon Label</label>
+            <input class="form-control" id="approve-coupon-code" value="${entryRaw.couponCode || ''}" placeholder="e.g. Ibotta" />
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input class="form-control" type="date" id="approve-date" value="${new Date(entryRaw.date).toISOString().slice(0,10)}" />
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input class="form-control" id="approve-notes" value="${entryRaw.notes || ''}" />
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Approve</button>
+      </div>
+    </form>`;
+
+  openModal('Edit & Approve', bodyHTML);
+
+  document.getElementById('approve-sale').addEventListener('change', (e) => {
+    document.getElementById('approve-sale-group').style.display = e.target.checked ? '' : 'none';
+  });
+  document.getElementById('approve-coupon').addEventListener('change', (e) => {
+    document.getElementById('approve-coupon-group').style.display = e.target.checked ? '' : 'none';
+  });
+
+  document.getElementById('approve-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saleOn = document.getElementById('approve-sale').checked;
+    const couponOn = document.getElementById('approve-coupon').checked;
+    try {
+      await api.prices.approve(id, {
+        isOrganic: document.getElementById('approve-organic').checked,
+        regularPrice: parseFloat(document.getElementById('approve-reg-price').value),
+        quantity: parseFloat(document.getElementById('approve-qty').value),
+        salePrice: saleOn ? (parseFloat(document.getElementById('approve-sale-price').value) || null) : null,
+        couponAmount: couponOn ? (parseFloat(document.getElementById('approve-coupon-amount').value) || null) : null,
+        couponCode: couponOn ? document.getElementById('approve-coupon-code').value.trim() : null,
+        date: document.getElementById('approve-date').value,
+        notes: document.getElementById('approve-notes').value.trim()
+      });
+      closeModal();
+      showToast('Entry approved');
+      if (onSuccess) await onSuccess();
+    } catch (err) {
+      handleError(err, 'Failed to approve entry');
+    }
+  });
+}
   document.getElementById('btn-add-price').addEventListener('click', () => openAddPriceModal(null));
 
   document.getElementById('price-search').addEventListener('input', (e) => {

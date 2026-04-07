@@ -35,7 +35,7 @@ router.put('/:id/approve', requireAuth, requireAdmin, async (req, res) => {
       reviewedAt: new Date()
     };
 
-    const editable = ['regularPrice', 'salePrice', 'couponAmount', 'couponCode', 'date', 'notes', 'storeId'];
+    const editable = ['regularPrice', 'salePrice', 'couponAmount', 'couponCode', 'date', 'notes', 'storeId', 'isOrganic'];
     editable.forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
 
     // Recalculate derived fields

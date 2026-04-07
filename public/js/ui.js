@@ -76,6 +76,13 @@ function closeModal() {
   }
   const modal = document.querySelector('.modal');
   if (modal) modal.style.marginBottom = '';
+
+  // Fire optional close callback (e.g. shopping list price confirmation dismiss)
+  if (window._modalCloseCallback) {
+    const cb = window._modalCloseCallback;
+    window._modalCloseCallback = null;
+    cb();
+  }
 }
 
 // Error display helper

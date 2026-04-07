@@ -990,3 +990,99 @@ body.role-member .member-only { display: flex; }
   color: var(--danger);
 }
 .csv-import-errors-list li { margin-bottom: 0.2rem; }
+
+/* ===== Meal Plan ===== */
+.meal-plan { padding: 1rem; }
+.meal-plan-nav { display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.meal-plan-week-label { font-weight: 600; }
+.meal-day { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 0.75rem; }
+.meal-day-header { font-weight: 600; padding: 0.75rem 1rem 0.5rem; border-bottom: 1px solid var(--border); }
+.meal-slot { display: flex; flex-direction: row; align-items: center; padding: 0.5rem 1rem; gap: 0.5rem; border-bottom: 1px solid var(--border); }
+.meal-slot:last-child { border-bottom: none; }
+.meal-type-label { min-width: 90px; font-size: 0.8125rem; color: var(--text-muted); font-weight: 500; }
+.meal-name-input { flex: 1; background: transparent; border: none; border-bottom: 1px solid var(--border); padding: 0.25rem 0; font-size: 0.9375rem; color: var(--text); font-family: inherit; }
+.meal-name-input:focus { outline: none; border-bottom-color: var(--primary); }
+.meal-notes-area { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem; width: 100%; font-size: 0.875rem; color: var(--text); resize: none; min-height: 60px; margin-top: 0.5rem; box-sizing: border-box; font-family: inherit; }
+.meal-notes-area:focus { outline: none; border-color: var(--primary); }
+.produce-section, .shopping-notes-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 0.75rem; }
+.section-label { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text); }
+.who-selector { position: relative; display: inline-block; }
+.who-btn { font-size: 0.75rem; color: var(--text-muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; background: none; cursor: pointer; white-space: nowrap; }
+.who-dropdown { position: absolute; top: 100%; right: 0; background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); z-index: 50; min-width: 140px; padding: 0.5rem; }
+.who-option { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8125rem; cursor: pointer; }
+.who-option:hover { background: var(--primary-bg); border-radius: var(--radius-sm); }
+.special-toggle { font-size: 0.75rem; color: var(--text-muted); cursor: pointer; background: none; border: none; padding: 0.25rem 0.5rem; font-family: inherit; }
+.special-toggle:hover { color: var(--text); }
+.meal-plan-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; align-items: center; }
+
+/* ===== Cart Bar ===== */
+.cart-bar {
+  position: fixed;
+  bottom: var(--nav-height);
+  left: 0; right: 0;
+  background: var(--surface-raised);
+  border-top: 1px solid var(--border-strong);
+  z-index: 90;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.3);
+}
+.cart-bar-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--text);
+}
+.cart-bar-chevron {
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  transition: transform 0.15s;
+}
+.cart-bar-chevron.expanded { transform: rotate(90deg); }
+.cart-bar-detail {
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 1rem 0.75rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.cart-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.3rem 0;
+  font-size: 0.875rem;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+.cart-detail-row:last-of-type { border-bottom: none; }
+.cart-detail-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0 0;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--primary);
+}
+/* Extra padding on shopping list tab when cart bar is visible */
+#tab-list.has-cart { padding-bottom: calc(var(--nav-height) + 48px); }
+
+/* ===== Low Stock Badge ===== */
+.badge-low-stock { background: rgba(248,113,113,0.15); color: #f87171; }
+.badge-num {
+  display: inline-block;
+  background: var(--danger);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  line-height: 18px;
+  text-align: center;
+  padding: 0 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+}

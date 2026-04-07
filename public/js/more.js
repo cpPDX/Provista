@@ -158,12 +158,15 @@ function renderInventory() {
     const name = inv.itemId?.name || 'Unknown';
     const unit = inv.unit || inv.itemId?.unit || '';
     const cat = inv.itemId?.category || '';
+    const isLow = inv.lowStockThreshold != null && inv.quantity <= inv.lowStockThreshold;
+    const thresholdText = inv.lowStockThreshold != null ? `Alert ≤ ${inv.lowStockThreshold}` : '';
     return `
       <div class="card" data-inv-id="${inv._id}">
         <div class="card-body">
-          <div class="card-title">${name}</div>
+          <div class="card-title">${name}${isLow ? ' <span class="badge badge-low-stock">Low</span>' : ''}</div>
           <div class="card-subtitle">${cat} &middot; Updated ${formatDate(inv.lastUpdated)}</div>
           ${inv.notes ? `<div class="text-muted text-sm">${inv.notes}</div>` : ''}
+          ${thresholdText ? `<div class="text-muted text-sm">${thresholdText}</div>` : ''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.375rem">
           <div class="qty-controls">
@@ -172,6 +175,7 @@ function renderInventory() {
             <button class="qty-btn" onclick="adjustInventory('${inv._id}', ${inv.quantity + 1})">+</button>
           </div>
           <span class="text-muted text-sm">${unit}</span>
+          <button class="btn btn-outline btn-sm" onclick="openEditInventoryModal('${inv._id}')">Edit</button>
           <button class="btn btn-danger btn-sm" onclick="removeInventoryItem('${inv._id}')">Remove</button>
         </div>
       </div>`;
@@ -222,6 +226,10 @@ function openAddInventoryModal() {
         <label>Notes (optional)</label>
         <input class="form-control" id="inv-notes" placeholder="e.g. expires Friday" />
       </div>
+      <div class="form-group">
+        <label>Low Stock Alert (optional)</label>
+        <input class="form-control" type="number" id="inv-threshold" placeholder="e.g. 2 (alert when quantity ≤ this)" min="0" step="any" />
+      </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary">Add to Inventory</button>
@@ -248,18 +256,63 @@ function openAddInventoryModal() {
     e.preventDefault();
     const itemId = document.getElementById('inv-item-id').value;
     if (!itemId) { showToast('Please select an item'); return; }
+    const thresholdRaw = document.getElementById('inv-threshold').value.trim();
+    const lowStockThreshold = thresholdRaw !== '' ? parseFloat(thresholdRaw) : null;
     try {
       await api.inventory.save({
         itemId,
         quantity: parseFloat(document.getElementById('inv-qty').value),
         unit: document.getElementById('inv-item-unit').value,
-        notes: document.getElementById('inv-notes').value.trim()
+        notes: document.getElementById('inv-notes').value.trim(),
+        lowStockThreshold
       });
       closeModal();
       showToast('Added to inventory');
       await loadInventory();
     } catch (err) {
       handleError(err, 'Failed to add to inventory');
+    }
+  });
+}
+
+function openEditInventoryModal(id) {
+  const inv = inventoryState.items.find(i => i._id === id);
+  if (!inv) return;
+  const bodyHTML = `
+    <form id="edit-inv-form">
+      <div class="form-group">
+        <label>Quantity</label>
+        <input class="form-control" type="number" id="edit-inv-qty" value="${inv.quantity}" min="0" step="any" required />
+      </div>
+      <div class="form-group">
+        <label>Notes (optional)</label>
+        <input class="form-control" id="edit-inv-notes" value="${inv.notes || ''}" placeholder="e.g. expires Friday" />
+      </div>
+      <div class="form-group">
+        <label>Low Stock Alert (optional)</label>
+        <input class="form-control" type="number" id="edit-inv-threshold" value="${inv.lowStockThreshold ?? ''}" placeholder="e.g. 2 (alert when quantity ≤ this)" min="0" step="any" />
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>`;
+  openModal('Edit Inventory Item', bodyHTML);
+  document.getElementById('edit-inv-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const thresholdRaw = document.getElementById('edit-inv-threshold').value.trim();
+    const lowStockThreshold = thresholdRaw !== '' ? parseFloat(thresholdRaw) : null;
+    try {
+      await api.inventory.update(id, {
+        quantity: parseFloat(document.getElementById('edit-inv-qty').value),
+        notes: document.getElementById('edit-inv-notes').value.trim(),
+        lowStockThreshold
+      });
+      closeModal();
+      showToast('Inventory updated');
+      await loadInventory();
+    } catch (err) {
+      handleError(err, 'Failed to update inventory');
     }
   });
 }
@@ -678,6 +731,12 @@ function initMoreTab() {
 
   document.getElementById('btn-more-csv-import')?.addEventListener('click', () => {
     openCsvImportModal();
+  });
+
+  document.getElementById('btn-meal-plan')?.addEventListener('click', () => {
+    initMealPlanSection();
+    showMoreSection('meal-plan');
+    loadMealPlan();
   });
 
   const resumeBtn = document.getElementById('btn-resume-setup');

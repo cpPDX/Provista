@@ -17,7 +17,6 @@
         <h1>Product Prices</h1>
         <div class="price-add-actions">
           <button class="btn btn-primary btn-sm" id="btn-add-price">+ Log Price</button>
-          <button class="btn btn-outline btn-sm" id="btn-scan-receipt">📷 Scan</button>
           <button class="btn btn-outline btn-sm" id="btn-open-csv-import">📂 Import</button>
         </div>
       </header>
@@ -36,7 +35,12 @@
     <section class="tab-panel" id="tab-list">
       <header class="page-header">
         <h1>Shopping List</h1>
-        <button class="btn btn-primary btn-sm" id="btn-add-list-item">+ Add</button>
+        <div style="display:flex;gap:0.5rem;align-items:center">
+          <button class="btn btn-sm btn-outline" id="btn-low-stock" style="display:none">
+            🔴 Low Stock <span id="low-stock-count" class="badge-num"></span>
+          </button>
+          <button class="btn btn-primary btn-sm" id="btn-add-list-item">+ Add</button>
+        </div>
       </header>
       <div id="list-summary" class="store-summary"></div>
       <div id="shopping-list" class="card-list"></div>
@@ -46,63 +50,6 @@
       </div>
     </section>
 
-    <!-- Tab: Scan (not in nav — accessed via Prices tab Scan button) -->
-    <section class="tab-panel" id="tab-scan">
-      <header class="page-header">
-        <button class="btn btn-icon" id="btn-scan-back">‹</button>
-        <h1>Scan Receipt</h1>
-      </header>
-      <div class="scan-container">
-        <div class="scan-intro">
-          <p class="text-muted">Take a photo or upload an image. Processing happens on your device — nothing is sent to a server.</p>
-        </div>
-        <div class="scan-buttons">
-          <button class="btn btn-primary btn-lg" id="btn-camera">📷 Use Camera</button>
-          <button class="btn btn-outline btn-lg" id="btn-upload">📁 Upload Image</button>
-        </div>
-        <input type="file" id="scan-file-input" accept="image/*" capture="environment" style="display:none" />
-        <div id="scan-preview" class="scan-preview" style="display:none">
-          <img id="scan-image" alt="Receipt preview" />
-        </div>
-        <div id="scan-progress" class="scan-progress" style="display:none">
-          <div class="spinner"></div>
-          <p id="scan-status">Processing receipt with OCR...</p>
-          <p class="text-muted text-sm">This may take 5–15 seconds</p>
-        </div>
-        <div id="scan-results" style="display:none">
-          <h2 class="section-title">Review Parsed Items</h2>
-          <div class="scan-meta">
-            <label>Store
-              <div class="autocomplete-wrap">
-                <input type="text" id="scan-store" placeholder="Store name" autocomplete="off" />
-                <div class="autocomplete-dropdown" id="scan-store-dropdown"></div>
-              </div>
-            </label>
-            <label>Date <input type="date" id="scan-date" /></label>
-          </div>
-          <div id="scan-line-items"></div>
-          <div id="scan-member-note" class="callout-box" style="display:none">
-            You're submitting as a member — these entries will be pending admin review before appearing in price history.
-          </div>
-          <button class="btn btn-primary btn-full" id="btn-save-scan">Save Confirmed Items</button>
-        </div>
-      </div>
-
-      <!-- CSV Import section -->
-      <div class="scan-import-section" style="margin: 0 0 1rem;">
-        <div class="scan-import-header" id="btn-toggle-csv-import">
-          <span>📂 Import from CSV</span>
-          <span class="chevron">›</span>
-        </div>
-        <div id="csv-import-body" class="scan-import-body" style="display:none">
-          <p class="text-muted text-sm" style="margin-bottom:0.75rem">Upload a spreadsheet of prices. <button id="btn-csv-template" class="btn-link">Download template</button></p>
-          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display:none" />
-          <button class="btn btn-outline btn-full" id="btn-csv-upload">Choose CSV File</button>
-          <div id="csv-import-status"></div>
-        </div>
-      </div>
-
-    </section>
 
     <!-- Tab: Spend -->
     <section class="tab-panel" id="tab-spend">
@@ -168,6 +115,11 @@
           <span>Import Prices from CSV</span>
           <span class="chevron">›</span>
         </button>
+        <button class="more-item" id="btn-meal-plan">
+          <span class="more-icon">🥗</span>
+          <span>Meal Plan</span>
+          <span class="chevron">›</span>
+        </button>
         <button class="more-item" id="btn-app-tour">
           <span class="more-icon">🗺️</span>
           <span>App Tour</span>
@@ -225,6 +177,15 @@
         </div>
         <div id="account-content" style="padding:0 1rem 1rem"></div>
       </div>
+
+      <!-- Meal Plan sub-section -->
+      <div id="section-meal-plan" class="sub-section" style="display:none">
+        <div class="sub-header">
+          <button class="btn btn-icon back-btn">‹</button>
+          <h2>Meal Plan</h2>
+        </div>
+        <div id="meal-plan-content" style="padding:0 0 1rem"></div>
+      </div>
     </section>
   </div>
 
@@ -260,6 +221,15 @@
     </div>
   </div>
 
+  <!-- Cart Running Total Bar (shown above nav when items are checked off) -->
+  <div id="cart-bar" class="cart-bar" style="display:none">
+    <div class="cart-bar-summary" id="cart-bar-summary">
+      <span id="cart-bar-label">In cart: $0.00 (0 items)</span>
+      <span class="cart-bar-chevron">›</span>
+    </div>
+    <div id="cart-bar-detail" class="cart-bar-detail" style="display:none"></div>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="toast" style="display:none"></div>
 
@@ -289,9 +259,9 @@
   <script src="/js/prices.js"></script>
   <script src="/js/shoppingList.js"></script>
   <script src="/js/csvImport.js"></script>
-  <script src="/js/scan.js"></script>
   <script src="/js/spend.js"></script>
   <script src="/js/more.js"></script>
+  <script src="/js/mealPlan.js"></script>
   <script src="/js/onboarding.js"></script>
   <script src="/js/app.js"></script>
 </body>
