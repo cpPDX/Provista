@@ -66,7 +66,9 @@ function renderSpendChart(summary) {
   if (!summary || !summary.length) return;
   const labels = summary.map(s => s.month);
   const values = summary.map(s => s.total);
-  setTimeout(() => drawBarChart('spend-chart', labels, values), 50);
+  // Use two rAF ticks to ensure the tab panel has finished laying out
+  // before we read canvas.parentElement.clientWidth
+  requestAnimationFrame(() => requestAnimationFrame(() => drawBarChart('spend-chart', labels, values)));
 }
 
 function initSpendTab() {

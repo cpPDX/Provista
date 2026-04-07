@@ -604,13 +604,14 @@ async function loadInviteCode() {
   try {
     const { inviteCode, expiresAt } = await api.household.getInvite();
     const expStr = new Date(expiresAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-    const joinUrl = `${window.location.origin}/join?code=${inviteCode}`;
+    // QR code served by the server to avoid CDN/CSP issues
+    const qrSrc = `/api/household/invite/qr?t=${Date.now()}`;
 
     section.innerHTML = `
       <div class="invite-code-display">
         <div class="invite-code-value">${inviteCode}</div>
         <div class="invite-code-expiry">Expires ${expStr}</div>
-        <canvas id="qr-canvas" width="180" height="180"></canvas>
+        <img class="qr-img" src="${qrSrc}" alt="Join QR code" width="180" height="180" />
       </div>
       <button class="btn btn-outline btn-full" id="btn-regen-invite" style="margin-top:0.5rem">Regenerate Code</button>`;
 
@@ -619,32 +620,9 @@ async function loadInviteCode() {
       showToast('New invite code generated');
       await loadInviteCode();
     });
-
-    // QR code is optional — if the CDN is unavailable the code is still shown
-    try {
-      await generateQR('qr-canvas', joinUrl);
-    } catch (_) {
-      const canvas = document.getElementById('qr-canvas');
-      if (canvas) canvas.remove();
-    }
   } catch (err) {
     section.innerHTML = `<p class="text-danger text-sm">Failed to load invite code.</p>`;
   }
-}
-
-async function generateQR(canvasId, text) {
-  // Load qrcode.js from CDN if not present
-  if (!window.QRCode) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
-      s.onload = resolve;
-      s.onerror = reject;
-      document.head.appendChild(s);
-    });
-  }
-  const canvas = document.getElementById(canvasId);
-  await QRCode.toCanvas(canvas, text, { width: 180, margin: 1 });
 }
 
 // ===== Helper =====

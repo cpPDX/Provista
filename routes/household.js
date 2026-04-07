@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
+const QRCode = require('qrcode');
 const Household = require('../models/Household');
 const User = require('../models/User');
 const PriceEntry = require('../models/PriceEntry');
@@ -49,6 +50,26 @@ router.get('/invite', requireAuth, requireAdmin, async (req, res) => {
       inviteCode: household.inviteCode,
       expiresAt: household.inviteCodeExpiresAt
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/household/invite/qr - return QR code as PNG image (admin+)
+router.get('/invite/qr', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const household = await Household.findById(req.user.householdId);
+    if (!household) return res.status(404).json({ error: 'Household not found' });
+    if (!household.inviteCode || !household.inviteCodeExpiresAt || household.inviteCodeExpiresAt < new Date()) {
+      household.refreshInviteCode();
+      await household.save();
+    }
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const joinUrl = `${origin}/join?code=${household.inviteCode}`;
+    const pngBuffer = await QRCode.toBuffer(joinUrl, { width: 200, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'no-store');
+    res.send(pngBuffer);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
