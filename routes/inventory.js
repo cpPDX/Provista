@@ -3,6 +3,19 @@ const router = express.Router();
 const InventoryItem = require('../models/InventoryItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
+router.get('/low-stock', requireAuth, async (req, res) => {
+  try {
+    const items = await InventoryItem.find({
+      householdId: req.user.householdId,
+      lowStockThreshold: { $ne: null }
+    }).populate('itemId', 'name unit category');
+    const low = items.filter(i => i.quantity <= i.lowStockThreshold);
+    res.json(low);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/', requireAuth, requireAdmin, async (req, res) => {
   try {
     const items = await InventoryItem.find({ householdId: req.user.householdId, quantity: { $gt: 0 } })

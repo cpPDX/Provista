@@ -7,7 +7,8 @@ const inventoryItemSchema = new mongoose.Schema({
   unit: { type: String, trim: true },
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastUpdated: { type: Date, default: Date.now },
-  notes: { type: String, trim: true }
+  notes: { type: String, trim: true },
+  lowStockThreshold: { type: Number, default: null }
 }, { timestamps: true });
 
 // Unique per household + item

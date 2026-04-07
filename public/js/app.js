@@ -31,17 +31,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (confirm('Sign out?')) await window.appAuth.logout();
   });
 
-  // Wire member-only scan note
-  if (window.appAuth.isMember()) {
-    const note = document.getElementById('scan-member-note');
-    if (note) note.style.display = '';
-  }
-
   initNavigation();
   initModal();
   initPricesTab();
   initShoppingListTab();
-  initScanTab();
   initSpendTab();
   initMoreTab();
 
@@ -68,27 +61,20 @@ function initNavigation() {
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => switchTab(item.dataset.tab));
   });
-
-  // Scan tab accessed via Prices header — not in bottom nav
-  document.getElementById('btn-scan-receipt')?.addEventListener('click', () => switchTab('scan'));
-  document.getElementById('btn-scan-back')?.addEventListener('click', () => switchTab('prices'));
   document.getElementById('btn-open-csv-import')?.addEventListener('click', () => openCsvImportModal());
 }
 
 async function switchTab(tabId) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('tab-' + tabId).classList.add('active');
-  // Scan tab has no nav button — skip nav highlight for it
-  const navBtn = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
-  if (navBtn) navBtn.classList.add('active');
+  document.getElementById('tab-' + tabId)?.classList.add('active');
+  document.querySelector(`.nav-item[data-tab="${tabId}"]`)?.classList.add('active');
 
   if (tabId !== 'more') hideMoreSection();
 
   switch (tabId) {
     case 'prices': await loadPricesTab(); break;
     case 'list': await loadShoppingListTab(); break;
-    case 'scan': await loadScanTab(); break;
     case 'spend': await loadSpendTab(); break;
   }
 }

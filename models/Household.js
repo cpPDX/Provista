@@ -14,7 +14,8 @@ const householdSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   inviteCode: { type: String, default: null },
-  inviteCodeExpiresAt: { type: Date, default: null }
+  inviteCodeExpiresAt: { type: Date, default: null },
+  weekStartDay: { type: Number, default: 6 }
 }, { timestamps: true });
 
 householdSchema.methods.refreshInviteCode = function () {
