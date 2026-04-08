@@ -62,21 +62,48 @@ function initNavigation() {
     item.addEventListener('click', () => switchTab(item.dataset.tab));
   });
   document.getElementById('btn-open-csv-import')?.addEventListener('click', () => openCsvImportModal());
+  document.getElementById('btn-user-menu').addEventListener('click', toggleUserMenu);
 }
 
 async function switchTab(tabId) {
+  closeUserMenu();
+  hideMoreSection();
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('tab-' + tabId)?.classList.add('active');
   document.querySelector(`.nav-item[data-tab="${tabId}"]`)?.classList.add('active');
 
-  if (tabId !== 'more') hideMoreSection();
-
   switch (tabId) {
     case 'prices': await loadPricesTab(); break;
     case 'list': await loadShoppingListTab(); break;
     case 'spend': await loadSpendTab(); break;
+    case 'inventory': await loadInventory(); break;
+    case 'meal-plan':
+      if (!window._mealPlanInit) { initMealPlanSection(); window._mealPlanInit = true; }
+      await loadMealPlan();
+      break;
   }
+}
+
+function toggleUserMenu() {
+  const panel = document.getElementById('tab-more');
+  const btn = document.getElementById('btn-user-menu');
+  const isOpen = panel.classList.contains('active');
+  if (isOpen) {
+    panel.classList.remove('active');
+    btn.classList.remove('active');
+    hideMoreSection();
+  } else {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    panel.classList.add('active');
+    btn.classList.add('active');
+  }
+}
+
+function closeUserMenu() {
+  document.getElementById('tab-more')?.classList.remove('active');
+  document.getElementById('btn-user-menu')?.classList.remove('active');
 }
 
 function initModal() {

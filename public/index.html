@@ -70,19 +70,51 @@
       <div id="spend-by-store" class="breakdown-list"></div>
     </section>
 
-    <!-- Tab: More -->
+    <!-- Tab: Inventory (admin-only nav tab) -->
+    <section class="tab-panel" id="tab-inventory">
+      <header class="page-header">
+        <h1>Inventory</h1>
+        <button class="btn btn-primary btn-sm" id="btn-add-inventory">+ Add</button>
+      </header>
+      <div id="inventory-list" class="card-list" style="padding:0.75rem"></div>
+    </section>
+
+    <!-- Tab: Meal Plan -->
+    <section class="tab-panel" id="tab-meal-plan">
+      <header class="page-header">
+        <h1>Meal Plan</h1>
+      </header>
+      <div id="meal-plan-content" style="padding:0 0 1rem"></div>
+    </section>
+
+    <!-- Tab: More (user/settings panel — opened via hamburger) -->
     <section class="tab-panel" id="tab-more">
       <header class="page-header">
         <div>
-          <h1>More</h1>
+          <h1>Menu</h1>
           <div id="user-label" class="text-muted text-sm"></div>
         </div>
         <button class="btn btn-outline btn-sm" id="btn-logout">Sign Out</button>
       </header>
       <div class="more-menu">
-        <button class="more-item admin-only" data-section="inventory">
-          <span class="more-icon">🧺</span>
-          <span>Inventory</span>
+        <button class="more-item" data-section="household">
+          <span class="more-icon">👥</span>
+          <span>Household</span>
+          <span class="chevron">›</span>
+        </button>
+        <button class="more-item" data-section="account">
+          <span class="more-icon">👤</span>
+          <span>My Account</span>
+          <span class="chevron">›</span>
+        </button>
+        <button class="more-item" id="btn-app-tour">
+          <span class="more-icon">🗺️</span>
+          <span>App Tour</span>
+          <span class="chevron">›</span>
+        </button>
+        <button class="more-item" id="btn-resume-setup" style="display:none;border-color:var(--primary)">
+          <span class="more-icon">🧭</span>
+          <span>Continue Setup</span>
           <span class="chevron">›</span>
         </button>
         <button class="more-item admin-only" data-section="items">
@@ -95,46 +127,11 @@
           <span>Stores</span>
           <span class="chevron">›</span>
         </button>
-        <button class="more-item" data-section="household">
-          <span class="more-icon">👥</span>
-          <span>Household</span>
-          <span class="chevron">›</span>
-        </button>
-        <button class="more-item" data-section="account">
-          <span class="more-icon">👤</span>
-          <span>My Account</span>
-          <span class="chevron">›</span>
-        </button>
-        <button class="more-item" id="btn-resume-setup" style="display:none;border-color:var(--primary)">
-          <span class="more-icon">🧭</span>
-          <span>Continue Setup</span>
-          <span class="chevron">›</span>
-        </button>
         <button class="more-item admin-only" id="btn-more-csv-import">
           <span class="more-icon">📂</span>
           <span>Import Prices from CSV</span>
           <span class="chevron">›</span>
         </button>
-        <button class="more-item" id="btn-meal-plan">
-          <span class="more-icon">🥗</span>
-          <span>Meal Plan</span>
-          <span class="chevron">›</span>
-        </button>
-        <button class="more-item" id="btn-app-tour">
-          <span class="more-icon">🗺️</span>
-          <span>App Tour</span>
-          <span class="chevron">›</span>
-        </button>
-      </div>
-
-      <!-- Inventory sub-section (admin+) -->
-      <div id="section-inventory" class="sub-section" style="display:none">
-        <div class="sub-header">
-          <button class="btn btn-icon back-btn">‹</button>
-          <h2>Inventory</h2>
-          <button class="btn btn-primary btn-sm" id="btn-add-inventory">+ Add</button>
-        </div>
-        <div id="inventory-list" class="card-list"></div>
       </div>
 
       <!-- Product Catalog sub-section (admin+) -->
@@ -178,35 +175,34 @@
         <div id="account-content" style="padding:0 1rem 1rem"></div>
       </div>
 
-      <!-- Meal Plan sub-section -->
-      <div id="section-meal-plan" class="sub-section" style="display:none">
-        <div class="sub-header">
-          <button class="btn btn-icon back-btn">‹</button>
-          <h2>Meal Plan</h2>
-        </div>
-        <div id="meal-plan-content" style="padding:0 0 1rem"></div>
-      </div>
     </section>
   </div>
+
+  <!-- User Menu Hamburger (fixed top-right) -->
+  <button id="btn-user-menu" class="user-menu-btn" aria-label="Menu">&#9776;</button>
 
   <!-- Bottom Navigation -->
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="prices">
       <span class="nav-icon">💰</span>
-      <span>Product Prices</span>
+      <span>Prices</span>
       <span id="nav-pending-dot" class="nav-pending-dot" style="display:none"></span>
     </button>
     <button class="nav-item" data-tab="list">
       <span class="nav-icon">📋</span>
-      <span>Shopping List</span>
+      <span>List</span>
+    </button>
+    <button class="nav-item admin-only" data-tab="inventory">
+      <span class="nav-icon">🧺</span>
+      <span>Inventory</span>
+    </button>
+    <button class="nav-item" data-tab="meal-plan">
+      <span class="nav-icon">🥗</span>
+      <span>Meal Plan</span>
     </button>
     <button class="nav-item" data-tab="spend">
       <span class="nav-icon">📊</span>
       <span>Spend</span>
-    </button>
-    <button class="nav-item" data-tab="more">
-      <span class="nav-icon">⋯</span>
-      <span>More</span>
     </button>
   </nav>
 

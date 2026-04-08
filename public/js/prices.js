@@ -562,6 +562,8 @@ function openApproveModal(id, entryRaw, onSuccess) {
     }
   });
 }
+
+function initPricesTab() {
   document.getElementById('btn-add-price').addEventListener('click', () => openAddPriceModal(null));
 
   document.getElementById('price-search').addEventListener('input', (e) => {
