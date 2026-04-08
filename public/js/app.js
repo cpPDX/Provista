@@ -85,6 +85,8 @@ async function switchTab(tabId) {
   }
 }
 
+let _userMenuPrevTab = 'prices';
+
 function toggleUserMenu() {
   const panel = document.getElementById('tab-more');
   const btn = document.getElementById('btn-user-menu');
@@ -93,7 +95,13 @@ function toggleUserMenu() {
     panel.classList.remove('active');
     btn.classList.remove('active');
     hideMoreSection();
+    // Restore the tab that was active before opening the menu
+    document.getElementById('tab-' + _userMenuPrevTab)?.classList.add('active');
+    document.querySelector(`.nav-item[data-tab="${_userMenuPrevTab}"]`)?.classList.add('active');
   } else {
+    // Remember which tab is currently active
+    const activeNav = document.querySelector('.nav-item.active');
+    if (activeNav?.dataset.tab) _userMenuPrevTab = activeNav.dataset.tab;
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     panel.classList.add('active');
