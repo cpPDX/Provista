@@ -5,19 +5,15 @@ module.exports = defineConfig({
   timeout: 30000,
   retries: 1,
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://127.0.0.1:3000',
     headless: true,
     viewport: { width: 390, height: 844 },
     screenshot: 'only-on-failure'
   },
   webServer: {
     command: 'node server.js',
-    url: 'http://localhost:3000',
+    url: 'http://127.0.0.1:3000',
     reuseExistingServer: !process.env.CI,
-    env: {
-      NODE_ENV: 'test',
-      JWT_SECRET: 'playwright-test-secret',
-      MONGODB_URI: process.env.TEST_MONGODB_URI || 'mongodb://localhost:27017/grocerytracker_e2e'
-    }
+    // No env override — server.js loads .env itself via require('dotenv').config()
   }
 });
