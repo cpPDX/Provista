@@ -4,7 +4,8 @@
 function showMoreSection(sectionId) {
   document.querySelector('.more-menu').style.display = 'none';
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
-  document.getElementById('section-' + sectionId).style.display = '';
+  const el = document.getElementById('section-' + sectionId);
+  if (el) el.style.display = '';
 }
 
 function hideMoreSection() {
@@ -696,8 +697,7 @@ function initMoreTab() {
     btn.addEventListener('click', async () => {
       const section = btn.dataset.section;
       showMoreSection(section);
-      if (section === 'inventory') await loadInventory();
-      else if (section === 'items') await loadCatalog();
+      if (section === 'items') await loadCatalog();
       else if (section === 'stores') await loadStores();
       else if (section === 'household') await loadHousehold();
       else if (section === 'account') await loadAccountSettings();
@@ -731,12 +731,6 @@ function initMoreTab() {
 
   document.getElementById('btn-more-csv-import')?.addEventListener('click', () => {
     openCsvImportModal();
-  });
-
-  document.getElementById('btn-meal-plan')?.addEventListener('click', () => {
-    initMealPlanSection();
-    showMoreSection('meal-plan');
-    loadMealPlan();
   });
 
   const resumeBtn = document.getElementById('btn-resume-setup');

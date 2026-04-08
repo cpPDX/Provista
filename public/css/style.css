@@ -1086,3 +1086,29 @@ body.role-member .member-only { display: flex; }
   margin-left: 4px;
   vertical-align: middle;
 }
+
+/* ===== User Menu Hamburger Button (fixed top-right) ===== */
+.user-menu-btn {
+  position: fixed;
+  top: 10px;
+  right: 1rem;
+  z-index: 110;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 1.125rem;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.user-menu-btn:hover,
+.user-menu-btn.active {
+  background: var(--primary-bg);
+  border-color: var(--primary);
+  color: var(--primary);
+}
