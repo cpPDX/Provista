@@ -93,21 +93,19 @@ async function fetchHouseholdMembers() {
 
 function collectPlanFromDOM() {
   const days = [];
-  document.querySelectorAll('.meal-day[data-day-index]').forEach((dayEl, di) => {
+  document.querySelectorAll('.meal-day[data-day-index]').forEach(dayEl => {
     const dateVal = dayEl.dataset.date;
     const specialCollapsed = dayEl.dataset.specialCollapsed === 'true';
     const meals = [];
-    dayEl.querySelectorAll('.meal-slot[data-meal-type]').forEach(slotEl => {
-      const mealType = slotEl.dataset.mealType;
-      const nameInput = slotEl.querySelector('.meal-name-input');
-      const name = nameInput ? nameInput.value : '';
-      // Collect selected members from who-selector
-      const members = [];
-      const checkboxes = slotEl.querySelectorAll('.who-option input[type=checkbox][data-member-id]');
-      checkboxes.forEach(cb => {
-        if (cb.checked) members.push(cb.dataset.memberId);
+    dayEl.querySelectorAll('.meal-type-section[data-meal-type]').forEach(section => {
+      const mealType = section.dataset.mealType;
+      section.querySelectorAll('.meal-row').forEach(row => {
+        const personInput = row.querySelector('.meal-person-input');
+        const nameInput = row.querySelector('.meal-name-input');
+        const personName = personInput ? personInput.value.trim() : '';
+        const name = nameInput ? nameInput.value.trim() : '';
+        meals.push({ mealType, personName, name });
       });
-      meals.push({ mealType, name, members });
     });
     days.push({ date: dateVal, meals, specialCollapsed });
   });
@@ -115,8 +113,8 @@ function collectPlanFromDOM() {
   return {
     weekStart: mealPlanState.weekStart,
     days,
-    produceNotes: (document.getElementById('mp-produce-notes') || {}).value || '',
-    shoppingNotes: (document.getElementById('mp-shopping-notes') || {}).value || ''
+    produceNotes: document.getElementById('mp-produce-notes')?.value || '',
+    shoppingNotes: document.getElementById('mp-shopping-notes')?.value || ''
   };
 }
 
@@ -137,88 +135,95 @@ async function doSave() {
   }
 }
 
-// ===== Who selector =====
+// ===== Per-person row builders =====
 
-function buildWhoSelector(slotEl, selectedMemberIds) {
-  const members = mealPlanState.members;
-  const isAllSelected = !selectedMemberIds || selectedMemberIds.length === 0;
+function buildPersonRow(mealType, personName, mealName, isAdmin) {
+  const row = document.createElement('div');
+  row.className = 'meal-row';
 
-  const container = document.createElement('div');
-  container.className = 'who-selector';
+  const personInput = document.createElement('input');
+  personInput.type = 'text';
+  personInput.className = 'meal-person-input';
+  personInput.value = personName;
+  personInput.placeholder = 'Person';
+  personInput.readOnly = !isAdmin;
+  personInput.addEventListener('input', scheduleSave);
+  row.appendChild(personInput);
 
-  const label = selectedMemberIds && selectedMemberIds.length > 0
-    ? members.filter(m => selectedMemberIds.includes(m._id)).map(m => m.name.split(' ')[0]).join(', ')
-    : 'All';
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.className = 'meal-name-input';
+  nameInput.value = mealName;
+  nameInput.placeholder = 'Meal…';
+  nameInput.readOnly = !isAdmin;
+  nameInput.addEventListener('input', scheduleSave);
+  row.appendChild(nameInput);
 
-  container.innerHTML = `
-    <button type="button" class="who-btn" title="Who is this meal for?">${label}</button>
-    <div class="who-dropdown" style="display:none">
-      <label class="who-option">
-        <input type="checkbox" data-all="true" ${isAllSelected ? 'checked' : ''} /> All
-      </label>
-      ${members.map(m => `
-        <label class="who-option">
-          <input type="checkbox" data-member-id="${m._id}" ${!isAllSelected && selectedMemberIds.includes(m._id) ? 'checked' : ''} />
-          ${m.name}
-        </label>
-      `).join('')}
-    </div>`;
+  if (isAdmin) {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'meal-row-remove';
+    removeBtn.textContent = '×';
+    removeBtn.setAttribute('aria-label', 'Remove row');
+    removeBtn.addEventListener('click', () => { row.remove(); scheduleSave(); });
+    row.appendChild(removeBtn);
+  }
 
-  const btn = container.querySelector('.who-btn');
-  const dropdown = container.querySelector('.who-dropdown');
+  return row;
+}
 
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    // Close any other open dropdowns
-    document.querySelectorAll('.who-dropdown').forEach(d => {
-      if (d !== dropdown) d.style.display = 'none';
-    });
-    dropdown.style.display = dropdown.style.display === 'none' ? '' : 'none';
-  });
-
-  // Checkbox logic
-  const allCheckbox = container.querySelector('input[data-all]');
-  const memberCheckboxes = container.querySelectorAll('input[data-member-id]');
-
-  allCheckbox.addEventListener('change', () => {
-    if (allCheckbox.checked) {
-      memberCheckboxes.forEach(cb => cb.checked = false);
-    }
-    updateWhoLabel(container);
+function buildAddPersonButton(contentEl, mealType, isAdmin) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'meal-add-row';
+  btn.textContent = '+ Add person';
+  btn.addEventListener('click', () => {
+    const row = buildPersonRow(mealType, '', '', isAdmin);
+    contentEl.insertBefore(row, btn);
+    row.querySelector('.meal-person-input')?.focus();
     scheduleSave();
   });
+  return btn;
+}
 
-  memberCheckboxes.forEach(cb => {
-    cb.addEventListener('change', () => {
-      const anyChecked = Array.from(memberCheckboxes).some(c => c.checked);
-      allCheckbox.checked = !anyChecked;
-      updateWhoLabel(container);
+function buildMealTypeSection(mealType, label, typeMeals, isAdmin, isSpecial, specialCollapsed) {
+  const section = document.createElement('div');
+  section.className = 'meal-type-section';
+  section.dataset.mealType = mealType;
+
+  const contentEl = document.createElement('div');
+  contentEl.className = 'meal-type-rows';
+
+  // Render per-person rows
+  typeMeals.forEach(m => contentEl.appendChild(buildPersonRow(mealType, m.personName || '', m.name || '', isAdmin)));
+  if (isAdmin) contentEl.appendChild(buildAddPersonButton(contentEl, mealType, isAdmin));
+
+  if (isSpecial) {
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.className = 'meal-type-header special-toggle';
+    toggleBtn.dataset.collapsed = specialCollapsed ? 'true' : 'false';
+    toggleBtn.textContent = (specialCollapsed ? '+ ' : '− ') + label;
+    contentEl.style.display = specialCollapsed ? 'none' : '';
+    toggleBtn.addEventListener('click', () => {
+      const col = toggleBtn.dataset.collapsed === 'true';
+      toggleBtn.dataset.collapsed = col ? 'false' : 'true';
+      toggleBtn.closest('.meal-day').dataset.specialCollapsed = col ? 'false' : 'true';
+      toggleBtn.textContent = (col ? '− ' : '+ ') + label;
+      contentEl.style.display = col ? '' : 'none';
       scheduleSave();
     });
-  });
-
-  return container;
-}
-
-function updateWhoLabel(container) {
-  const allCheckbox = container.querySelector('input[data-all]');
-  const btn = container.querySelector('.who-btn');
-  if (allCheckbox.checked) {
-    btn.textContent = 'All';
-    return;
+    section.appendChild(toggleBtn);
+  } else {
+    const header = document.createElement('div');
+    header.className = 'meal-type-header';
+    header.textContent = label;
+    section.appendChild(header);
   }
-  const members = mealPlanState.members;
-  const checkedIds = Array.from(container.querySelectorAll('input[data-member-id]'))
-    .filter(cb => cb.checked)
-    .map(cb => cb.dataset.memberId);
-  const names = members.filter(m => checkedIds.includes(m._id)).map(m => m.name.split(' ')[0]);
-  btn.textContent = names.length ? names.join(', ') : 'All';
-}
 
-// Close dropdowns on outside click
-document.addEventListener('click', () => {
-  document.querySelectorAll('.who-dropdown').forEach(d => d.style.display = 'none');
-});
+  section.appendChild(contentEl);
+  return section;
+}
 
 // ===== Render =====
 
@@ -300,99 +305,32 @@ function renderMealPlan(plan) {
 
 function renderDayCard(day, di) {
   const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', special: 'Special Occasion' };
+  const MEAL_TYPES_ORDER = ['breakfast', 'lunch', 'dinner', 'special'];
   const dateStr = day.date ? (typeof day.date === 'string' ? day.date : new Date(day.date).toISOString()) : null;
-  const isAdmin = window.appAuth && (window.appAuth.isAdmin ? window.appAuth.isAdmin() : false);
+  const isAdmin = window.appAuth?.isAdmin?.() || false;
+  const specialCollapsed = day.specialCollapsed !== false;
 
   const dayEl = document.createElement('div');
   dayEl.className = 'meal-day';
   dayEl.dataset.dayIndex = di;
   dayEl.dataset.date = dateStr || '';
-  dayEl.dataset.specialCollapsed = day.specialCollapsed !== false ? 'true' : 'false';
+  dayEl.dataset.specialCollapsed = specialCollapsed ? 'true' : 'false';
 
   const header = document.createElement('div');
   header.className = 'meal-day-header';
   header.textContent = dateStr ? formatDayHeader(dateStr) : `Day ${di + 1}`;
   dayEl.appendChild(header);
 
-  const mealTypes = ['breakfast', 'lunch', 'dinner', 'special'];
-  mealTypes.forEach(mealType => {
-    const meal = (day.meals || []).find(m => m.mealType === mealType) || { mealType, name: '', members: [] };
-    const isSpecial = mealType === 'special';
-    const collapsed = day.specialCollapsed !== false;
-
-    if (isSpecial) {
-      // Special toggle row
-      const toggleRow = document.createElement('div');
-      toggleRow.style.cssText = 'padding:0.25rem 1rem;border-bottom:1px solid var(--border)';
-      const toggleBtn = document.createElement('button');
-      toggleBtn.type = 'button';
-      toggleBtn.className = 'special-toggle';
-      toggleBtn.textContent = collapsed ? '+ Special Occasion' : '− Special Occasion';
-      toggleBtn.dataset.collapsed = collapsed ? 'true' : 'false';
-      toggleRow.appendChild(toggleBtn);
-      dayEl.appendChild(toggleRow);
-
-      const slotEl = buildMealSlot(meal, mealType, MEAL_LABELS[mealType], isAdmin, day.members);
-      slotEl.style.display = collapsed ? 'none' : '';
-      dayEl.appendChild(slotEl);
-
-      toggleBtn.addEventListener('click', () => {
-        const isCollapsed = toggleBtn.dataset.collapsed === 'true';
-        toggleBtn.dataset.collapsed = isCollapsed ? 'false' : 'true';
-        dayEl.dataset.specialCollapsed = isCollapsed ? 'false' : 'true';
-        toggleBtn.textContent = isCollapsed ? '− Special Occasion' : '+ Special Occasion';
-        slotEl.style.display = isCollapsed ? '' : 'none';
-        scheduleSave();
-      });
-    } else {
-      dayEl.appendChild(buildMealSlot(meal, mealType, MEAL_LABELS[mealType], isAdmin, day.members));
-    }
+  MEAL_TYPES_ORDER.forEach(mealType => {
+    const typeMeals = (day.meals || []).filter(m => m.mealType === mealType);
+    const rows = typeMeals.length > 0 ? typeMeals : [{ personName: '', name: '' }];
+    dayEl.appendChild(buildMealTypeSection(
+      mealType, MEAL_LABELS[mealType], rows, isAdmin,
+      mealType === 'special', specialCollapsed
+    ));
   });
 
   return dayEl;
-}
-
-function buildMealSlot(meal, mealType, label, isAdmin, dayMembers) {
-  const slotEl = document.createElement('div');
-  slotEl.className = 'meal-slot';
-  slotEl.dataset.mealType = mealType;
-
-  const typeLabel = document.createElement('span');
-  typeLabel.className = 'meal-type-label';
-  typeLabel.textContent = label;
-  slotEl.appendChild(typeLabel);
-
-  if (isAdmin) {
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.className = 'meal-name-input';
-    nameInput.value = meal.name || '';
-    nameInput.placeholder = 'Add meal…';
-    nameInput.addEventListener('input', scheduleSave);
-    slotEl.appendChild(nameInput);
-
-    const whoSelector = buildWhoSelector(slotEl, meal.members || []);
-    slotEl.appendChild(whoSelector);
-  } else {
-    const nameSpan = document.createElement('span');
-    nameSpan.style.flex = '1';
-    nameSpan.style.fontSize = '0.9375rem';
-    nameSpan.textContent = meal.name || '';
-    slotEl.appendChild(nameSpan);
-
-    if (meal.members && meal.members.length > 0) {
-      const whoSpan = document.createElement('span');
-      whoSpan.className = 'who-btn';
-      whoSpan.style.cursor = 'default';
-      const names = mealPlanState.members
-        .filter(m => meal.members.includes(m._id))
-        .map(m => m.name.split(' ')[0]);
-      whoSpan.textContent = names.length ? names.join(', ') : 'All';
-      slotEl.appendChild(whoSpan);
-    }
-  }
-
-  return slotEl;
 }
 
 function escHtml(str) {
@@ -411,23 +349,26 @@ function exportWeekICS() {
     if (!dateStr) return;
     const datePart = dateStr.slice(0, 10).replace(/-/g, '');
 
-    dayEl.querySelectorAll('.meal-slot[data-meal-type]').forEach(slotEl => {
-      const mealType = slotEl.dataset.mealType;
-      const nameInput = slotEl.querySelector('.meal-name-input');
-      const nameSpan = slotEl.querySelector('span:not(.meal-type-label):not(.who-btn)');
-      const name = (nameInput ? nameInput.value : nameSpan ? nameSpan.textContent : '').trim();
-      if (!name) return;
-
-      const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}-${mealType}@grocerytracker`;
-      events.push([
-        'BEGIN:VEVENT',
-        `UID:${uid}`,
-        `DTSTART:${datePart}T${MEAL_HOURS[mealType]}`,
-        `DTEND:${datePart}T${MEAL_HOURS_END[mealType]}`,
-        `SUMMARY:${name}`,
-        'DESCRIPTION:Meal plan export from GroceryTracker',
-        'END:VEVENT'
-      ].join('\r\n'));
+    dayEl.querySelectorAll('.meal-type-section[data-meal-type]').forEach(section => {
+      const mealType = section.dataset.mealType;
+      section.querySelectorAll('.meal-row').forEach(row => {
+        const nameInput = row.querySelector('.meal-name-input');
+        const name = (nameInput ? nameInput.value : '').trim();
+        if (!name) return;
+        const personInput = row.querySelector('.meal-person-input');
+        const person = (personInput ? personInput.value.trim() : '');
+        const summary = person ? `${person}: ${name}` : name;
+        const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}-${mealType}@grocerytracker`;
+        events.push([
+          'BEGIN:VEVENT',
+          `UID:${uid}`,
+          `DTSTART:${datePart}T${MEAL_HOURS[mealType]}`,
+          `DTEND:${datePart}T${MEAL_HOURS_END[mealType]}`,
+          `SUMMARY:${summary}`,
+          'DESCRIPTION:Meal plan export from GroceryTracker',
+          'END:VEVENT'
+        ].join('\r\n'));
+      });
     });
   });
 

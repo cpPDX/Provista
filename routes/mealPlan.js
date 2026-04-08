@@ -2,21 +2,29 @@ const express = require('express');
 const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const Household = require('../models/Household');
+const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
 
-function buildScaffold(weekStart) {
+function buildScaffold(weekStart, members) {
   const days = [];
   const start = new Date(weekStart);
+  const memberNames = (members || []).map(m => m.name);
   for (let i = 0; i < 7; i++) {
     const date = new Date(start);
     date.setUTCDate(start.getUTCDate() + i);
-    days.push({
-      date,
-      meals: MEAL_TYPES.map(mealType => ({ mealType, name: '', members: [] })),
-      specialCollapsed: true
+    const meals = [];
+    MEAL_TYPES.forEach(mealType => {
+      if (memberNames.length === 0) {
+        meals.push({ mealType, personName: '', name: '' });
+      } else {
+        memberNames.forEach(name => {
+          meals.push({ mealType, personName: name, name: '' });
+        });
+      }
     });
+    days.push({ date, meals, specialCollapsed: true });
   }
   return days;
 }
@@ -33,11 +41,11 @@ router.get('/', requireAuth, async (req, res) => {
     let plan = await MealPlan.findOne({ householdId: req.user.householdId, weekStart: weekStartDate });
 
     if (!plan) {
-      // Return scaffold without saving
+      const members = await User.find({ householdId: req.user.householdId }).select('name').lean();
       return res.json({
         householdId: req.user.householdId,
         weekStart: weekStartDate,
-        days: buildScaffold(weekStartDate),
+        days: buildScaffold(weekStartDate, members),
         produceNotes: '',
         shoppingNotes: '',
         _scaffold: true
@@ -63,7 +71,7 @@ router.put('/', requireAuth, requireAdmin, async (req, res) => {
       { householdId: req.user.householdId, weekStart: weekStartDate },
       {
         $set: {
-          days: days || buildScaffold(weekStartDate),
+          days: days || buildScaffold(weekStartDate, []),
           produceNotes: produceNotes || '',
           shoppingNotes: shoppingNotes || ''
         }

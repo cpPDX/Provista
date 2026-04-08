@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const mealSchema = new mongoose.Schema({
   mealType: { type: String, enum: ['breakfast', 'lunch', 'dinner', 'special'], required: true },
-  name: { type: String, trim: true, default: '' },
-  members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  personName: { type: String, trim: true, default: '' },
+  name: { type: String, trim: true, default: '' }
 }, { _id: false });
 
 const daySchema = new mongoose.Schema({

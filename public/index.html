@@ -35,7 +35,7 @@
     <section class="tab-panel" id="tab-list">
       <header class="page-header">
         <h1>Shopping List</h1>
-        <div style="display:flex;gap:0.5rem;align-items:center">
+        <div class="page-header-actions">
           <button class="btn btn-sm btn-outline" id="btn-low-stock" style="display:none">
             🔴 Low Stock <span id="low-stock-count" class="badge-num"></span>
           </button>
@@ -74,7 +74,9 @@
     <section class="tab-panel" id="tab-inventory">
       <header class="page-header">
         <h1>Inventory</h1>
-        <button class="btn btn-primary btn-sm" id="btn-add-inventory">+ Add</button>
+        <div class="page-header-actions">
+          <button class="btn btn-primary btn-sm" id="btn-add-inventory">+ Add</button>
+        </div>
       </header>
       <div id="inventory-list" class="card-list" style="padding:0.75rem"></div>
     </section>
@@ -90,31 +92,21 @@
     <!-- Tab: More (user/settings panel — opened via hamburger) -->
     <section class="tab-panel" id="tab-more">
       <header class="page-header">
-        <div>
-          <h1>Menu</h1>
-          <div id="user-label" class="text-muted text-sm"></div>
+        <h1>Menu</h1>
+        <div class="page-header-actions">
+          <div id="user-label" class="text-muted text-sm" style="text-align:right"></div>
+          <button class="btn btn-outline btn-sm" id="btn-logout">Sign Out</button>
         </div>
-        <button class="btn btn-outline btn-sm" id="btn-logout">Sign Out</button>
       </header>
       <div class="more-menu">
-        <button class="more-item" data-section="household">
-          <span class="more-icon">👥</span>
-          <span>Household</span>
-          <span class="chevron">›</span>
-        </button>
         <button class="more-item" data-section="account">
           <span class="more-icon">👤</span>
           <span>My Account</span>
           <span class="chevron">›</span>
         </button>
-        <button class="more-item" id="btn-app-tour">
-          <span class="more-icon">🗺️</span>
-          <span>App Tour</span>
-          <span class="chevron">›</span>
-        </button>
-        <button class="more-item" id="btn-resume-setup" style="display:none;border-color:var(--primary)">
-          <span class="more-icon">🧭</span>
-          <span>Continue Setup</span>
+        <button class="more-item" data-section="household">
+          <span class="more-icon">👥</span>
+          <span>Household</span>
           <span class="chevron">›</span>
         </button>
         <button class="more-item admin-only" data-section="items">
@@ -130,6 +122,16 @@
         <button class="more-item admin-only" id="btn-more-csv-import">
           <span class="more-icon">📂</span>
           <span>Import Prices from CSV</span>
+          <span class="chevron">›</span>
+        </button>
+        <button class="more-item" id="btn-app-tour">
+          <span class="more-icon">🗺️</span>
+          <span>App Tour</span>
+          <span class="chevron">›</span>
+        </button>
+        <button class="more-item" id="btn-resume-setup" style="display:none;border-color:var(--primary)">
+          <span class="more-icon">🧭</span>
+          <span>Continue Setup (Wizard)</span>
           <span class="chevron">›</span>
         </button>
       </div>
