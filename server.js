@@ -40,18 +40,22 @@ app.get('*', (req, res) => {
 });
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocerytracker';
-const PORT = process.env.PORT || 3000;
 
-// Listen immediately so Railway's health check succeeds while DB connects
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-mongoose.connect(MONGODB_URI)
-  .then(() => {
-    console.log('Connected to MongoDB');
-  })
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  // Listen immediately so Railway's health check succeeds while DB connects
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running on port ${PORT}`);
   });
+
+  mongoose.connect(MONGODB_URI)
+    .then(() => {
+      console.log('Connected to MongoDB');
+    })
+    .catch(err => {
+      console.error('MongoDB connection error:', err);
+      process.exit(1);
+    });
+}
+
+module.exports = app;

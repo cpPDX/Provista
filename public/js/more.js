@@ -691,6 +691,47 @@ function openAddCatalogItemModal() {
   });
 }
 
+// ===== About =====
+function loadAboutSection() {
+  document.getElementById('about-content').innerHTML = `
+    <div style="text-align:center;padding:1rem 0 1.5rem">
+      <div style="font-size:2.5rem;margin-bottom:0.5rem">🛒</div>
+      <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Grocery Tracker</h2>
+      <p class="text-muted text-sm">Version 1.0</p>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-body">
+        <div class="card-title">Why this app exists</div>
+        <p class="text-muted text-sm" style="margin-top:0.5rem;line-height:1.6">
+          Grocery prices vary wildly by store, week, and season. This app was built to help
+          households track what they actually pay, spot the best deals, and make smarter
+          shopping decisions — without spreadsheets or receipt-stuffed wallets.
+        </p>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-body">
+        <div class="card-title">Features</div>
+        <ul style="margin-top:0.5rem;padding-left:1.25rem;line-height:1.9;font-size:0.9rem;color:var(--text-muted)">
+          <li>Price history by item &amp; store</li>
+          <li>Shopping list with running cart total</li>
+          <li>Inventory &amp; low-stock alerts</li>
+          <li>Weekly meal planning</li>
+          <li>Spending analytics by category &amp; store</li>
+          <li>Household sharing with roles</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="card-title">Created by</div>
+        <p style="margin-top:0.5rem;font-size:0.9375rem">Chris Phelan</p>
+        <p class="text-muted text-sm" style="margin-top:0.25rem">Built for our household. Shared with yours.</p>
+      </div>
+    </div>
+  `;
+}
+
 // ===== Init =====
 function initMoreTab() {
   document.querySelectorAll('.more-item[data-section]').forEach(btn => {
@@ -701,6 +742,7 @@ function initMoreTab() {
       else if (section === 'stores') await loadStores();
       else if (section === 'household') await loadHousehold();
       else if (section === 'account') await loadAccountSettings();
+      else if (section === 'about') loadAboutSection();
     });
   });
 
