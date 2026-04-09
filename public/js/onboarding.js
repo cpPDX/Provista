@@ -42,7 +42,7 @@ const WIZARD_STEPS = [
     sectionLoader: async () => { await loadStores(); },
     targetId: 'btn-add-store',
     actionId: 'add-store',
-    title: 'Step 1 of 5 — Add your stores',
+    title: 'Step 1 of 4 — Add your stores',
     text: 'Start by adding the grocery stores you shop at (Costco, Trader Joe\'s, Safeway…). Tap + Add Store — the wizard advances automatically when you save.',
     nextLabel: 'Skip'
   },
@@ -52,18 +52,9 @@ const WIZARD_STEPS = [
     sectionLoader: null,
     targetId: 'btn-add-price',
     actionId: 'add-price',
-    title: 'Step 2 of 5 — Log a price',
-    text: 'Use the Prices tab to record what you paid for each item. Tap + Add Price and fill it in — the wizard advances automatically when you save.',
+    title: 'Step 2 of 4 — Log a price',
+    text: 'Use the Prices tab to record what you paid for each item. Tap + Log Price and fill it in — the wizard advances automatically when you save. You can also import a CSV of past prices.',
     nextLabel: 'Skip'
-  },
-  {
-    tab: 'prices',
-    section: null,
-    sectionLoader: null,
-    targetId: 'btn-scan-receipt',
-    title: 'Step 3 of 5 — Scan receipts',
-    text: 'Tap "Scan" to photograph a receipt and the app reads prices using OCR — all on your device.',
-    nextLabel: 'Next'
   },
   {
     tab: 'more',
@@ -80,7 +71,7 @@ const WIZARD_STEPS = [
       }, 400);
     },
     targetId: 'household-content',
-    title: 'Step 4 of 5 — Invite your household',
+    title: 'Step 3 of 4 — Invite your household',
     text: 'Share your invite code or QR code with family. They\'ll join your household and see prices, the shopping list, and inventory.',
     nextLabel: 'Next'
   },
@@ -108,6 +99,7 @@ async function startSetupWizard(fromStep) {
 
 function runWizard(startStep) {
   wizardActive = true;
+  document.body.classList.add('wizard-active');
   let current = startStep;
 
   // Elements
@@ -205,6 +197,7 @@ function runWizard(startStep) {
 
   function close() {
     wizardActive = false;
+    document.body.classList.remove('wizard-active');
     window.onWizardActionComplete = null;
     document.querySelectorAll('.wizard-highlight').forEach(el => el.classList.remove('wizard-highlight'));
     backdrop.classList.remove('visible');
@@ -222,7 +215,7 @@ function startAppTour() {
     {
       tab: 'prices',
       title: 'Product Prices',
-      text: 'Your price log. Log prices, scan receipts, or import from CSV. Tap any item to see its full history and compare stores.',
+      text: 'Your price log. Log prices manually or import from CSV. Tap any item to see its full history and compare stores.',
       anchor: '[data-tab="prices"]'
     },
     {
