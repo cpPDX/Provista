@@ -16,6 +16,21 @@ let pricesState = {
 window.pricesState = pricesState;
 
 async function loadPricesTab() {
+  // Show skeleton immediately so users know data is loading
+  const pricesList = document.getElementById('prices-list');
+  pricesList.innerHTML = [1, 2, 3, 4].map(() => `
+    <div class="card skeleton-card">
+      <div class="card-body">
+        <div class="skeleton-line skeleton-title"></div>
+        <div class="skeleton-line skeleton-subtitle"></div>
+        <div class="skeleton-line skeleton-meta"></div>
+      </div>
+      <div class="card-meta" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <div class="skeleton-line skeleton-price"></div>
+        <div class="skeleton-line skeleton-ppu"></div>
+      </div>
+    </div>`).join('');
+
   try {
     const entries = await api.prices.list();
     pricesState.entries = entries;
@@ -59,29 +74,36 @@ function renderPricesList(entriesOrGroups) {
 
   container.innerHTML = groups.map(({ item, entries: es }) => {
     const latest = es[0];
-    const storeName = latest.storeId?.name || 'Unknown store';
+    const storeName = escapeHtml(latest.storeId?.name || 'Unknown store');
     const unit = item?.unit || 'unit';
     const hasSale = latest.salePrice != null;
     const hasCoupon = latest.couponAmount != null && latest.couponAmount > 0;
     const isOrganic = item?.isOrganic;
     const badges = [
-      isOrganic ? `<span class="badge badge-organic">Organic</span>` : '',
-      hasSale ? `<span class="badge badge-sale">Sale</span>` : '',
-      hasCoupon ? `<span class="badge badge-coupon">Coupon</span>` : ''
+      isOrganic ? `<span class="badge badge-organic">🌿 Organic</span>` : '',
+      hasSale ? `<span class="badge badge-sale">🏷️ Sale</span>` : '',
+      hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span>` : ''
     ].filter(Boolean).join(' ');
     return `
-      <div class="card" onclick="openItemDetail('${item?._id}', '${(item?.name || '').replace(/'/g, "\\'")}')">
+      <div class="card price-list-card" data-item-id="${item?._id}">
         <div class="card-body">
-          <div class="card-title">${item?.name || 'Unknown item'}</div>
-          <div class="card-subtitle">${item?.category || ''} &middot; ${storeName} &middot; ${formatDate(latest.date)}</div>
+          <div class="card-title">${escapeHtml(item?.name || 'Unknown item')}</div>
+          <div class="card-subtitle">${escapeHtml(item?.category || '')} &middot; ${storeName} &middot; ${formatDate(latest.date)}</div>
           <div style="margin-top:4px">${badges}</div>
         </div>
         <div class="card-meta">
           <div class="price-big">${formatCurrency(latest.finalPrice)}</div>
-          <div class="price-unit">${formatPPU(latest.pricePerUnit, unit)}</div>
+          <div class="price-unit">${formatPPU(latest.pricePerUnit, escapeHtml(unit))}</div>
         </div>
       </div>`;
   }).join('');
+
+  // Attach click listeners using the item ID from state (avoids embedding name in onclick)
+  container.querySelectorAll('.price-list-card').forEach(card => {
+    const itemId = card.dataset.itemId;
+    const group = groups.find(g => (g.item?._id || g.item) === itemId);
+    card.addEventListener('click', () => openItemDetail(itemId, group?.item?.name || 'Item'));
+  });
 }
 
 function applyPricesFilter() {
@@ -147,10 +169,10 @@ function openPricesFilterSheet() {
 
   const f = pricesState.filter;
   const catChips = categories.map(c =>
-    `<button class="filter-chip${f.categories.includes(c) ? ' selected' : ''}" data-cat="${c}" onclick="togglePriceFilterCat(this,'${c.replace(/'/g,"\\'")}')"> ${c}</button>`
+    `<button class="filter-chip${f.categories.includes(c) ? ' selected' : ''}" data-cat="${escapeAttr(c)}" onclick="togglePriceFilterCat(this)">${escapeHtml(c)}</button>`
   ).join('');
   const storeChips = stores.map(s =>
-    `<button class="filter-chip${f.stores.includes(s.id) ? ' selected' : ''}" data-store="${s.id}" onclick="togglePriceFilterStore(this,'${s.id}')"> ${s.name.replace(/'/g,"\\'")}</button>`
+    `<button class="filter-chip${f.stores.includes(s.id) ? ' selected' : ''}" data-store="${escapeAttr(s.id)}" onclick="togglePriceFilterStore(this)">${escapeHtml(s.name)}</button>`
   ).join('');
   const dateOptions = [
     { val: 'all', label: 'All time' },
@@ -205,12 +227,14 @@ function closeFilterSheet() {
   document.getElementById('filter-sheet-overlay').style.display = 'none';
 }
 
-function togglePriceFilterCat(btn, cat) {
+function togglePriceFilterCat(btn) {
+  const cat = btn.dataset.cat;
   const f = pricesState.filter;
   if (f.categories.includes(cat)) { f.categories = f.categories.filter(c => c !== cat); btn.classList.remove('selected'); }
   else { f.categories.push(cat); btn.classList.add('selected'); }
 }
-function togglePriceFilterStore(btn, storeId) {
+function togglePriceFilterStore(btn) {
+  const storeId = btn.dataset.store;
   const f = pricesState.filter;
   if (f.stores.includes(storeId)) { f.stores = f.stores.filter(s => s !== storeId); btn.classList.remove('selected'); }
   else { f.stores.push(storeId); btn.classList.add('selected'); }
@@ -296,19 +320,19 @@ async function loadDetailHistory(itemId) {
           ${hasCoupon ? `<span class="price-breakdown-coupon">− ${formatCurrency(e.couponAmount)} coupon${e.couponCode ? ` (${e.couponCode})` : ''}</span>` : ''}
         </div>` : '';
 
-      const organicBadge = e.isOrganic ? `<span class="badge badge-organic">Organic</span> ` : '';
-      const saleBadge = hasSale ? `<span class="badge badge-sale">Sale</span> ` : '';
-      const couponBadge = hasCoupon ? `<span class="badge badge-coupon">Coupon</span> ` : '';
+      const organicBadge = e.isOrganic ? `<span class="badge badge-organic">🌿 Organic</span> ` : '';
+      const saleBadge = hasSale ? `<span class="badge badge-sale">🏷️ Sale</span> ` : '';
+      const couponBadge = hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span> ` : '';
       const canDelete = window.appAuth?.isAdmin() && !isPending;
 
       return `
         <div class="card" style="margin-bottom:0.5rem;${isPending ? 'opacity:0.8;border-left:3px solid var(--warning)' : ''}">
           <div class="card-body">
-            <div class="card-title">${e.storeId?.name || 'Unknown'}</div>
-            <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity} &middot; by ${e.submittedBy?.name || '—'}</div>
+            <div class="card-title">${escapeHtml(e.storeId?.name || 'Unknown')}</div>
+            <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity} &middot; by ${escapeHtml(e.submittedBy?.name || '—')}</div>
             <div style="margin-top:4px">${organicBadge}${saleBadge}${couponBadge}${statusBadge}</div>
             ${priceLine}
-            ${e.notes ? `<div class="text-muted text-sm" style="margin-top:4px">${e.notes}</div>` : ''}
+            ${e.notes ? `<div class="text-muted text-sm" style="margin-top:4px">${escapeHtml(e.notes)}</div>` : ''}
           </div>
           <div class="card-meta">
             <div class="price-big ${isBest ? 'price-best' : ''}">${formatCurrency(e.finalPrice)}</div>
@@ -341,9 +365,9 @@ async function loadDetailCompare(itemId) {
             <div class="card-title">${e.store?.name || 'Unknown'}</div>
             <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity}</div>
             <div style="margin-top:4px">
-              ${i === 0 ? `<span class="badge badge-best">Best price</span>` : ''}
-              ${hasSale ? `<span class="badge badge-sale">Sale</span>` : ''}
-              ${hasCoupon ? `<span class="badge badge-coupon">Coupon</span>` : ''}
+              ${i === 0 ? `<span class="badge badge-best">⭐ Best price</span>` : ''}
+              ${hasSale ? `<span class="badge badge-sale">🏷️ Sale</span>` : ''}
+              ${hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span>` : ''}
             </div>
           </div>
           <div class="card-meta">
@@ -383,8 +407,13 @@ async function deletePriceEntry(entryId, itemId) {
   }
 }
 
-// Live final-price calculator used in the add-price modal
+// Live final-price calculator used in the add-price modal (debounced to avoid DOM churn on every keystroke)
+let _recalcDebounce;
 function recalcPricePreview() {
+  clearTimeout(_recalcDebounce);
+  _recalcDebounce = setTimeout(_doRecalcPricePreview, 150);
+}
+function _doRecalcPricePreview() {
   const reg = parseFloat(document.getElementById('price-regular')?.value) || 0;
   const saleOn = document.getElementById('price-on-sale')?.checked;
   const sale = saleOn ? (parseFloat(document.getElementById('price-sale')?.value) || null) : null;
@@ -397,11 +426,14 @@ function recalcPricePreview() {
   const ppu = qty > 0 ? final / qty : final;
 
   const preview = document.getElementById('price-calc-preview');
-  if (preview && reg > 0) {
-    preview.textContent = `Final: ${formatCurrency(final)} · ${formatPPU(ppu, document.getElementById('price-item-unit')?.value || 'unit')}`;
-    preview.style.display = '';
-  } else if (preview) {
-    preview.style.display = 'none';
+  if (preview) {
+    if (reg > 0) {
+      preview.textContent = `Final: ${formatCurrency(final)} · ${formatPPU(ppu, document.getElementById('price-item-unit')?.value || 'unit')}`;
+      preview.classList.remove('price-calc-placeholder');
+    } else {
+      preview.textContent = 'Enter a price above to see the final calculation';
+      preview.classList.add('price-calc-placeholder');
+    }
   }
 }
 
@@ -411,17 +443,17 @@ function openAddPriceModal(prefillItem, onSaved) {
   const bodyHTML = `
     <form id="add-price-form">
       <div class="form-group">
-        <label>Item</label>
+        <label>Item <span class="required-star">*</span></label>
         <div class="autocomplete-wrap">
           <input class="form-control" id="price-item-input" placeholder="Search or create item..." autocomplete="off"
-            value="${prefillItem ? prefillItem.name : ''}" required />
+            value="${prefillItem ? escapeAttr(prefillItem.name) : ''}" required />
           <div class="autocomplete-dropdown" id="price-item-dropdown"></div>
         </div>
-        <input type="hidden" id="price-item-id" value="${prefillItem ? prefillItem._id : ''}" />
-        <input type="hidden" id="price-item-unit" value="${prefillItem ? prefillItem.unit : ''}" />
+        <input type="hidden" id="price-item-id" value="${prefillItem ? escapeAttr(prefillItem._id) : ''}" />
+        <input type="hidden" id="price-item-unit" value="${prefillItem ? escapeAttr(prefillItem.unit) : ''}" />
       </div>
       <div class="form-group">
-        <label>Store</label>
+        <label>Store <span class="required-star">*</span></label>
         <div class="autocomplete-wrap">
           <input class="form-control" id="price-store-input" placeholder="Search or add store..." autocomplete="off" required />
           <div class="autocomplete-dropdown" id="price-store-dropdown"></div>
@@ -430,16 +462,16 @@ function openAddPriceModal(prefillItem, onSaved) {
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Regular Price ($)</label>
+          <label>Regular Price ($) <span class="required-star">*</span></label>
           <input class="form-control" type="number" id="price-regular" step="0.01" min="0" required placeholder="0.00" />
         </div>
         <div class="form-group">
-          <label>Quantity</label>
+          <label>Quantity <span class="required-star">*</span></label>
           <input class="form-control" type="number" id="price-qty" step="any" min="0.01" value="1" required />
         </div>
       </div>
       <div class="form-group">
-        <label>Date</label>
+        <label>Date <span class="required-star">*</span></label>
         <input class="form-control" type="date" id="price-date" value="${new Date().toISOString().slice(0,10)}" required />
       </div>
 
@@ -469,7 +501,7 @@ function openAddPriceModal(prefillItem, onSaved) {
         </div>
       </div>
 
-      <div id="price-calc-preview" class="price-calc-preview" style="display:none"></div>
+      <div id="price-calc-preview" class="price-calc-preview price-calc-placeholder">Enter a price above to see the final calculation</div>
 
       <div class="checkbox-row">
         <input type="checkbox" id="price-organic" />
@@ -603,10 +635,10 @@ async function loadScanPendingSection() {
     }
 
     container.innerHTML = entries.map(e => {
-      const name = e.itemId?.name || 'Unknown item';
+      const name = escapeHtml(e.itemId?.name || 'Unknown item');
       const unit = e.itemId?.unit || 'unit';
-      const store = e.storeId?.name || 'Unknown store';
-      const submitter = e.submittedBy?.name || 'Unknown';
+      const store = escapeHtml(e.storeId?.name || 'Unknown store');
+      const submitter = escapeHtml(e.submittedBy?.name || 'Unknown');
       const hasSale = e.salePrice != null;
       const hasCoupon = e.couponAmount != null && e.couponAmount > 0;
       const isOrganic = e.isOrganic;
@@ -614,17 +646,17 @@ async function loadScanPendingSection() {
         <div class="pending-card" id="pending-${e._id}">
           <div class="pending-card-header">
             <div>
-              <div style="font-weight:600">${name}${isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
+              <div style="font-weight:600">${name}${isOrganic ? ' <span class="badge badge-organic">🌿 Organic</span>' : ''}</div>
               <div class="text-muted text-sm">${store} &middot; ${formatDate(e.date)} &middot; by ${submitter}</div>
             </div>
             <div style="text-align:right">
               <div style="font-weight:700;font-size:1.1rem">${formatCurrency(e.finalPrice)}</div>
-              <div class="text-muted text-sm">${formatPPU(e.pricePerUnit, unit)}</div>
-              ${hasSale ? `<span class="badge badge-sale">Sale</span>` : ''}
-              ${hasCoupon ? `<span class="badge badge-coupon">Coupon</span>` : ''}
+              <div class="text-muted text-sm">${formatPPU(e.pricePerUnit, escapeHtml(unit))}</div>
+              ${hasSale ? `<span class="badge badge-sale">🏷️ Sale</span>` : ''}
+              ${hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span>` : ''}
             </div>
           </div>
-          ${e.notes ? `<div class="text-muted text-sm">${e.notes}</div>` : ''}
+          ${e.notes ? `<div class="text-muted text-sm">${escapeHtml(e.notes)}</div>` : ''}
           <div class="pending-card-actions">
             <button class="btn btn-outline btn-sm" onclick="openApprovePriceModal('${e._id}', ${JSON.stringify(e).replace(/"/g, '&quot;')})">Edit &amp; Approve</button>
             <button class="btn btn-primary btn-sm" onclick="quickApprovePrice('${e._id}')">Approve ✓</button>
@@ -705,7 +737,7 @@ function openApproveModal(id, entryRaw, onSuccess) {
           </div>
           <div class="form-group">
             <label>Coupon Label</label>
-            <input class="form-control" id="approve-coupon-code" value="${entryRaw.couponCode || ''}" placeholder="e.g. Ibotta" />
+            <input class="form-control" id="approve-coupon-code" value="${escapeAttr(entryRaw.couponCode || '')}" placeholder="e.g. Ibotta" />
           </div>
         </div>
       </div>
@@ -715,7 +747,7 @@ function openApproveModal(id, entryRaw, onSuccess) {
       </div>
       <div class="form-group">
         <label>Notes</label>
-        <input class="form-control" id="approve-notes" value="${entryRaw.notes || ''}" />
+        <input class="form-control" id="approve-notes" value="${escapeAttr(entryRaw.notes || '')}" />
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>

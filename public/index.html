@@ -48,6 +48,7 @@
       <div id="list-summary" class="store-summary"></div>
       <div id="shopping-list" class="card-list"></div>
       <div class="list-actions">
+        <button class="btn btn-outline btn-sm" id="btn-deselect-all">Deselect All</button>
         <button class="btn btn-outline btn-sm" id="btn-clear-checked">Clear Checked</button>
         <button class="btn btn-danger btn-sm admin-only" id="btn-clear-all">Clear All</button>
       </div>
@@ -105,6 +106,14 @@
           <button class="btn btn-outline btn-sm" id="btn-logout">Sign Out</button>
         </div>
       </header>
+      <!-- Admin quick-access tiles (hidden for members via role CSS) -->
+      <div class="more-quick-access admin-only" id="more-quick-access">
+        <button class="quick-tile" data-section="items"><span class="quick-tile-icon">🏷️</span>Catalog</button>
+        <button class="quick-tile" data-section="stores"><span class="quick-tile-icon">🏪</span>Stores</button>
+        <button class="quick-tile" id="quick-tile-csv"><span class="quick-tile-icon">📂</span>Import CSV</button>
+        <button class="quick-tile" data-section="household"><span class="quick-tile-icon">👥</span>Household</button>
+      </div>
+
       <div class="more-menu">
         <button class="more-item" data-section="account">
           <span class="more-icon">👤</span>
@@ -254,7 +263,11 @@
       <span id="cart-bar-label">In cart: $0.00 (0 items)</span>
       <span class="cart-bar-chevron">›</span>
     </div>
-    <div id="cart-bar-detail" class="cart-bar-detail" style="display:none"></div>
+    <div id="cart-bar-detail" class="cart-bar-detail" style="display:none">
+    <div class="done-shopping-row">
+      <button class="btn btn-primary btn-full" id="btn-done-shopping">Done Shopping ✓</button>
+    </div>
+  </div>
   </div>
 
   <!-- Toast -->
@@ -263,6 +276,7 @@
   <!-- Item Detail Panel -->
   <div id="item-detail-panel" class="slide-panel" style="display:none">
     <div class="slide-panel-header">
+      <div class="panel-handle-row"><div class="panel-drag-handle"></div></div>
       <button class="btn btn-icon" id="close-detail">‹</button>
       <div style="flex:1;min-width:0">
         <h2 id="detail-item-name"></h2>

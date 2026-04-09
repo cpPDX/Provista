@@ -104,8 +104,23 @@ async function switchTab(tabId) {
 }
 
 function initModal() {
-  document.getElementById('modal-close').addEventListener('click', closeModal);
+  function tryCloseModal() {
+    if (window._dirtyForm?.isDirty) {
+      showUnsavedPrompt(() => {});
+    } else {
+      closeModal();
+    }
+  }
+
+  document.getElementById('modal-close').addEventListener('click', tryCloseModal);
   document.getElementById('modal-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('modal-overlay')) closeModal();
+    if (e.target === document.getElementById('modal-overlay')) tryCloseModal();
+  });
+
+  // Escape key closes the modal (respects unsaved-changes guard)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
+    if (modalOpen) { e.preventDefault(); tryCloseModal(); }
   });
 }

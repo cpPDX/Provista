@@ -14,7 +14,12 @@ const api = {
       throw new Error('Not authenticated');
     }
 
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`HTTP ${res.status}: invalid JSON response`);
+    }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
   },
