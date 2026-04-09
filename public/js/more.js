@@ -7,12 +7,16 @@ function showMoreSection(sectionId) {
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
   const el = document.getElementById('section-' + sectionId);
   if (el) el.style.display = '';
+  // Show quick-access row so you can jump between sections without going back
+  document.getElementById('more-quick-access')?.style.removeProperty('display');
 }
 
 function hideMoreSection() {
   document.querySelector('#tab-more .page-header')?.style.removeProperty('display');
   document.querySelector('.more-menu').style.display = '';
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
+  // Hide quick-access row on the main menu — it's redundant there
+  document.getElementById('more-quick-access')?.style.setProperty('display', 'none');
 }
 
 // ===== Account Settings (all roles) =====
@@ -838,8 +842,13 @@ function loadAboutSection() {
   const isAdmin = window.appAuth?.isAdmin();
   document.getElementById('about-content').innerHTML = `
     <div style="text-align:center;padding:1rem 0 1.5rem">
-      <div style="font-size:2.5rem;margin-bottom:0.5rem">🛒</div>
-      <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Grocery Tracker</h2>
+      <div style="margin-bottom:0.75rem">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="display:inline-block">
+          <rect width="48" height="48" rx="12" fill="#21ABCD"/>
+          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="white" text-anchor="middle" letter-spacing="-0.5">P</text>
+        </svg>
+      </div>
+      <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Provista</h2>
       <p class="text-muted text-sm">Version 1.0</p>
     </div>
     <div class="card" style="margin-bottom:1rem">
