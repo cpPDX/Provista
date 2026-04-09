@@ -1,6 +1,6 @@
-/* Auth page styles — Railway dark theme */
+/* Auth page styles */
 body.auth-page {
-  background: linear-gradient(135deg, #1a0a2e 0%, #0e0e18 50%, #0b0b0b 100%);
+  background: linear-gradient(135deg, #1A1C20 0%, #2E3035 50%, #1A1C20 100%);
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -30,8 +30,8 @@ body.auth-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(168,85,247,0.15);
-  border: 1.5px solid rgba(168,85,247,0.25);
+  background: rgba(33,171,205,0.15);
+  border: 1.5px solid rgba(33,171,205,0.25);
   border-radius: 50%;
 }
 .auth-logo h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; }

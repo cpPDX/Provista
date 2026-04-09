@@ -1,49 +1,87 @@
-/* ===== CSS Variables — Railway dark theme ===== */
+/* ===== CSS Variables — Blue + Dark Grey theme ===== */
 :root {
-  /* Surfaces */
-  --bg: #0b0b0b;
-  --surface: #141414;
-  --surface-raised: #1f1f1f;
+  /* Backgrounds */
+  --color-bg-base: #1A1C20;
+  --color-bg-card: #525661;
+  --color-bg-card-elevated: #5E6370;
+  --color-bg-input: #3E4047;
+  --color-bg-nav: #2E3035;
 
-  /* Borders — barely-there on dark */
-  --border: rgba(255,255,255,0.07);
-  --border-strong: rgba(255,255,255,0.14);
+  /* Text */
+  --color-text-primary: #F0F2F5;
+  --color-text-secondary: #A8AEBA;
+  --color-text-disabled: #6B717E;
+  --color-text-inverse: #1A1C20;
 
-  /* Brand — Railway signature purple */
-  --primary: #a855f7;
-  --primary-light: #c084fc;
-  --primary-dark: #9333ea;
-  --primary-bg: rgba(168,85,247,0.12);
+  /* Blue brand */
+  --color-blue-light: #6ECEE3;
+  --color-blue: #21ABCD;
+  --color-blue-dark: #1789A4;
+  --color-blue-muted: rgba(33, 171, 205, 0.1);
 
-  /* Semantic — brightened for dark bg readability */
-  --danger: #f87171;
-  --success: #34d399;
-  --warning: #fbbf24;
+  /* Semantic */
+  --color-success: #2ECC8A;
+  --color-warning: #F0A500;
+  --color-danger: #E05252;
+  --color-danger-muted: rgba(224, 82, 82, 0.1);
+
+  /* Borders */
+  --color-border: rgba(107, 113, 126, 0.25);
+  --color-border-focus: #21ABCD;
+  --color-divider: rgba(107, 113, 126, 0.15);
 
   /* Typography */
-  --text: #e4e4e7;
-  --text-muted: #71717a;
-  --text-sm: 0.8125rem;
+  --font-display: 'DM Sans', 'Inter', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 
-  /* Layout */
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-card-elevated: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-modal: 0 -4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-blue-glow: 0 0 12px rgba(33, 171, 205, 0.25);
+
+  /* Motion */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* Compatibility aliases — old names → new theme values */
+  --bg: var(--color-bg-base);
+  --surface: var(--color-bg-card);
+  --surface-raised: var(--color-bg-card-elevated);
+  --primary: var(--color-blue);
+  --primary-light: var(--color-blue-light);
+  --primary-dark: var(--color-blue-dark);
+  --primary-bg: var(--color-blue-muted);
+  --danger: var(--color-danger);
+  --success: var(--color-success);
+  --warning: var(--color-warning);
+  --text: var(--color-text-primary);
+  --text-muted: var(--color-text-secondary);
+  --text-sm: 0.8125rem;
   --nav-height: 64px;
   --header-height: 56px;
-
-  /* Radius — tighter, Railway-style */
-  --radius: 10px;
-  --radius-sm: 6px;
-
-  /* Shadows — heavier for dark surfaces */
-  --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
-  --shadow-md: 0 4px 20px rgba(0,0,0,0.5), 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-lg: 0 10px 40px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.4);
+  --border: var(--color-border);
+  --border-strong: var(--color-divider);
+  --radius: var(--radius-lg);
+  --shadow: var(--shadow-card);
+  --shadow-md: var(--shadow-card-elevated);
+  --shadow-lg: var(--shadow-modal);
 }
 
 /* ===== Reset ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: var(--font-display);
   font-size: 16px;
   color: var(--text);
   background: var(--bg);
@@ -51,18 +89,6 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-/* Subtle noise grain — Railway signature texture */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.035;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 300px 300px;
 }
 button { cursor: pointer; border: none; background: none; font: inherit; color: inherit; }
 input, select, textarea { font: inherit; color: inherit; }
@@ -171,8 +197,8 @@ a { color: var(--primary); text-decoration: none; }
   white-space: nowrap;
   letter-spacing: -0.01em;
 }
-.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 1px 3px rgba(168,85,247,0.3); }
-.btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 16px rgba(168,85,247,0.35); }
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 1px 3px rgba(33,171,205,0.3); }
+.btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 16px rgba(33,171,205,0.35); }
 .btn-primary:active { background: var(--primary-dark); transform: scale(0.98); }
 .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
 .btn-outline:hover { background: var(--primary-bg); }
@@ -199,7 +225,7 @@ a { color: var(--primary); text-decoration: none; }
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
-.search-bar input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(168,85,247,0.15); }
+.search-bar input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(33,171,205,0.15); }
 
 /* ===== Card List ===== */
 .card-list {
@@ -257,13 +283,13 @@ a { color: var(--primary); text-decoration: none; }
   font-weight: 500;
 }
 .badge-sale    { background: rgba(251,191,36,0.12);  color: #fbbf24; }
-.badge-coupon  { background: rgba(192,132,252,0.12); color: #c084fc; }
+.badge-coupon  { background: rgba(110,206,227,0.12); color: #6ECEE3; }
 .badge-best    { background: rgba(52,211,153,0.12);  color: #34d399; }
 .badge-organic { background: rgba(52,211,153,0.12);  color: #34d399; }
 .badge-no-data { background: rgba(255,255,255,0.06); color: var(--text-muted); }
 
 /* ===== Price display ===== */
-.price-big { font-size: 1.125rem; font-weight: 700; }
+.price-big { font-size: 1.125rem; font-weight: 700; font-family: var(--font-mono); }
 .price-unit { font-size: var(--text-sm); color: var(--text-muted); }
 .price-best { color: var(--success); }
 
@@ -271,7 +297,7 @@ a { color: var(--primary); text-decoration: none; }
 .price-breakdown { font-size: var(--text-sm); margin-top: 0.25rem; }
 .price-breakdown-reg { color: var(--text-muted); }
 .price-breakdown-sale { color: #fbbf24; }
-.price-breakdown-coupon { color: #c084fc; }
+.price-breakdown-coupon { color: #6ECEE3; }
 
 /* Live price calculation preview (add price form) */
 .price-calc-preview {
@@ -285,8 +311,8 @@ a { color: var(--primary); text-decoration: none; }
 }
 .price-calc-preview strong { color: var(--text); }
 .callout-box {
-  background: rgba(168,85,247,0.08);
-  border: 1px solid rgba(168,85,247,0.2);
+  background: rgba(33,171,205,0.08);
+  border: 1px solid rgba(33,171,205,0.2);
   border-radius: var(--radius-sm);
   padding: 0.625rem 0.875rem;
   font-size: var(--text-sm);
@@ -452,7 +478,7 @@ a { color: var(--primary); text-decoration: none; }
   transition: border-color 0.15s;
   min-height: 44px;
 }
-.form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(168,85,247,0.15); }
+.form-control:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(33,171,205,0.15); }
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -567,9 +593,9 @@ a { color: var(--primary); text-decoration: none; }
   color: white;
   border-radius: var(--radius);
   padding: 1.25rem 1.5rem;
-  box-shadow: 0 4px 24px rgba(168,85,247,0.35);
+  box-shadow: 0 4px 24px rgba(33,171,205,0.35);
 }
-.total-card .amount { font-size: 2rem; font-weight: 800; }
+.total-card .amount { font-size: 2rem; font-weight: 800; font-family: var(--font-mono); }
 .total-card .label { font-size: var(--text-sm); opacity: 0.85; margin-top: 2px; }
 .breakdown-list {
   padding: 0 1rem;
@@ -800,7 +826,7 @@ body.role-member .member-only { display: flex; }
   font-weight: 800;
   letter-spacing: 0.25em;
   color: var(--primary);
-  font-family: 'Courier New', monospace;
+  font-family: var(--font-mono);
 }
 .invite-code-expiry { font-size: var(--text-sm); color: var(--text-muted); margin-top: 0.375rem; }
 
@@ -929,7 +955,7 @@ body.role-member .member-only { display: flex; }
   position: absolute;
   inset: 4px;
   border-radius: 12px;
-  background: rgba(168,85,247,0.1);
+  background: rgba(33,171,205,0.1);
   pointer-events: none;
 }
 
@@ -942,8 +968,8 @@ body.role-member .member-only { display: flex; }
   animation: wizardPulse 1.5s ease-in-out infinite;
 }
 @keyframes wizardPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(168,85,247,0.5); }
-  50% { box-shadow: 0 0 0 8px rgba(168,85,247,0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(33,171,205,0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(33,171,205,0); }
 }
 
 /* Wizard tooltip variant — z-index 260:
