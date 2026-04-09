@@ -2,6 +2,7 @@
 
 // ===== Navigation =====
 function showMoreSection(sectionId) {
+  document.querySelector('#tab-more .page-header')?.style.setProperty('display', 'none');
   document.querySelector('.more-menu').style.display = 'none';
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
   const el = document.getElementById('section-' + sectionId);
@@ -9,6 +10,7 @@ function showMoreSection(sectionId) {
 }
 
 function hideMoreSection() {
+  document.querySelector('#tab-more .page-header')?.style.removeProperty('display');
   document.querySelector('.more-menu').style.display = '';
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
 }

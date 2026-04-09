@@ -249,12 +249,18 @@ function navigateToCatalogItem(itemId, itemName) {
   const panel = document.getElementById('item-detail-panel');
   panel.classList.remove('open');
   setTimeout(() => { panel.style.display = 'none'; }, 250);
-  // Navigate to More → Catalog
+  // Navigate to More → Catalog, then open the specific item
   switchTab('more');
   showMoreSection('items');
   loadCatalog().then(() => {
-    const card = document.querySelector(`[data-item-id="${itemId}"]`);
-    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const item = catalogState?.items.find(i => i._id === itemId);
+    if (item) {
+      openEditItemModal(item._id, item.name, item.category, item.unit, !!item.isOrganic);
+    } else {
+      // Item not in catalog yet — just scroll to card if present
+      const card = document.querySelector(`[data-item-id="${itemId}"]`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   });
 }
 
