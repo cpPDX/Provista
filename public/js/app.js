@@ -64,7 +64,16 @@ function initNavigation() {
   document.getElementById('btn-open-csv-import')?.addEventListener('click', () => openCsvImportModal());
 }
 
+function closeDetailPanel() {
+  const panel = document.getElementById('item-detail-panel');
+  if (panel && panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    setTimeout(() => { panel.style.display = 'none'; }, 250);
+  }
+}
+
 function handleNavTap(tabId) {
+  closeDetailPanel();
   const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
   if (modalOpen && window._dirtyForm?.isDirty) {
     showUnsavedPrompt(() => switchTab(tabId));
