@@ -29,6 +29,7 @@
         <h2 class="section-title">Pending Review</h2>
         <div id="scan-pending-list" class="card-list"></div>
       </div>
+      <!-- Note: scan-pending-section is kept for pending price entry reviews; receipt scanning removed -->
     </section>
 
     <!-- Tab: Shopping List -->
@@ -61,13 +62,17 @@
           <button class="btn btn-icon" id="btn-next-month">&#8250;</button>
         </div>
       </header>
-      <p class="text-muted text-sm disclaimer">Only reflects logged &amp; scanned approved purchases.</p>
+      <p class="text-muted text-sm disclaimer">Only reflects logged approved purchases.</p>
       <div id="spend-total-card" class="total-card"></div>
       <canvas id="spend-chart" height="180"></canvas>
       <h2 class="section-title">By Category</h2>
-      <div id="spend-by-category" class="breakdown-list"></div>
+      <div class="breakdown-scroll-wrap">
+        <div id="spend-by-category" class="breakdown-list"></div>
+      </div>
       <h2 class="section-title">By Store</h2>
-      <div id="spend-by-store" class="breakdown-list"></div>
+      <div class="breakdown-scroll-wrap">
+        <div id="spend-by-store" class="breakdown-list"></div>
+      </div>
     </section>
 
     <!-- Tab: Inventory (admin-only nav tab) -->
@@ -124,11 +129,6 @@
           <span>Import Prices from CSV</span>
           <span class="chevron">›</span>
         </button>
-        <button class="more-item" id="btn-app-tour">
-          <span class="more-icon">🗺️</span>
-          <span>App Tour</span>
-          <span class="chevron">›</span>
-        </button>
         <button class="more-item" id="btn-resume-setup" style="display:none;border-color:var(--primary)">
           <span class="more-icon">🧭</span>
           <span>Continue Setup (Wizard)</span>
@@ -137,6 +137,11 @@
         <button class="more-item" data-section="about">
           <span class="more-icon">ℹ️</span>
           <span>About</span>
+          <span class="chevron">›</span>
+        </button>
+        <button class="more-item" id="btn-app-tour">
+          <span class="more-icon">🗺️</span>
+          <span>App Tour</span>
           <span class="chevron">›</span>
         </button>
       </div>
@@ -194,9 +199,6 @@
     </section>
   </div>
 
-  <!-- User Menu Hamburger (fixed top-right) -->
-  <button id="btn-user-menu" class="user-menu-btn" aria-label="Menu">&#9776;</button>
-
   <!-- Bottom Navigation -->
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="prices">
@@ -219,6 +221,10 @@
     <button class="nav-item" data-tab="spend">
       <span class="nav-icon">📊</span>
       <span>Spend</span>
+    </button>
+    <button class="nav-item" data-tab="more">
+      <span class="nav-icon">☰</span>
+      <span>More</span>
     </button>
   </nav>
 
@@ -276,5 +282,6 @@
   <script src="/js/mealPlan.js"></script>
   <script src="/js/onboarding.js"></script>
   <script src="/js/app.js"></script>
+  <!-- scan.js removed: receipt scanning feature removed -->
 </body>
 </html>

@@ -5,8 +5,7 @@ body.auth-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem 1rem;
-  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0));
+  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0));
 }
 
 .auth-container {
@@ -21,11 +20,21 @@ body.auth-page {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.625rem;
   color: white;
 }
-.auth-logo-icon { font-size: 3rem; }
-.auth-logo h1 { font-size: 1.75rem; font-weight: 800; }
+.auth-logo-icon {
+  font-size: 3.25rem;
+  width: 72px;
+  height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(168,85,247,0.15);
+  border: 1.5px solid rgba(168,85,247,0.25);
+  border-radius: 50%;
+}
+.auth-logo h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; }
 
 .auth-card {
   background: var(--surface);

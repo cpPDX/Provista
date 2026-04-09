@@ -3,6 +3,23 @@
 const CSV_COLUMNS = ['item_name', 'category', 'unit', 'store_name', 'regular_price',
   'sale_price', 'coupon_amount', 'coupon_code', 'quantity', 'date', 'notes', 'is_organic'];
 
+// Normalize raw CSV category names to canonical display names
+const CATEGORY_NORMALIZE = {
+  'dry': 'Pantry',
+  'dry goods': 'Pantry',
+  'dried goods': 'Pantry',
+  'pantry dry': 'Pantry',
+  'shelf stable': 'Pantry',
+  'canned': 'Pantry',
+  'canned goods': 'Pantry',
+};
+
+function normalizeCategory(raw) {
+  if (!raw) return '';
+  const key = raw.trim().toLowerCase();
+  return CATEGORY_NORMALIZE[key] || raw.trim();
+}
+
 const CSV_EXAMPLE_ROWS = [
   ['Whole Milk 1gal', 'Dairy', 'gal', 'Costco', '4.99', '', '', '', '1', '2026-04-01', '', 'false'],
   ['Sourdough Bread', 'Bakery', 'loaf', 'Trader Joes', '3.49', '2.99', '0.50', 'Ibotta', '2', '2026-04-01', 'On sale this week', 'false'],
@@ -118,7 +135,7 @@ async function importCsvPrices(rows) {
         errors.push({ row: rowNum, reason: `Item "${itemName}" not found. Ask an admin to add it first.` }); continue;
       }
       try {
-        const category = (row.category || '').trim() || 'Other';
+        const category = normalizeCategory(row.category) || 'Other';
         const unit = (row.unit || '').trim() || 'unit';
         const isOrganic = (row.is_organic || '').trim().toLowerCase() === 'true';
         item = await api.items.create({ name: itemName, category, unit, isOrganic });
@@ -257,9 +274,17 @@ function handleCsvFileSelect(e) {
 /** Modal-based CSV import (from Prices header and More menu) */
 function openCsvImportModal() {
   openModal('Import Prices from CSV', `
+    <p class="text-muted text-sm" style="margin-bottom:0.5rem">
+      Import grocery prices from a spreadsheet. Each row becomes a price entry in your household's history.
+    </p>
+    <p class="text-muted text-sm" style="margin-bottom:0.5rem">
+      <strong style="color:var(--text)">Required columns:</strong> item_name, category, unit, store_name, regular_price.
+      Optional: sale_price, coupon_amount, coupon_code, quantity, date, notes, is_organic.
+    </p>
     <p class="text-muted text-sm" style="margin-bottom:0.75rem">
-      Upload a spreadsheet of prices.
-      <button onclick="downloadCsvTemplate()" class="btn-link">Download template</button>
+      Duplicate entries (same item + store + date) are automatically skipped.
+      New stores and items are created automatically.
+      <button onclick="downloadCsvTemplate()" class="btn-link" style="color:var(--primary)">Download template →</button>
     </p>
     <input type="file" id="csv-modal-file-input" accept=".csv,text/csv" style="display:none" />
     <button class="btn btn-outline btn-full" id="btn-csv-modal-upload">Choose CSV File</button>

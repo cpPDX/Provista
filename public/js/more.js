@@ -339,16 +339,27 @@ function renderCatalog() {
     return;
   }
   container.innerHTML = items.map(item => `
-    <div class="card">
-      <div class="card-body">
-        <div class="card-title">${item.name}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
-        <div class="card-subtitle">${item.category} &middot; ${item.unit}</div>
+    <div class="card swipeable" data-item-id="${item._id}">
+      <div class="card-body-wrap">
+        <div class="card-body">
+          <div class="card-title">${item.name}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
+          <div class="card-subtitle">${item.category} &middot; ${item.unit}</div>
+        </div>
       </div>
-      <div class="card-actions">
-        <button class="btn btn-outline btn-sm" onclick="openEditItemModal('${item._id}','${escapeAttr(item.name)}','${escapeAttr(item.category)}','${escapeAttr(item.unit)}',${!!item.isOrganic})">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteItem('${item._id}')">✕</button>
-      </div>
+      <div class="card-swipe-delete">Delete</div>
     </div>`).join('');
+
+  // Tap to edit, swipe left to delete
+  container.querySelectorAll('.card.swipeable').forEach(card => {
+    const id = card.dataset.itemId;
+    const item = items.find(i => i._id === id);
+    if (!item) return;
+    card.querySelector('.card-body-wrap').addEventListener('click', () => {
+      openEditItemModal(id, item.name, item.category, item.unit, !!item.isOrganic);
+    });
+    card.querySelector('.card-swipe-delete').addEventListener('click', () => deleteItem(id));
+    attachSwipeDelete(card);
+  });
 }
 
 function openEditItemModal(id, name, category, unit, isOrganic = false) {
@@ -432,16 +443,27 @@ function renderStores() {
     return;
   }
   container.innerHTML = storesState.stores.map(store => `
-    <div class="card">
-      <div class="card-body">
-        <div class="card-title">${store.name}</div>
-        ${store.location ? `<div class="card-subtitle">${store.location}</div>` : ''}
+    <div class="card swipeable" data-store-id="${store._id}">
+      <div class="card-body-wrap">
+        <div class="card-body">
+          <div class="card-title">${store.name}</div>
+          ${store.location ? `<div class="card-subtitle">${store.location}</div>` : ''}
+        </div>
       </div>
-      <div class="card-actions">
-        <button class="btn btn-outline btn-sm" onclick="openEditStoreModal('${store._id}','${escapeAttr(store.name)}','${escapeAttr(store.location || '')}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteStore('${store._id}')">✕</button>
-      </div>
+      <div class="card-swipe-delete">Delete</div>
     </div>`).join('');
+
+  // Tap to edit, swipe left to delete
+  container.querySelectorAll('.card.swipeable').forEach(card => {
+    const id = card.dataset.storeId;
+    const store = storesState.stores.find(s => s._id === id);
+    if (!store) return;
+    card.querySelector('.card-body-wrap').addEventListener('click', () => {
+      openEditStoreModal(id, store.name, store.location || '');
+    });
+    card.querySelector('.card-swipe-delete').addEventListener('click', () => deleteStore(id));
+    attachSwipeDelete(card);
+  });
 }
 
 function openEditStoreModal(id, name, location) {
@@ -693,6 +715,7 @@ function openAddCatalogItemModal() {
 
 // ===== About =====
 function loadAboutSection() {
+  const isAdmin = window.appAuth?.isAdmin();
   document.getElementById('about-content').innerHTML = `
     <div style="text-align:center;padding:1rem 0 1.5rem">
       <div style="font-size:2.5rem;margin-bottom:0.5rem">🛒</div>
@@ -722,14 +745,90 @@ function loadAboutSection() {
         </ul>
       </div>
     </div>
-    <div class="card">
+    <div class="card" style="margin-bottom:${isAdmin ? '1rem' : '0'}">
       <div class="card-body">
         <div class="card-title">Created by</div>
         <p style="margin-top:0.5rem;font-size:0.9375rem">Chris Phelan</p>
         <p class="text-muted text-sm" style="margin-top:0.25rem">Built for our household. Shared with yours.</p>
       </div>
     </div>
+    ${isAdmin ? `
+    <div class="card">
+      <div class="card-body">
+        <div class="card-title">Data Maintenance</div>
+        <p class="text-muted text-sm" style="margin-top:0.5rem;margin-bottom:0.75rem">
+          Normalize legacy category names (e.g. "Dry" → "Pantry") from older CSV imports.
+        </p>
+        <button class="btn btn-outline btn-sm" id="btn-migrate-categories">Fix Category Names</button>
+        <div id="migrate-result" class="text-sm" style="margin-top:0.5rem"></div>
+      </div>
+    </div>` : ''}
   `;
+
+  if (isAdmin) {
+    document.getElementById('btn-migrate-categories')?.addEventListener('click', async () => {
+      const btn = document.getElementById('btn-migrate-categories');
+      const result = document.getElementById('migrate-result');
+      btn.disabled = true;
+      btn.textContent = 'Running…';
+      try {
+        const res = await api.request('POST', '/admin/migrate-categories');
+        result.textContent = res.message;
+        result.style.color = 'var(--success)';
+      } catch (err) {
+        result.textContent = 'Failed: ' + err.message;
+        result.style.color = 'var(--danger)';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Fix Category Names';
+      }
+    });
+  }
+}
+
+// ===== Swipe-to-delete helper =====
+function attachSwipeDelete(card) {
+  let startX = 0;
+  let startY = 0;
+  let swiping = false;
+
+  card.addEventListener('touchstart', (e) => {
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    swiping = false;
+  }, { passive: true });
+
+  card.addEventListener('touchmove', (e) => {
+    const dx = e.touches[0].clientX - startX;
+    const dy = e.touches[0].clientY - startY;
+    // Only intercept clear horizontal swipes
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
+      swiping = true;
+    }
+  }, { passive: true });
+
+  card.addEventListener('touchend', (e) => {
+    if (!swiping) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    if (dx < -40) {
+      // Swipe left → reveal delete
+      card.classList.add('swiped');
+      // Dismiss other swiped cards
+      document.querySelectorAll('.card.swipeable.swiped').forEach(c => {
+        if (c !== card) c.classList.remove('swiped');
+      });
+    } else if (dx > 20) {
+      // Swipe right → hide delete
+      card.classList.remove('swiped');
+    }
+  });
+
+  // Tap anywhere outside the swipe-delete area collapses it
+  document.addEventListener('touchstart', (e) => {
+    if (card.classList.contains('swiped') && !card.contains(e.target)) {
+      card.classList.remove('swiped');
+    }
+  }, { passive: true });
 }
 
 // ===== Init =====

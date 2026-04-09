@@ -28,6 +28,7 @@ app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/shopping-list', require('./routes/shoppingList'));
 app.use('/api/spend', require('./routes/spend'));
 app.use('/api/meal-plan', require('./routes/mealPlan'));
+app.use('/api/admin', require('./routes/admin'));
 
 // Serve login page for /join route (join via QR code link)
 app.get('/join', (req, res) => {
