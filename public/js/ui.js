@@ -67,6 +67,26 @@ function openModal(title, bodyHTML, onConfirm) {
     }
   }
 
+  // Hoist .form-actions out of the scrollable modal-body into the modal footer,
+  // so buttons are never obscured by content above them.
+  const footer = document.getElementById('modal-footer');
+  const formActions = document.querySelector('#modal-body .form-actions');
+  if (footer && formActions) {
+    // Associate any submit buttons with their parent form so they still work
+    // when moved outside the <form> element.
+    const parentForm = formActions.closest('form');
+    if (parentForm) {
+      if (!parentForm.id) parentForm.id = '_mf_' + Date.now();
+      formActions.querySelectorAll('button[type="submit"], button:not([type])').forEach(btn => {
+        if (!btn.getAttribute('form')) btn.setAttribute('form', parentForm.id);
+      });
+    }
+    footer.appendChild(formActions);
+    footer.style.display = '';
+  } else if (footer) {
+    footer.style.display = 'none';
+  }
+
   // Move focus to the first focusable field for keyboard/accessibility
   const firstInput = document.querySelector('#modal-body input:not([type=hidden]), #modal-body select, #modal-body textarea');
   if (firstInput) firstInput.focus();
@@ -127,6 +147,8 @@ function closeModal() {
   clearDirtyForm();
   document.getElementById('modal-overlay').style.display = 'none';
   document.getElementById('modal-body').innerHTML = '';
+  const footer = document.getElementById('modal-footer');
+  if (footer) { footer.innerHTML = ''; footer.style.display = 'none'; }
 
   // Clean up keyboard listener and reset margin
   if (window.visualViewport && window._modalVpHandler) {
