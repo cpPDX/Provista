@@ -59,9 +59,19 @@ function capitalizeRole(role) {
 
 function initNavigation() {
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => switchTab(item.dataset.tab));
+    item.addEventListener('click', () => handleNavTap(item.dataset.tab));
   });
   document.getElementById('btn-open-csv-import')?.addEventListener('click', () => openCsvImportModal());
+}
+
+function handleNavTap(tabId) {
+  const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
+  if (modalOpen && window._dirtyForm?.isDirty) {
+    showUnsavedPrompt(() => switchTab(tabId));
+  } else {
+    if (modalOpen) closeModal();
+    switchTab(tabId);
+  }
 }
 
 async function switchTab(tabId) {
