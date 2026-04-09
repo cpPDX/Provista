@@ -1,0 +1,17 @@
+{
+  "name": "Provista",
+  "short_name": "Provista",
+  "description": "Smart grocery price tracking and household spend management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#21ABCD",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

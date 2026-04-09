@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Grocery Tracker</title>
+  <title>Provista</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#21ABCD" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -107,7 +110,7 @@
         </div>
       </header>
       <!-- Admin quick-access tiles (hidden for members via role CSS) -->
-      <div class="more-quick-access admin-only" id="more-quick-access">
+      <div class="more-quick-access admin-only" id="more-quick-access" style="display:none">
         <button class="quick-tile" data-section="items"><span class="quick-tile-icon">🏷️</span>Catalog</button>
         <button class="quick-tile" data-section="stores"><span class="quick-tile-icon">🏪</span>Stores</button>
         <button class="quick-tile" id="quick-tile-csv"><span class="quick-tile-icon">📂</span>Import CSV</button>
@@ -275,8 +278,8 @@
 
   <!-- Item Detail Panel -->
   <div id="item-detail-panel" class="slide-panel" style="display:none">
+    <div class="panel-handle-row"><div class="panel-drag-handle"></div></div>
     <div class="slide-panel-header">
-      <div class="panel-handle-row"><div class="panel-drag-handle"></div></div>
       <button class="btn btn-icon" id="close-detail">‹</button>
       <div style="flex:1;min-width:0">
         <h2 id="detail-item-name"></h2>
