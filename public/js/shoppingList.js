@@ -32,6 +32,15 @@ function renderShoppingList() {
   updateCartBar();
 
   const container = document.getElementById('shopping-list');
+
+  // Show/hide clear buttons based on list state
+  const hasItems = items.length > 0;
+  const hasChecked = items.some(i => i.checked);
+  const clearCheckedBtn = document.getElementById('btn-clear-checked');
+  const clearAllBtn = document.getElementById('btn-clear-all');
+  if (clearCheckedBtn) clearCheckedBtn.style.display = hasChecked ? '' : 'none';
+  if (clearAllBtn) clearAllBtn.style.display = hasItems ? '' : 'none';
+
   if (!items.length) {
     container.innerHTML = emptyState('📋', 'Your shopping list is empty. Tap "+ Add" to start.');
     return;
@@ -422,6 +431,10 @@ function openLowStockReview() {
 // =============================================================
 
 function initShoppingListTab() {
+  // Start hidden; renderShoppingList() reveals them when items exist
+  document.getElementById('btn-clear-checked').style.display = 'none';
+  document.getElementById('btn-clear-all').style.display = 'none';
+
   document.getElementById('btn-add-list-item').addEventListener('click', openAddListItemModal);
 
   document.getElementById('btn-low-stock')?.addEventListener('click', openLowStockReview);
