@@ -2,14 +2,25 @@
 
 let pricesState = {
   entries: [],
-  searchQuery: ''
+  searchQuery: '',
+  filter: {
+    categories: [],
+    stores: [],
+    dateRange: 'all',
+    organicOnly: false,
+    saleOnly: false,
+    sortBy: 'date'
+  }
 };
+// Expose globally so more.js catalog filter can read entries for last-purchased sort
+window.pricesState = pricesState;
 
 async function loadPricesTab() {
   try {
     const entries = await api.prices.list();
     pricesState.entries = entries;
-    renderPricesList(entries);
+    window.pricesState = pricesState; // keep global ref fresh
+    applyPricesFilter();
 
     // Load pending review section (moved from scan tab) and badge count
     if (window.appAuth?.isAdmin()) {
@@ -22,22 +33,31 @@ async function loadPricesTab() {
   }
 }
 
-function renderPricesList(entries) {
+// Accepts either a flat entries array (groups by item) or pre-grouped array from applyPricesFilter
+function renderPricesList(entriesOrGroups) {
   const container = document.getElementById('prices-list');
-  if (!entries.length) {
+
+  let groups;
+  if (Array.isArray(entriesOrGroups) && entriesOrGroups.length && entriesOrGroups[0]?.item !== undefined) {
+    // Pre-grouped format from applyPricesFilter
+    groups = entriesOrGroups;
+  } else {
+    // Flat entries — group by item
+    const byItem = {};
+    entriesOrGroups.forEach(e => {
+      const id = e.itemId?._id || e.itemId;
+      if (!byItem[id]) byItem[id] = { item: e.itemId, entries: [] };
+      byItem[id].entries.push(e);
+    });
+    groups = Object.values(byItem);
+  }
+
+  if (!groups.length) {
     container.innerHTML = emptyState('💰', 'No approved price entries yet. Tap "+ Add Price" to get started.');
     return;
   }
 
-  // Group by item
-  const byItem = {};
-  entries.forEach(e => {
-    const id = e.itemId?._id || e.itemId;
-    if (!byItem[id]) byItem[id] = { item: e.itemId, entries: [] };
-    byItem[id].entries.push(e);
-  });
-
-  container.innerHTML = Object.values(byItem).map(({ item, entries: es }) => {
+  container.innerHTML = groups.map(({ item, entries: es }) => {
     const latest = es[0];
     const storeName = latest.storeId?.name || 'Unknown store';
     const unit = item?.unit || 'unit';
@@ -64,12 +84,178 @@ function renderPricesList(entries) {
   }).join('');
 }
 
+function applyPricesFilter() {
+  const { filter, entries, searchQuery } = pricesState;
+  const cutoffDays = { '7d': 7, '30d': 30, '90d': 90 };
+  const cutoff = cutoffDays[filter.dateRange]
+    ? new Date(Date.now() - cutoffDays[filter.dateRange] * 86400000) : null;
+
+  const filtered = entries.filter(e => {
+    if (filter.categories.length && !filter.categories.includes(e.itemId?.category)) return false;
+    if (filter.stores.length && !filter.stores.includes(String(e.storeId?._id || e.storeId))) return false;
+    if (cutoff && new Date(e.date) < cutoff) return false;
+    if (filter.organicOnly && !e.itemId?.isOrganic) return false;
+    if (filter.saleOnly && e.salePrice == null) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!(e.itemId?.name || '').toLowerCase().includes(q) &&
+          !(e.itemId?.category || '').toLowerCase().includes(q) &&
+          !(e.storeId?.name || '').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Group by item
+  const byItem = {};
+  filtered.forEach(e => {
+    const id = e.itemId?._id || e.itemId;
+    if (!byItem[id]) byItem[id] = { item: e.itemId, entries: [] };
+    byItem[id].entries.push(e);
+  });
+  let groups = Object.values(byItem);
+
+  // Sort
+  if (filter.sortBy === 'name') {
+    groups.sort((a, b) => (a.item?.name || '').localeCompare(b.item?.name || ''));
+  } else if (filter.sortBy === 'price') {
+    groups.sort((a, b) => (a.entries[0]?.finalPrice || 0) - (b.entries[0]?.finalPrice || 0));
+  } else if (filter.sortBy === 'ppu') {
+    groups.sort((a, b) => (a.entries[0]?.pricePerUnit || 0) - (b.entries[0]?.pricePerUnit || 0));
+  }
+  // 'date': entries already sorted newest-first from API
+
+  // Update count bar
+  const totalGroups = new Set(entries.map(e => e.itemId?._id || e.itemId)).size;
+  const isFiltered = filter.categories.length || filter.stores.length ||
+    filter.dateRange !== 'all' || filter.organicOnly || filter.saleOnly;
+  const countBar = document.getElementById('prices-filter-count');
+  if (countBar) {
+    countBar.textContent = isFiltered ? `Showing ${groups.length} of ${totalGroups} items` : '';
+    countBar.style.display = isFiltered ? '' : 'none';
+  }
+  const dot = document.getElementById('prices-filter-dot');
+  if (dot) dot.style.display = (isFiltered || filter.sortBy !== 'date') ? '' : 'none';
+
+  renderPricesList(groups);
+}
+
+function openPricesFilterSheet() {
+  const entries = pricesState.entries;
+  const categories = [...new Set(entries.map(e => e.itemId?.category).filter(Boolean))].sort();
+  const stores = [...new Map(entries.map(e => [String(e.storeId?._id || e.storeId), e.storeId?.name || 'Unknown'])).entries()]
+    .map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+
+  const f = pricesState.filter;
+  const catChips = categories.map(c =>
+    `<button class="filter-chip${f.categories.includes(c) ? ' selected' : ''}" data-cat="${c}" onclick="togglePriceFilterCat(this,'${c.replace(/'/g,"\\'")}')"> ${c}</button>`
+  ).join('');
+  const storeChips = stores.map(s =>
+    `<button class="filter-chip${f.stores.includes(s.id) ? ' selected' : ''}" data-store="${s.id}" onclick="togglePriceFilterStore(this,'${s.id}')"> ${s.name.replace(/'/g,"\\'")}</button>`
+  ).join('');
+  const dateOptions = [
+    { val: 'all', label: 'All time' },
+    { val: '7d', label: 'Last 7 days' },
+    { val: '30d', label: 'Last 30 days' },
+    { val: '90d', label: 'Last 3 months' }
+  ];
+
+  document.getElementById('filter-sheet-title').textContent = 'Filter & Sort';
+  document.getElementById('filter-sheet-body').innerHTML = `
+    <div>
+      <div class="filter-section-label">Sort by</div>
+      <div class="filter-chips">
+        ${[['date','Date (newest)'],['name','Name A→Z'],['price','Price (lowest)'],['ppu','Price/unit (lowest)']].map(([v,l]) =>
+          `<button class="filter-chip${f.sortBy===v?' selected':''}" onclick="setPriceFilterSort(this,'${v}')">${l}</button>`).join('')}
+      </div>
+    </div>
+    <div>
+      <div class="filter-section-label">Date range</div>
+      <div class="filter-chips">
+        ${dateOptions.map(o =>
+          `<button class="filter-chip${f.dateRange===o.val?' selected':''}" onclick="setPriceFilterDate(this,'${o.val}')">${o.label}</button>`).join('')}
+      </div>
+    </div>
+    ${categories.length ? `<div><div class="filter-section-label">Category</div><div class="filter-chips">${catChips}</div></div>` : ''}
+    ${stores.length ? `<div><div class="filter-section-label">Store</div><div class="filter-chips">${storeChips}</div></div>` : ''}
+    <div>
+      <div class="filter-section-label">Show only</div>
+      <div class="filter-toggle-row">
+        <span>Organic only</span>
+        <input type="checkbox" ${f.organicOnly ? 'checked' : ''} onchange="pricesState.filter.organicOnly=this.checked" />
+      </div>
+      <div class="filter-toggle-row">
+        <span>On sale only</span>
+        <input type="checkbox" ${f.saleOnly ? 'checked' : ''} onchange="pricesState.filter.saleOnly=this.checked" />
+      </div>
+    </div>`;
+
+  document.getElementById('filter-sheet-clear').onclick = () => {
+    pricesState.filter = { categories: [], stores: [], dateRange: 'all', organicOnly: false, saleOnly: false, sortBy: 'date' };
+    closeFilterSheet();
+    applyPricesFilter();
+  };
+  document.getElementById('filter-sheet-done').onclick = () => { closeFilterSheet(); applyPricesFilter(); };
+  document.getElementById('filter-sheet-overlay').style.display = 'flex';
+  document.getElementById('filter-sheet-overlay').onclick = (e) => {
+    if (e.target === document.getElementById('filter-sheet-overlay')) { closeFilterSheet(); applyPricesFilter(); }
+  };
+}
+
+function closeFilterSheet() {
+  document.getElementById('filter-sheet-overlay').style.display = 'none';
+}
+
+function togglePriceFilterCat(btn, cat) {
+  const f = pricesState.filter;
+  if (f.categories.includes(cat)) { f.categories = f.categories.filter(c => c !== cat); btn.classList.remove('selected'); }
+  else { f.categories.push(cat); btn.classList.add('selected'); }
+}
+function togglePriceFilterStore(btn, storeId) {
+  const f = pricesState.filter;
+  if (f.stores.includes(storeId)) { f.stores = f.stores.filter(s => s !== storeId); btn.classList.remove('selected'); }
+  else { f.stores.push(storeId); btn.classList.add('selected'); }
+}
+function setPriceFilterSort(btn, val) {
+  pricesState.filter.sortBy = val;
+  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+function setPriceFilterDate(btn, val) {
+  pricesState.filter.dateRange = val;
+  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
 async function openItemDetail(itemId, itemName) {
   const panel = document.getElementById('item-detail-panel');
   document.getElementById('detail-item-name').textContent = itemName;
   panel.style.display = 'block';
   panel.classList.add('open');
+
+  // "View in Catalog" link — only show for admins
+  const catalogLink = document.getElementById('btn-view-in-catalog');
+  if (catalogLink) {
+    const isAdmin = window.appAuth?.isAdmin();
+    catalogLink.style.display = isAdmin ? '' : 'none';
+    catalogLink.onclick = () => navigateToCatalogItem(itemId, itemName);
+  }
+
   await Promise.all([loadDetailHistory(itemId), loadDetailCompare(itemId)]);
+}
+
+function navigateToCatalogItem(itemId, itemName) {
+  window._catalogBackNav = { itemId, itemName };
+  // Close detail panel
+  const panel = document.getElementById('item-detail-panel');
+  panel.classList.remove('open');
+  setTimeout(() => { panel.style.display = 'none'; }, 250);
+  // Navigate to More → Catalog
+  switchTab('more');
+  showMoreSection('items');
+  loadCatalog().then(() => {
+    const card = document.querySelector(`[data-item-id="${itemId}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 async function loadDetailHistory(itemId) {
@@ -296,6 +482,7 @@ function openAddPriceModal(prefillItem, onSaved) {
     </form>`;
 
   openModal(isAdmin ? 'Log Price' : 'Submit Price', bodyHTML);
+  registerDirtyForm(() => document.getElementById('add-price-form')?.requestSubmit());
 
   // Toggles
   document.getElementById('price-on-sale').addEventListener('change', (e) => {
@@ -531,6 +718,7 @@ function openApproveModal(id, entryRaw, onSuccess) {
     </form>`;
 
   openModal('Edit & Approve', bodyHTML);
+  registerDirtyForm(() => document.getElementById('approve-form')?.requestSubmit());
 
   document.getElementById('approve-sale').addEventListener('change', (e) => {
     document.getElementById('approve-sale-group').style.display = e.target.checked ? '' : 'none';
@@ -565,15 +753,11 @@ function openApproveModal(id, entryRaw, onSuccess) {
 
 function initPricesTab() {
   document.getElementById('btn-add-price').addEventListener('click', () => openAddPriceModal(null));
+  document.getElementById('btn-prices-filter')?.addEventListener('click', openPricesFilterSheet);
 
   document.getElementById('price-search').addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase();
-    const filtered = pricesState.entries.filter(entry =>
-      (entry.itemId?.name || '').toLowerCase().includes(q) ||
-      (entry.itemId?.category || '').toLowerCase().includes(q) ||
-      (entry.storeId?.name || '').toLowerCase().includes(q)
-    );
-    renderPricesList(filtered);
+    pricesState.searchQuery = e.target.value.toLowerCase();
+    applyPricesFilter();
   });
 
   document.querySelectorAll('.detail-tab').forEach(btn => {

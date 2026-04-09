@@ -64,7 +64,46 @@ function openModal(title, bodyHTML, onConfirm) {
   }
 }
 
+// Dirty-form tracking — shared across all affected modals
+window._dirtyForm = { isDirty: false, saveCallback: null };
+
+function registerDirtyForm(saveCallback) {
+  window._dirtyForm = { isDirty: false, saveCallback };
+  // Mark dirty on any field change inside the modal
+  setTimeout(() => {
+    document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea')
+      .forEach(el => el.addEventListener('change', () => { window._dirtyForm.isDirty = true; }));
+  }, 0);
+}
+
+function clearDirtyForm() {
+  window._dirtyForm = { isDirty: false, saveCallback: null };
+}
+
+function showUnsavedPrompt(onLeave) {
+  const el = document.getElementById('unsaved-prompt');
+  if (!el) { onLeave(); return; }
+  el.style.display = '';
+  const hide = () => { el.style.display = 'none'; };
+  document.getElementById('unsaved-cancel').onclick = hide;
+  document.getElementById('unsaved-leave').onclick = () => {
+    hide(); clearDirtyForm(); closeModal(); onLeave();
+  };
+  document.getElementById('unsaved-save').onclick = async () => {
+    hide();
+    const cb = window._dirtyForm?.saveCallback;
+    clearDirtyForm();
+    if (cb) {
+      try { await cb(); } catch (_) {}
+    } else {
+      closeModal();
+    }
+    onLeave();
+  };
+}
+
 function closeModal() {
+  clearDirtyForm();
   document.getElementById('modal-overlay').style.display = 'none';
   document.getElementById('modal-body').innerHTML = '';
 
@@ -200,7 +239,8 @@ function drawLineChart(canvasId, datasets) {
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const displayW = canvas.offsetWidth || 320;
-  const displayH = canvas.height;
+  // Read from data-height to avoid accumulating dpr multiplications on each redraw
+  const displayH = parseInt(canvas.dataset.height || 200);
   canvas.width = displayW * dpr;
   canvas.height = displayH * dpr;
   ctx.scale(dpr, dpr);

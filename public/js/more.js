@@ -299,6 +299,7 @@ function openEditInventoryModal(id) {
       </div>
     </form>`;
   openModal('Edit Inventory Item', bodyHTML);
+  registerDirtyForm(() => document.getElementById('edit-inv-form')?.requestSubmit());
   document.getElementById('edit-inv-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const thresholdRaw = document.getElementById('edit-inv-threshold').value.trim();
@@ -320,15 +321,132 @@ function openEditInventoryModal(id) {
 
 // ===== Product Catalog (admin+) =====
 let catalogState = { items: [], filtered: [] };
+let catalogFilterState = { categories: [], organic: 'all', sortBy: 'name' };
 
 async function loadCatalog() {
   try {
     catalogState.items = await api.items.list();
-    catalogState.filtered = catalogState.items;
-    renderCatalog();
+    applyCatalogFilter();
+    updateCatalogBackBanner();
   } catch (err) {
     handleError(err, 'Failed to load catalog');
   }
+}
+
+function applyCatalogFilter() {
+  const { categories, organic, sortBy } = catalogFilterState;
+  const q = (document.getElementById('catalog-search')?.value || '').toLowerCase();
+
+  let items = catalogState.items.filter(item => {
+    if (q && !(item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q))) return false;
+    if (categories.length && !categories.includes(item.category)) return false;
+    if (organic === 'organic' && !item.isOrganic) return false;
+    if (organic === 'conventional' && item.isOrganic) return false;
+    return true;
+  });
+
+  if (sortBy === 'name') {
+    items.sort((a, b) => a.name.localeCompare(b.name));
+  } else if (sortBy === 'lastPurchased') {
+    const lastPurchased = {};
+    (window.pricesState?.entries || []).forEach(e => {
+      const id = String(e.itemId?._id || e.itemId);
+      if (!lastPurchased[id] || new Date(e.date) > new Date(lastPurchased[id]))
+        lastPurchased[id] = e.date;
+    });
+    items.sort((a, b) => {
+      const da = lastPurchased[String(a._id)], db = lastPurchased[String(b._id)];
+      if (!da && !db) return 0; if (!da) return 1; if (!db) return -1;
+      return new Date(db) - new Date(da);
+    });
+  }
+
+  catalogState.filtered = items;
+  renderCatalog();
+
+  const isFiltered = categories.length || organic !== 'all';
+  const countBar = document.getElementById('catalog-filter-count');
+  if (countBar) {
+    countBar.textContent = isFiltered ? `Showing ${items.length} of ${catalogState.items.length} products` : '';
+    countBar.style.display = isFiltered ? '' : 'none';
+  }
+  const dot = document.getElementById('catalog-filter-dot');
+  if (dot) dot.style.display = (isFiltered || sortBy !== 'name') ? '' : 'none';
+}
+
+function updateCatalogBackBanner() {
+  const banner = document.getElementById('catalog-back-banner');
+  const btn = document.getElementById('btn-catalog-back');
+  if (!banner || !btn) return;
+  if (window._catalogBackNav) {
+    btn.textContent = `← Back to ${window._catalogBackNav.itemName} Price`;
+    banner.style.display = '';
+    btn.onclick = () => {
+      const { itemId, itemName } = window._catalogBackNav;
+      window._catalogBackNav = null;
+      banner.style.display = 'none';
+      hideMoreSection();
+      switchTab('prices');
+      openItemDetail(itemId, itemName);
+    };
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function openCatalogFilterSheet() {
+  const cats = [...new Set(catalogState.items.map(i => i.category).filter(Boolean))].sort();
+  const f = catalogFilterState;
+
+  document.getElementById('filter-sheet-title').textContent = 'Filter & Sort';
+  document.getElementById('filter-sheet-body').innerHTML = `
+    <div>
+      <div class="filter-section-label">Sort by</div>
+      <div class="filter-chips">
+        ${[['name','Name A→Z'],['lastPurchased','Last purchased']].map(([v,l]) =>
+          `<button class="filter-chip${f.sortBy===v?' selected':''}" onclick="setCatalogFilterSort(this,'${v}')">${l}</button>`).join('')}
+      </div>
+    </div>
+    ${cats.length ? `<div>
+      <div class="filter-section-label">Category</div>
+      <div class="filter-chips">
+        ${cats.map(c => `<button class="filter-chip${f.categories.includes(c)?' selected':''}" onclick="toggleCatalogFilterCat(this,'${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}
+      </div>
+    </div>` : ''}
+    <div>
+      <div class="filter-section-label">Organic</div>
+      <div class="filter-chips">
+        ${[['all','All'],['organic','Organic only'],['conventional','Conventional only']].map(([v,l]) =>
+          `<button class="filter-chip${f.organic===v?' selected':''}" onclick="setCatalogFilterOrganic(this,'${v}')">${l}</button>`).join('')}
+      </div>
+    </div>`;
+
+  document.getElementById('filter-sheet-clear').onclick = () => {
+    catalogFilterState = { categories: [], organic: 'all', sortBy: 'name' };
+    closeFilterSheet();
+    applyCatalogFilter();
+  };
+  document.getElementById('filter-sheet-done').onclick = () => { closeFilterSheet(); applyCatalogFilter(); };
+  document.getElementById('filter-sheet-overlay').style.display = 'flex';
+  document.getElementById('filter-sheet-overlay').onclick = (e) => {
+    if (e.target === document.getElementById('filter-sheet-overlay')) { closeFilterSheet(); applyCatalogFilter(); }
+  };
+}
+
+function toggleCatalogFilterCat(btn, cat) {
+  const f = catalogFilterState;
+  if (f.categories.includes(cat)) { f.categories = f.categories.filter(c => c !== cat); btn.classList.remove('selected'); }
+  else { f.categories.push(cat); btn.classList.add('selected'); }
+}
+function setCatalogFilterSort(btn, val) {
+  catalogFilterState.sortBy = val;
+  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+function setCatalogFilterOrganic(btn, val) {
+  catalogFilterState.organic = val;
+  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
 }
 
 function renderCatalog() {
@@ -858,13 +976,8 @@ function initMoreTab() {
     });
   });
 
-  document.getElementById('catalog-search').addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase();
-    catalogState.filtered = catalogState.items.filter(item =>
-      item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q)
-    );
-    renderCatalog();
-  });
+  document.getElementById('catalog-search').addEventListener('input', applyCatalogFilter);
+  document.getElementById('btn-catalog-filter')?.addEventListener('click', openCatalogFilterSheet);
 
   document.getElementById('btn-app-tour').addEventListener('click', () => {
     startAppTour();
