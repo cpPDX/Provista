@@ -5,21 +5,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ok = await window.appAuth.load();
   if (!ok) return;
 
-<<<<<<< HEAD
   const { user, household, features } = window.appAuth;
 
-  // Initialize offline support if feature flag is enabled
-  if (features?.offlineAccess) {
-    await initOfflineSupport();
-  }
-
-=======
-<<<<<<< Updated upstream
-  const { user, household } = window.appAuth;
-=======
-  const { user, household, features } = window.appAuth;
-
->>>>>>> test
   // Show session expiry notice if using cached auth
   if (window.appAuth.offlineSession) {
     const noCache = typeof offlineDb !== 'undefined' ? !(await offlineDb.hasData()) : true;
@@ -33,10 +20,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     showToast('Offline mode — your session expired. Connect to the internet to log back in.', 5000);
   }
-<<<<<<< HEAD
-=======
->>>>>>> Stashed changes
->>>>>>> test
 
   // Apply role class to body for CSS visibility rules
   document.body.classList.add('role-' + user.role);
