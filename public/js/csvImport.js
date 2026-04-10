@@ -22,9 +22,10 @@ function normalizeCategory(raw) {
 
 function getCsvExampleRows() {
   const today = new Date().toISOString().slice(0, 10);
+  // regular_price and sale_price are PER-UNIT shelf prices; quantity is how many units you bought
   return [
-    ['Whole Milk 1gal', 'Dairy', 'gal', 'Costco', '4.99', '', '', '', '1', today, '', 'false'],
-    ['Sourdough Bread', 'Bakery', 'loaf', 'Trader Joes', '3.49', '2.99', '0.50', 'Ibotta', '2', today, 'On sale this week', 'false'],
+    ['Whole Milk', 'Dairy', 'gal', 'Costco', '4.99', '', '', '', '1', today, '', 'false'],
+    ['Avocado', 'Produce', 'each', 'Trader Joes', '0.79', '0.59', '', '', '3', today, '3 for $1.77 sale', 'false'],
     ['Organic Carrots', 'Produce', 'lb', 'Fred Meyer', '2.49', '', '', '', '1', today, '', 'true'],
   ];
 }
