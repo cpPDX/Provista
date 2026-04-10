@@ -8,10 +8,73 @@ const api = {
     if (body !== undefined) opts.body = JSON.stringify(body);
     const res = await fetch('/api' + path, opts);
 
+<<<<<<< Updated upstream
     // Redirect to login on auth failure
     if (res.status === 401) {
       window.location.href = '/login.html';
       throw new Error('Not authenticated');
+=======
+    // Check if offline features are available
+    const hasOffline = typeof offlineDb !== 'undefined' && window.appAuth?.features?.offlineAccess;
+
+    try {
+      const res = await fetch('/api' + path, opts);
+
+      // Handle structured offline error from service worker
+      if (res.status === 503) {
+        const data = await res.json().catch(() => ({}));
+        if (data.offline && hasOffline) {
+          return this._offlineFallback(method, path, body);
+        }
+      }
+
+      // Redirect to login on auth failure (but not if offline)
+      if (res.status === 401) {
+        if (!offlineManager?.isOnline && hasOffline) {
+          return this._offlineFallback(method, path, body);
+        }
+        window.location.href = '/login.html';
+        throw new Error('Not authenticated');
+      }
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`HTTP ${res.status}: invalid JSON response`);
+      }
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      // On successful write, update IndexedDB cache
+      if (hasOffline && method !== 'GET' && data._id) {
+        const store = resolveStore(path);
+        if (store) offlineDb.put(store, data).catch(() => {});
+      }
+
+      return data;
+    } catch (err) {
+      // Network error — try offline fallback
+      if (hasOffline && (err.name === 'TypeError' || err.message === 'Failed to fetch')) {
+        return this._offlineFallback(method, path, body);
+      }
+      throw err;
+    }
+  },
+
+  // Offline fallback: reads from IndexedDB, writes go to sync queue
+  async _offlineFallback(method, path, body) {
+    const store = resolveStore(path);
+
+    if (method === 'GET') {
+      if (!store) throw new Error('This data is not available offline');
+
+      // Handle item-specific price endpoints that need client-side filtering
+      const filtered = await offlineFilter(store, path);
+      if (filtered !== null) return filtered;
+
+      const data = await offlineDb.getAll(store);
+      return data;
+>>>>>>> Stashed changes
     }
 
     const data = await res.json();
