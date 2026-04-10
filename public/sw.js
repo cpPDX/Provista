@@ -1,8 +1,8 @@
 // Provista Service Worker
 // Cache-first for app shell, network-first for API data
 
-const SHELL_CACHE = 'provista-shell-v1';
-const API_CACHE = 'provista-api-v1';
+const SHELL_CACHE = 'provista-shell-v2';
+const API_CACHE = 'provista-api-v2';
 
 const SHELL_ASSETS = [
   '/',

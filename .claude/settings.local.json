@@ -6,7 +6,8 @@
       "Bash(curl -sL \"https://cdn.jsdelivr.net/npm/idb@8/build/umd.js\" -o /d/source/myRepos/GroceryTracker/public/js/vendor/idb.min.js)",
       "Bash(npm test:*)",
       "Bash(node -e ':*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(git config:*)"
     ]
   }
 }
