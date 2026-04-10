@@ -5,9 +5,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ok = await window.appAuth.load();
   if (!ok) return;
 
-<<<<<<< Updated upstream
-  const { user, household } = window.appAuth;
-=======
   const { user, household, features } = window.appAuth;
 
   // Show session expiry notice if using cached auth
@@ -23,7 +20,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     showToast('Offline mode — your session expired. Connect to the internet to log back in.', 5000);
   }
->>>>>>> Stashed changes
 
   // Apply role class to body for CSS visibility rules
   document.body.classList.add('role-' + user.role);
