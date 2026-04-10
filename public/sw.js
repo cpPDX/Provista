@@ -1,8 +1,8 @@
 // Provista Service Worker
-// Cache-first for app shell, network-first for API data
+// Cache-first for static assets (images, fonts), network-first for JS/CSS and API data
 
-const SHELL_CACHE = 'provista-shell-v3';
-const API_CACHE = 'provista-api-v3';
+const SHELL_CACHE = 'provista-shell-v4';
+const API_CACHE = 'provista-api-v4';
 
 const SHELL_ASSETS = [
   '/',
@@ -66,7 +66,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell: cache-first with network fallback
+  // JS and CSS: network-first so deploys take effect immediately; cache fallback when offline
+  if (url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
+    event.respondWith(networkFirstWithCacheFallback(request));
+    return;
+  }
+
+  // Static assets (images, icons, fonts): cache-first
   event.respondWith(cacheFirstWithNetworkFallback(request));
 });
 
