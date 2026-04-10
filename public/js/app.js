@@ -5,7 +5,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ok = await window.appAuth.load();
   if (!ok) return;
 
+<<<<<<< Updated upstream
   const { user, household } = window.appAuth;
+=======
+  const { user, household, features } = window.appAuth;
+
+  // Show session expiry notice if using cached auth
+  if (window.appAuth.offlineSession) {
+    const noCache = typeof offlineDb !== 'undefined' ? !(await offlineDb.hasData()) : true;
+    if (noCache) {
+      document.getElementById('app').innerHTML = `
+        <div class="empty-state" style="padding:2rem">
+          <div class="empty-icon">📡</div>
+          <p>You need to connect to the internet at least once to load your data for offline use.</p>
+        </div>`;
+      return;
+    }
+    showToast('Offline mode — your session expired. Connect to the internet to log back in.', 5000);
+  }
+>>>>>>> Stashed changes
 
   // Apply role class to body for CSS visibility rules
   document.body.classList.add('role-' + user.role);
@@ -31,6 +49,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (confirm('Sign out?')) await window.appAuth.logout();
   });
 
+  // Attach event handlers immediately so the UI is interactive while offline
+  // support initializes in the background
   initNavigation();
   initModal();
   initPricesTab();
@@ -40,6 +60,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load default tab
   await loadPricesTab();
+
+  // Initialize offline support AFTER UI is interactive (non-blocking)
+  if (features?.offlineAccess) {
+    initOfflineSupport();
+  }
 
   // Setup wizard for new household owners
   const resumeBtn = document.getElementById('btn-resume-setup');
