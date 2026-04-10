@@ -1,4 +1,13 @@
 // Centralized API helper with offline support
+
+// Returns true only for simple top-level CRUD paths (e.g. /items, /items/123).
+// Sub-resource actions like /items/123/merge are not safe to queue offline.
+function _isSimpleCrudPath(method, path) {
+  if (method === 'GET') return true;
+  const segments = path.split('?')[0].split('/').filter(Boolean);
+  return segments.length <= 2;
+}
+
 const api = {
   async request(method, path, body) {
     const opts = {
@@ -16,7 +25,7 @@ const api = {
       // Handle structured offline error from service worker
       if (res.status === 503) {
         const data = await res.json().catch(() => ({}));
-        if (data.offline && hasOffline) {
+        if (data.offline && hasOffline && _isSimpleCrudPath(method, path)) {
           return this._offlineFallback(method, path, body);
         }
       }
@@ -46,8 +55,9 @@ const api = {
 
       return data;
     } catch (err) {
-      // Network error — try offline fallback
-      if (hasOffline && (err.name === 'TypeError' || err.message === 'Failed to fetch')) {
+      // Network error — try offline fallback (only for simple CRUD, not sub-resource actions)
+      if (hasOffline && _isSimpleCrudPath(method, path) &&
+          (err.name === 'TypeError' || err.message === 'Failed to fetch')) {
         return this._offlineFallback(method, path, body);
       }
       throw err;
