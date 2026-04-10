@@ -113,7 +113,13 @@ router.get('/me', async (req, res) => {
     if (user.householdId) {
       household = await Household.findById(user.householdId).select('name ownerId');
     }
-    res.json({ user, household });
+    // Feature flags — offlineAccess is on for all households for now
+    const features = {
+      offlineAccess: true,
+      advancedAnalytics: false
+    };
+
+    res.json({ user, household, features });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired session' });
   }

@@ -14,6 +14,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Health check (no auth required)
+app.use('/api/health', require('./routes/health'));
+
 // Auth routes (no auth middleware - these set/clear the cookie)
 app.use('/api/auth', require('./routes/auth'));
 
@@ -29,6 +32,7 @@ app.use('/api/shopping-list', require('./routes/shoppingList'));
 app.use('/api/spend', require('./routes/spend'));
 app.use('/api/meal-plan', require('./routes/mealPlan'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/sync', require('./routes/sync'));
 
 // Serve login page for /join route (join via QR code link)
 app.get('/join', (req, res) => {

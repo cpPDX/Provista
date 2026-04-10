@@ -5,6 +5,9 @@ let listState = { items: [] };
 // Cart state: confirmed prices while shopping. In-memory, cleared when list is cleared.
 const cartState = new Map(); // listItemId → { name, price, quantity }
 
+// Guard against rapid double-taps on the same item's checkbox
+const pendingCheckIds = new Set();
+
 // =============================================================
 // Loading & Rendering
 // =============================================================
@@ -38,8 +41,10 @@ function renderShoppingList() {
   const hasChecked = items.some(i => i.checked);
   const clearCheckedBtn = document.getElementById('btn-clear-checked');
   const clearAllBtn = document.getElementById('btn-clear-all');
+  const deselectAllBtn = document.getElementById('btn-deselect-all');
   if (clearCheckedBtn) clearCheckedBtn.style.display = hasChecked ? '' : 'none';
   if (clearAllBtn) clearAllBtn.style.display = hasItems ? '' : 'none';
+  if (deselectAllBtn) deselectAllBtn.style.display = hasChecked ? '' : 'none';
 
   if (!items.length) {
     container.innerHTML = emptyState('📋', 'Your shopping list is empty. Tap "+ Add" to start.');
@@ -65,9 +70,8 @@ function renderShoppingList() {
 
     return `
       <div class="card list-item ${checked ? 'checked' : ''}" data-id="${item._id}">
-        <div class="list-item-check ${checked ? 'checked' : ''}"
-          onclick="handleListItemCheck('${item._id}', ${!checked})">
-          ${checked ? '✓' : ''}
+        <div class="list-item-check-wrap" onclick="handleListItemCheck('${item._id}', ${!checked})">
+          <div class="list-item-check ${checked ? 'checked' : ''}">${checked ? '✓' : ''}</div>
         </div>
         <div class="card-body">
           <div class="card-title">${name}</div>
@@ -118,6 +122,7 @@ function renderStoreSummary(items) {
 // =============================================================
 
 function handleListItemCheck(id, willBeChecked) {
+  if (pendingCheckIds.has(id)) return;
   const item = listState.items.find(i => i._id === id);
   if (!item) return;
 
@@ -149,8 +154,8 @@ function showPriceConfirmSheet(listItemId, name, qty, unit, knownPrice) {
 
   const bodyHTML = `
     <div style="text-align:center;padding:0.25rem 0 0.75rem">
-      <div style="font-size:1.125rem;font-weight:700">${name}</div>
-      <div class="text-muted text-sm">qty ${qty}${unit ? ' ' + unit : ''}</div>
+      <div style="font-size:1.125rem;font-weight:700">${escapeHtml(name)}</div>
+      <div class="text-muted text-sm">qty ${qty}${unit ? ' ' + escapeHtml(unit) : ''}</div>
     </div>
     ${hasPrice ? `
       <p style="text-align:center;margin-bottom:1rem">Did you pay <strong>${priceStr}</strong>?</p>
@@ -180,6 +185,8 @@ function showPriceConfirmSheet(listItemId, name, qty, unit, knownPrice) {
     });
 
     document.getElementById('btn-cart-update-price').addEventListener('click', () => {
+      // Clear the close callback first so the dismiss-without-confirm path doesn't fire early
+      window._modalCloseCallback = null;
       closeModal();
       const listItem = listState.items.find(i => i._id === listItemId);
       const prefillItem = listItem?.itemId ? { ...listItem.itemId } : null;
@@ -270,6 +277,7 @@ function renderCartDetail(container) {
 // =============================================================
 
 async function toggleListItem(id, checked) {
+  pendingCheckIds.add(id);
   try {
     await api.shoppingList.update(id, { checked });
     const item = listState.items.find(i => i._id === id);
@@ -277,6 +285,8 @@ async function toggleListItem(id, checked) {
     renderShoppingList();
   } catch (err) {
     handleError(err, 'Failed to update item');
+  } finally {
+    pendingCheckIds.delete(id);
   }
 }
 
@@ -342,6 +352,23 @@ function openAddListItemModal() {
       handleError(err, 'Failed to add item');
     }
   });
+}
+
+// =============================================================
+// Deselect All
+// =============================================================
+
+async function deselectAll() {
+  const checked = listState.items.filter(i => i.checked);
+  if (!checked.length) { showToast('No checked items'); return; }
+  cartState.clear();
+  try {
+    await Promise.all(checked.map(i => api.shoppingList.update(i._id, { checked: false })));
+    checked.forEach(i => { i.checked = false; });
+    renderShoppingList();
+  } catch (err) {
+    handleError(err, 'Failed to uncheck items');
+  }
 }
 
 // =============================================================
@@ -437,6 +464,26 @@ function initShoppingListTab() {
 
   document.getElementById('btn-add-list-item').addEventListener('click', openAddListItemModal);
 
+  document.getElementById('btn-deselect-all')?.addEventListener('click', deselectAll);
+
+  document.getElementById('btn-done-shopping')?.addEventListener('click', async () => {
+    const checkedItems = listState.items.filter(i => i.checked);
+    if (!checkedItems.length) { showToast('No items checked off'); return; }
+
+    let total = 0;
+    cartState.forEach(entry => { total += entry.price; });
+    const count = checkedItems.length;
+    const msg = `Trip complete! ${count} item${count !== 1 ? 's' : ''} — ${formatCurrency(total)} total`;
+
+    // Clear checked items from API and local state
+    checkedItems.forEach(i => cartState.delete(i._id));
+    try {
+      await api.shoppingList.clear(true); // clear checked=true only
+    } catch (_) {}
+    await loadShoppingListTab();
+    showToast(msg, 4000);
+  });
+
   document.getElementById('btn-low-stock')?.addEventListener('click', openLowStockReview);
 
   // Cart bar expand/collapse
@@ -448,10 +495,12 @@ function initShoppingListTab() {
     if (!open) renderCartDetail(detail);
   });
 
-  document.getElementById('btn-clear-checked').addEventListener('click', async () => {
+  document.getElementById('btn-clear-checked').addEventListener('click', async (e) => {
     const count = listState.items.filter(i => i.checked).length;
     if (!count) { showToast('No checked items'); return; }
     if (!confirm(`Remove ${count} checked item${count !== 1 ? 's' : ''}?`)) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       // Remove checked items from cart state too
       listState.items.filter(i => i.checked).forEach(i => cartState.delete(i._id));
@@ -460,12 +509,16 @@ function initShoppingListTab() {
       showToast('Checked items cleared');
     } catch (err) {
       handleError(err, 'Failed to clear items');
+    } finally {
+      btn.disabled = false;
     }
   });
 
-  document.getElementById('btn-clear-all').addEventListener('click', async () => {
+  document.getElementById('btn-clear-all').addEventListener('click', async (e) => {
     if (!listState.items.length) { showToast('List is already empty'); return; }
     if (!confirm('Clear the entire shopping list?')) return;
+    const btn = e.currentTarget;
+    btn.disabled = true;
     try {
       cartState.clear();
       await api.shoppingList.clear(false);
@@ -473,6 +526,8 @@ function initShoppingListTab() {
       showToast('List cleared');
     } catch (err) {
       handleError(err, 'Failed to clear list');
+    } finally {
+      btn.disabled = false;
     }
   });
 }
