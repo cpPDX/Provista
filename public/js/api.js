@@ -106,7 +106,8 @@ const api = {
     list: () => api.get('/items'),
     create: (data) => api.post('/items', data),
     update: (id, data) => api.put(`/items/${id}`, data),
-    delete: (id) => api.delete(`/items/${id}`)
+    delete: (id) => api.delete(`/items/${id}`),
+    merge: (sourceId, targetId) => api.post(`/items/${sourceId}/merge`, { targetId })
   },
   stores: {
     list: () => api.get('/stores'),

@@ -527,8 +527,19 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
-    </form>`;
+    </form>
+    <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+      <p class="text-muted text-sm" style="margin-bottom:0.5rem">Duplicate item? Merge all price history into another item and delete this one.</p>
+      <div class="autocomplete-wrap">
+        <input class="form-control" id="merge-target-input" placeholder="Search for item to merge into…" autocomplete="off" />
+        <div class="autocomplete-dropdown" id="merge-target-dropdown"></div>
+      </div>
+      <input type="hidden" id="merge-target-id" />
+      <button type="button" class="btn btn-danger btn-sm" id="btn-do-merge" style="margin-top:0.5rem;display:none">Merge into selected item →</button>
+    </div>`;
+
   openModal('Edit Item', bodyHTML);
+
   document.getElementById('edit-item-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
@@ -543,6 +554,31 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
       showToast('Item updated');
       await loadCatalog();
     } catch (err) { handleError(err, 'Failed to update item'); }
+  });
+
+  // Merge autocomplete
+  const mergeInput = document.getElementById('merge-target-input');
+  const mergeDropdown = document.getElementById('merge-target-dropdown');
+  const mergeBtn = document.getElementById('btn-do-merge');
+  attachItemAutocomplete(mergeInput, mergeDropdown, {
+    onSelect(target) {
+      document.getElementById('merge-target-id').value = target._id;
+      mergeBtn.textContent = `Merge into "${target.name}" →`;
+      mergeBtn.style.display = '';
+    }
+  });
+
+  mergeBtn.addEventListener('click', async () => {
+    const targetId = document.getElementById('merge-target-id').value;
+    const targetName = mergeInput.value;
+    if (!targetId) return;
+    if (!confirm(`Merge "${name}" into "${targetName}"?\n\nAll price history, shopping list entries, and inventory entries will move to "${targetName}". This item will be deleted.`)) return;
+    try {
+      await api.request('POST', `/items/${id}/merge`, { targetId });
+      closeModal();
+      showToast(`Merged into "${targetName}"`);
+      await loadCatalog();
+    } catch (err) { handleError(err, 'Merge failed'); }
   });
 }
 

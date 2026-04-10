@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Item = require('../models/Item');
+const PriceEntry = require('../models/PriceEntry');
+const ShoppingListItem = require('../models/ShoppingListItem');
+const InventoryItem = require('../models/InventoryItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 // GET /api/items - list or search items scoped to household
@@ -41,6 +44,34 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
     res.json(item);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/items/:id/merge - merge source item into target, re-pointing all references (admin+)
+router.post('/:id/merge', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { targetId } = req.body;
+    const sourceId = req.params.id;
+    const householdId = req.user.householdId;
+    if (!targetId || targetId === sourceId) return res.status(400).json({ error: 'Invalid targetId' });
+
+    const [source, target] = await Promise.all([
+      Item.findOne({ _id: sourceId, householdId }),
+      Item.findOne({ _id: targetId, householdId })
+    ]);
+    if (!source || !target) return res.status(404).json({ error: 'Item not found' });
+
+    // Re-point all references from source → target
+    await Promise.all([
+      PriceEntry.updateMany({ itemId: sourceId, householdId }, { itemId: targetId }),
+      ShoppingListItem.updateMany({ itemId: sourceId, householdId }, { itemId: targetId }),
+      InventoryItem.updateMany({ itemId: sourceId, householdId }, { itemId: targetId })
+    ]);
+
+    await Item.findOneAndDelete({ _id: sourceId, householdId });
+    res.json({ success: true, target });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
