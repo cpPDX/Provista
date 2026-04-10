@@ -536,6 +536,7 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
       </div>
       <input type="hidden" id="merge-target-id" />
       <button type="button" class="btn btn-danger btn-sm" id="btn-do-merge" style="margin-top:0.5rem;display:none">Merge into selected item →</button>
+      <p id="merge-error" class="text-danger" style="display:none;margin-top:0.5rem;font-size:var(--text-sm)"></p>
     </div>`;
 
   openModal('Edit Item', bodyHTML);
@@ -571,14 +572,28 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
   mergeBtn.addEventListener('click', async () => {
     const targetId = document.getElementById('merge-target-id').value;
     const targetName = mergeInput.value;
+    const errEl = document.getElementById('merge-error');
+    if (errEl) errEl.style.display = 'none';
     if (!targetId) return;
+    if (targetId === id) {
+      if (errEl) { errEl.textContent = 'Cannot merge an item into itself.'; errEl.style.display = ''; }
+      return;
+    }
     if (!confirm(`Merge "${name}" into "${targetName}"?\n\nAll price history, shopping list entries, and inventory entries will move to "${targetName}". This item will be deleted.`)) return;
+    mergeBtn.disabled = true;
+    mergeBtn.textContent = 'Merging…';
     try {
-      await api.request('POST', `/items/${id}/merge`, { targetId });
+      await api.items.merge(id, targetId);
       closeModal();
-      showToast(`Merged into "${targetName}"`);
+      showToast(`Merged "${name}" into "${targetName}"`);
       await loadCatalog();
-    } catch (err) { handleError(err, 'Merge failed'); }
+    } catch (err) {
+      const msg = err?.message || 'Merge failed';
+      if (errEl) { errEl.textContent = `Error: ${msg}`; errEl.style.display = ''; }
+      handleError(err, 'Merge failed');
+      mergeBtn.disabled = false;
+      mergeBtn.textContent = `Merge into "${targetName}" →`;
+    }
   });
 }
 
