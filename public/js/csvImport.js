@@ -90,9 +90,46 @@ function parseRowDate(raw) {
 /**
  * Import parsed CSV rows into the app.
  * All users can auto-create stores. Items require admin to auto-create.
- * Skips duplicate entries (same item + store + date).
- * Returns { imported: N, errors: [{ row, reason }], newStores: [name] }
+ * Upserts duplicate entries (same item + store + date).
+ * Returns { imported: N, errors: [{ row, reason }], newStores: [name], fuzzyMatched: [{ csv, matched }] }
  */
+
+// Levenshtein distance for fuzzy item name matching
+function _levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => j === 0 ? i : 0));
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// Find an existing item by exact or fuzzy name match.
+// Returns { item, fuzzy: true/false } or null.
+function _findItem(csvName, itemMap) {
+  const norm = csvName.toLowerCase().trim();
+  if (itemMap.has(norm)) return { item: itemMap.get(norm), fuzzy: false };
+
+  // Singular ↔ plural (strip/add trailing 's')
+  const singular = norm.replace(/s$/, '');
+  const plural = norm + 's';
+  if (itemMap.has(singular)) return { item: itemMap.get(singular), fuzzy: true };
+  if (itemMap.has(plural)) return { item: itemMap.get(plural), fuzzy: true };
+
+  // Levenshtein ≤ 2 for names of 8+ characters (avoids false matches on short names)
+  if (norm.length >= 8) {
+    for (const [key, item] of itemMap) {
+      if (Math.abs(key.length - norm.length) <= 3 && _levenshtein(key, norm) <= 2) {
+        return { item, fuzzy: true };
+      }
+    }
+  }
+
+  return null;
+}
 async function importCsvPrices(rows) {
   const auth = window.appAuth;
   const canCreateItem = auth.isAdmin();
@@ -116,6 +153,7 @@ async function importCsvPrices(rows) {
   const imported = [];
   const errors = [];
   const newStores = [];
+  const fuzzyMatched = [];
 
   for (const row of rows) {
     const rowNum = row._rowNum;
@@ -133,9 +171,16 @@ async function importCsvPrices(rows) {
       errors.push({ row: rowNum, reason: `Invalid regular_price "${regularPriceRaw}"` }); continue;
     }
 
-    // --- Resolve item ---
-    let item = itemMap.get(itemName.toLowerCase());
-    if (!item) {
+    // --- Resolve item (exact then fuzzy match, then create) ---
+    let item;
+    const match = _findItem(itemName, itemMap);
+    if (match) {
+      item = match.item;
+      if (match.fuzzy) {
+        fuzzyMatched.push({ csv: itemName, matched: item.name });
+        itemMap.set(itemName.toLowerCase(), item); // cache so same name resolves instantly next row
+      }
+    } else {
       if (!canCreateItem) {
         errors.push({ row: rowNum, reason: `Item "${itemName}" not found. Ask an admin to add it first.` }); continue;
       }
@@ -202,7 +247,7 @@ async function importCsvPrices(rows) {
     }
   }
 
-  return { imported: imported.length, errors, newStores };
+  return { imported: imported.length, errors, newStores, fuzzyMatched };
 }
 
 /**
@@ -268,6 +313,11 @@ function renderCsvImportResult(result, statusEl) {
     html += '</p>';
   } else {
     html += '<p class="csv-import-error">No prices imported.</p>';
+  }
+  if (result.fuzzyMatched && result.fuzzyMatched.length > 0) {
+    html += `<details class="csv-import-result"><summary class="text-muted text-sm">${result.fuzzyMatched.length} name${result.fuzzyMatched.length !== 1 ? 's' : ''} auto-matched</summary>`;
+    html += result.fuzzyMatched.map(f => `<p class="text-muted text-sm">"${escapeHtml(f.csv)}" → "${escapeHtml(f.matched)}"</p>`).join('');
+    html += '</details>';
   }
   if (result.errors.length > 0) {
     html += `<details class="csv-import-result"><summary class="csv-import-error">${result.errors.length} row${result.errors.length !== 1 ? 's' : ''} skipped</summary>`;
