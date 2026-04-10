@@ -107,10 +107,11 @@ async function importCsvPrices(rows) {
   const itemMap = new Map(itemsData.map(i => [i.name.toLowerCase(), i]));
   const storeMap = new Map(storesData.map(s => [s.name.toLowerCase(), s]));
 
-  // Build dedup set: itemId|storeId|dateString
-  const dupSet = new Set(existingPrices.map(p =>
-    `${p.itemId._id || p.itemId}|${p.storeId._id || p.storeId}|${new Date(p.date).toDateString()}`
-  ));
+  // Build dedup map: key -> existing entry _id (for upsert)
+  const dupMap = new Map(existingPrices.map(p => [
+    `${p.itemId._id || p.itemId}|${p.storeId._id || p.storeId}|${new Date(p.date).toDateString()}`,
+    p._id
+  ]));
 
   const imported = [];
   const errors = [];
@@ -161,14 +162,11 @@ async function importCsvPrices(rows) {
       }
     }
 
-    // --- Dedup check ---
+    // --- Dedup / upsert check ---
     const rowDate = parseRowDate(row.date);
     const dupKey = `${item._id}|${store._id}|${rowDate.toDateString()}`;
-    if (dupSet.has(dupKey)) {
-      errors.push({ row: rowNum, reason: `Duplicate: ${itemName} at ${storeName} on that date already exists — skipped` });
-      continue;
-    }
-    dupSet.add(dupKey);
+    const existingId = dupMap.get(dupKey);
+    dupMap.set(dupKey, null); // mark seen so the same row can't match twice
 
     // --- Build payload ---
     // regular_price and sale_price in the CSV are per-unit shelf prices.
@@ -193,6 +191,10 @@ async function importCsvPrices(rows) {
     if (notes) payload.notes = notes;
 
     try {
+      if (existingId) {
+        // Replace existing entry: delete old and recreate with corrected values
+        await api.prices.delete(existingId);
+      }
       await api.prices.create(payload);
       imported.push(rowNum);
     } catch (e) {
