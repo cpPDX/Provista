@@ -8,7 +8,13 @@ const shoppingListItemSchema = new mongoose.Schema({
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   addedAt: { type: Date, default: Date.now },
   removedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
-  removedAt: { type: Date, default: null }
+  removedAt: { type: Date, default: null },
+  lastConflict: {
+    resolvedAt: { type: Date },
+    winnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    winnerName: { type: String },
+    overwrittenValue: { type: mongoose.Schema.Types.Mixed }
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model('ShoppingListItem', shoppingListItemSchema);

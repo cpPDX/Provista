@@ -5,7 +5,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ok = await window.appAuth.load();
   if (!ok) return;
 
-  const { user, household } = window.appAuth;
+  const { user, household, features } = window.appAuth;
+
+  // Initialize offline support if feature flag is enabled
+  if (features?.offlineAccess) {
+    await initOfflineSupport();
+  }
+
+  // Show session expiry notice if using cached auth
+  if (window.appAuth.offlineSession) {
+    const noCache = typeof offlineDb !== 'undefined' ? !(await offlineDb.hasData()) : true;
+    if (noCache) {
+      document.getElementById('app').innerHTML = `
+        <div class="empty-state" style="padding:2rem">
+          <div class="empty-icon">📡</div>
+          <p>You need to connect to the internet at least once to load your data for offline use.</p>
+        </div>`;
+      return;
+    }
+    showToast('Offline mode — your session expired. Connect to the internet to log back in.', 5000);
+  }
 
   // Apply role class to body for CSS visibility rules
   document.body.classList.add('role-' + user.role);
@@ -52,6 +71,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (resumeBtn) resumeBtn.style.display = '';
   }
 });
+
+// ============================================================
+// Offline Support Initialization
+// ============================================================
+
+async function initOfflineSupport() {
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch {}
+  }
+
+  // Initialize offline manager (online/offline detection)
+  offlineManager.init();
+
+  // Initialize IndexedDB and bootstrap data
+  await offlineBootstrap.init();
+
+  // Initialize iOS install prompt
+  if (typeof initInstallPrompt === 'function') {
+    initInstallPrompt();
+  }
+}
 
 function capitalizeRole(role) {
   return role.charAt(0).toUpperCase() + role.slice(1);

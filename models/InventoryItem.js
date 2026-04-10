@@ -8,7 +8,13 @@ const inventoryItemSchema = new mongoose.Schema({
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastUpdated: { type: Date, default: Date.now },
   notes: { type: String, trim: true },
-  lowStockThreshold: { type: Number, default: null }
+  lowStockThreshold: { type: Number, default: null },
+  lastConflict: {
+    resolvedAt: { type: Date },
+    winnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    winnerName: { type: String },
+    overwrittenValue: { type: mongoose.Schema.Types.Mixed }
+  }
 }, { timestamps: true });
 
 // Unique per household + item

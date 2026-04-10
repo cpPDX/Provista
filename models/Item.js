@@ -7,7 +7,13 @@ const itemSchema = new mongoose.Schema({
   unit: { type: String, required: true, trim: true },
   barcode: { type: String, trim: true },
   isOrganic: { type: Boolean, default: false },
-  isSeeded: { type: Boolean, default: false }
+  isSeeded: { type: Boolean, default: false },
+  lastConflict: {
+    resolvedAt: { type: Date },
+    winnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    winnerName: { type: String },
+    overwrittenValue: { type: mongoose.Schema.Types.Mixed }
+  }
 }, { timestamps: true });
 
 itemSchema.index({ householdId: 1, name: 1 });
