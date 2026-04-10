@@ -15,6 +15,43 @@ let pricesState = {
 // Expose globally so more.js catalog filter can read entries for last-purchased sort
 window.pricesState = pricesState;
 
+// ===== Similar-item clustering =====
+// Groups price-list items whose normalized names are within Levenshtein distance ≤ 3.
+// Reuses _levenshtein() from csvImport.js (loaded before this file in index.html).
+
+function _normItemName(name) {
+  return name.toLowerCase().trim()
+    .replace(/\s*[-–]\s*(lrg|large|sm|small|med|medium)\s*$/i, '')
+    .replace(/s$/, '');
+}
+
+function clusterItemGroups(groups) {
+  if (typeof _levenshtein !== 'function') return groups.map(g => ({ canonical: g, members: [g] }));
+  const clusters = [];
+  const used = new Set();
+  groups.forEach((g, i) => {
+    if (used.has(i)) return;
+    const normA = _normItemName(g.item?.name || '');
+    const members = [g];
+    groups.forEach((h, j) => {
+      if (j === i || used.has(j)) return;
+      const normB = _normItemName(h.item?.name || '');
+      if (normA && normB && _levenshtein(normA, normB) <= 3) {
+        members.push(h);
+        used.add(j);
+      }
+    });
+    used.add(i);
+    // Canonical = member with most entries; alphabetical on tie
+    const canonical = members.reduce((best, m) =>
+      m.entries.length > best.entries.length ||
+      (m.entries.length === best.entries.length && (m.item?.name || '') < (best.item?.name || ''))
+        ? m : best, members[0]);
+    clusters.push({ canonical, members });
+  });
+  return clusters;
+}
+
 async function loadPricesTab() {
   // Show skeleton immediately so users know data is loading
   const pricesList = document.getElementById('prices-list');
@@ -48,44 +85,32 @@ async function loadPricesTab() {
   }
 }
 
-// Accepts either a flat entries array (groups by item) or pre-grouped array from applyPricesFilter
-function renderPricesList(entriesOrGroups) {
+function renderPricesList(clusters) {
   const container = document.getElementById('prices-list');
 
-  let groups;
-  if (Array.isArray(entriesOrGroups) && entriesOrGroups.length && entriesOrGroups[0]?.item !== undefined) {
-    // Pre-grouped format from applyPricesFilter
-    groups = entriesOrGroups;
-  } else {
-    // Flat entries — group by item
-    const byItem = {};
-    entriesOrGroups.forEach(e => {
-      const id = e.itemId?._id || e.itemId;
-      if (!byItem[id]) byItem[id] = { item: e.itemId, entries: [] };
-      byItem[id].entries.push(e);
-    });
-    groups = Object.values(byItem);
-  }
-
-  if (!groups.length) {
+  if (!clusters.length) {
     container.innerHTML = emptyState('💰', 'No approved price entries yet. Tap "+ Add Price" to get started.');
     return;
   }
 
-  container.innerHTML = groups.map(({ item, entries: es }) => {
+  container.innerHTML = clusters.map((cluster, idx) => {
+    const { canonical, members } = cluster;
+    const { item, entries: es } = canonical;
     const latest = es[0];
     const storeName = escapeHtml(latest.storeId?.name || 'Unknown store');
     const unit = item?.unit || 'unit';
     const hasSale = latest.salePrice != null;
     const hasCoupon = latest.couponAmount != null && latest.couponAmount > 0;
     const isOrganic = item?.isOrganic;
+    const isMulti = members.length > 1;
     const badges = [
       isOrganic ? `<span class="badge badge-organic">🌿 Organic</span>` : '',
       hasSale ? `<span class="badge badge-sale">🏷️ Sale</span>` : '',
-      hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span>` : ''
+      hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span>` : '',
+      isMulti ? `<span class="badge badge-muted">${members.length} variants</span>` : ''
     ].filter(Boolean).join(' ');
     return `
-      <div class="card price-list-card" data-item-id="${item?._id}">
+      <div class="card price-list-card" data-cluster-idx="${idx}">
         <div class="card-body">
           <div class="card-title">${escapeHtml(item?.name || 'Unknown item')}</div>
           <div class="card-subtitle">${escapeHtml(item?.category || '')} &middot; ${storeName} &middot; ${formatDate(latest.date)}</div>
@@ -98,11 +123,9 @@ function renderPricesList(entriesOrGroups) {
       </div>`;
   }).join('');
 
-  // Attach click listeners using the item ID from state (avoids embedding name in onclick)
   container.querySelectorAll('.price-list-card').forEach(card => {
-    const itemId = card.dataset.itemId;
-    const group = groups.find(g => (g.item?._id || g.item) === itemId);
-    card.addEventListener('click', () => openItemDetail(itemId, group?.item?.name || 'Item'));
+    const idx = +card.dataset.clusterIdx;
+    card.addEventListener('click', () => openClusterDetail(clusters[idx]));
   });
 }
 
@@ -146,19 +169,22 @@ function applyPricesFilter() {
   }
   // 'date': entries already sorted newest-first from API
 
+  const clusters = clusterItemGroups(groups);
+  pricesState.clusters = clusters;
+
   // Update count bar
   const totalGroups = new Set(entries.map(e => e.itemId?._id || e.itemId)).size;
   const isFiltered = filter.categories.length || filter.stores.length ||
     filter.dateRange !== 'all' || filter.organicOnly || filter.saleOnly;
   const countBar = document.getElementById('prices-filter-count');
   if (countBar) {
-    countBar.textContent = isFiltered ? `Showing ${groups.length} of ${totalGroups} items` : '';
+    countBar.textContent = isFiltered ? `Showing ${clusters.length} of ${totalGroups} items` : '';
     countBar.style.display = isFiltered ? '' : 'none';
   }
   const dot = document.getElementById('prices-filter-dot');
   if (dot) dot.style.display = (isFiltered || filter.sortBy !== 'date') ? '' : 'none';
 
-  renderPricesList(groups);
+  renderPricesList(clusters);
 }
 
 function openPricesFilterSheet() {
@@ -265,6 +291,142 @@ async function openItemDetail(itemId, itemName) {
   }
 
   await Promise.all([loadDetailHistory(itemId), loadDetailCompare(itemId)]);
+}
+
+// Opens the detail panel for a cluster (1 or more similar items).
+function openClusterDetail(cluster) {
+  const { canonical, members } = cluster;
+  const canonicalId = canonical.item?._id || canonical.item;
+  const canonicalName = canonical.item?.name || 'Item';
+
+  if (members.length === 1) {
+    openItemDetail(canonicalId, canonicalName);
+    return;
+  }
+
+  const panel = document.getElementById('item-detail-panel');
+  const nameEl = document.getElementById('detail-item-name');
+  nameEl.innerHTML = `${escapeHtml(canonicalName)} <span class="badge badge-muted" style="font-size:0.7rem;vertical-align:middle">${members.length} variants</span>`;
+  panel.style.display = 'block';
+  panel.classList.add('open');
+
+  // Reset to history tab
+  document.querySelectorAll('.detail-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.detail-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('.detail-tab[data-detail="history"]')?.classList.add('active');
+  document.getElementById('detail-history')?.classList.add('active');
+
+  const catalogLink = document.getElementById('btn-view-in-catalog');
+  if (catalogLink) {
+    catalogLink.style.display = window.appAuth?.isAdmin() ? '' : 'none';
+    catalogLink.onclick = () => navigateToCatalogItem(canonicalId, canonicalName);
+  }
+
+  const allItemIds = members.map(m => m.item?._id || m.item).filter(Boolean);
+  loadClusterHistory(allItemIds, members);
+  loadClusterCompare(allItemIds);
+}
+
+async function loadClusterHistory(itemIds, members) {
+  const container = document.getElementById('detail-history');
+  container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const allHistories = await Promise.all(itemIds.map(id => api.prices.history(id)));
+    const allEntries = allHistories.flat().sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    if (!allEntries.length) { container.innerHTML = emptyState('📋', 'No price history yet.'); return; }
+
+    // Map itemId → variant name for labelling
+    const canonicalName = members.reduce((best, m) =>
+      m.entries.length >= best.entries.length ? m : best, members[0]).item?.name || '';
+    const itemNames = {};
+    members.forEach(m => { itemNames[String(m.item?._id || m.item)] = m.item?.name || ''; });
+
+    const approvedEntries = allEntries.filter(e => e.status === 'approved');
+    const minPPU = approvedEntries.length ? Math.min(...approvedEntries.map(e => e.pricePerUnit)) : null;
+    const unit = allEntries[0]?.itemId?.unit || 'unit';
+
+    container.innerHTML = allEntries.map(e => {
+      const isBest = minPPU !== null && e.status === 'approved' && Math.abs(e.pricePerUnit - minPPU) < 0.001;
+      const isPending = e.status === 'pending';
+      const hasSale = e.salePrice != null;
+      const hasCoupon = e.couponAmount != null && e.couponAmount > 0;
+      const variantName = itemNames[String(e.itemId?._id || e.itemId)] || '';
+      const variantLabel = variantName && variantName !== canonicalName
+        ? `<div class="text-muted" style="font-size:var(--text-sm)">${escapeHtml(variantName)}</div>` : '';
+      const statusBadge = isPending
+        ? `<span class="badge badge-pending">Pending</span>`
+        : isBest ? `<span class="badge badge-best">Best</span>` : '';
+      const priceLine = hasSale || hasCoupon ? `
+        <div class="price-breakdown">
+          <span class="price-breakdown-reg">${formatCurrency(e.regularPrice)} reg</span>
+          ${hasSale ? `<span class="price-breakdown-sale">→ ${formatCurrency(e.salePrice)} sale</span>` : ''}
+          ${hasCoupon ? `<span class="price-breakdown-coupon">− ${formatCurrency(e.couponAmount)} coupon</span>` : ''}
+        </div>` : '';
+      return `
+        <div class="card" style="margin-bottom:0.5rem;${isPending ? 'opacity:0.8;border-left:3px solid var(--warning)' : ''}">
+          <div class="card-body">
+            <div class="card-title">${escapeHtml(e.storeId?.name || 'Unknown')}</div>
+            <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity}</div>
+            ${variantLabel}
+            <div style="margin-top:4px">${statusBadge}</div>
+            ${priceLine}
+          </div>
+          <div class="card-meta">
+            <div class="price-big ${isBest ? 'price-best' : ''}">${formatCurrency(e.finalPrice)}</div>
+            <div class="price-unit">${formatPPU(e.pricePerUnit, unit)}</div>
+          </div>
+        </div>`;
+    }).join('');
+
+    loadDetailTrend(null, approvedEntries);
+  } catch (err) {
+    container.innerHTML = emptyState('⚠️', 'Failed to load history.');
+  }
+}
+
+async function loadClusterCompare(itemIds) {
+  const container = document.getElementById('detail-compare');
+  container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+  try {
+    const allCompares = await Promise.all(itemIds.map(id => api.prices.compare(id)));
+    const allEntries = allCompares.flat();
+
+    if (!allEntries.length) { container.innerHTML = emptyState('🏪', 'No approved price comparisons yet.'); return; }
+
+    // Best (lowest pricePerUnit) per store across all variants
+    const byStore = {};
+    allEntries.forEach(e => {
+      const sid = String(e.storeId || '');
+      if (!byStore[sid] || e.pricePerUnit < byStore[sid].pricePerUnit) byStore[sid] = e;
+    });
+    const storeEntries = Object.values(byStore).sort((a, b) => a.pricePerUnit - b.pricePerUnit);
+    const unit = storeEntries[0]?.item?.unit || 'unit';
+
+    let callout = storeEntries.length > 1 ? buildCallout(storeEntries) : '';
+    container.innerHTML = callout + storeEntries.map((e, i) => {
+      const hasSale = e.salePrice != null;
+      const hasCoupon = e.couponAmount != null && e.couponAmount > 0;
+      return `
+        <div class="card" style="margin-bottom:0.5rem">
+          <div class="card-body">
+            <div class="card-title">${escapeHtml(e.store?.name || 'Unknown')}</div>
+            <div class="card-subtitle">${formatDate(e.date)} &middot; qty ${e.quantity}</div>
+            <div style="margin-top:4px">
+              ${i === 0 ? `<span class="badge badge-best">⭐ Best price</span>` : ''}
+              ${hasSale ? `<span class="badge badge-sale">🏷️ Sale</span>` : ''}
+              ${hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span>` : ''}
+            </div>
+          </div>
+          <div class="card-meta">
+            <div class="price-big ${i === 0 ? 'price-best' : ''}">${formatCurrency(e.finalPrice)}</div>
+            <div class="price-unit">${formatPPU(e.pricePerUnit, unit)}</div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = emptyState('⚠️', 'Failed to load comparison.');
+  }
 }
 
 function navigateToCatalogItem(itemId, itemName) {
@@ -399,8 +561,10 @@ async function deletePriceEntry(entryId, itemId) {
   try {
     await api.prices.delete(entryId);
     showToast('Entry deleted');
-    await loadDetailHistory(itemId);
-    await loadDetailCompare(itemId);
+    // Close detail panel and reload — handles both single-item and cluster views
+    const panel = document.getElementById('item-detail-panel');
+    panel.classList.remove('open');
+    setTimeout(() => { panel.style.display = 'none'; }, 250);
     await loadPricesTab();
   } catch (err) {
     handleError(err, 'Failed to delete entry');

@@ -338,8 +338,35 @@ async function loadCatalog() {
     catalogState.items = await api.items.list();
     applyCatalogFilter();
     updateCatalogBackBanner();
+    if (window.appAuth?.isAdmin()) updateDuplicateBanner();
   } catch (err) {
     handleError(err, 'Failed to load catalog');
+  }
+}
+
+async function updateDuplicateBanner() {
+  const banner = document.getElementById('catalog-dupe-banner');
+  if (!banner) return;
+  try {
+    const clusters = await api.admin.duplicateGroups();
+    if (!clusters.length) { banner.style.display = 'none'; return; }
+    const total = clusters.reduce((s, c) => s + c.duplicates.length, 0);
+    const names = clusters.map(c => `"${c.canonical.name}"`).join(', ');
+    banner.innerHTML = `⚠️ ${total} duplicate item${total !== 1 ? 's' : ''} found (${names}).
+      <button class="btn-link" id="btn-consolidate" style="margin-left:0.5rem">Consolidate Now →</button>`;
+    banner.style.display = '';
+    document.getElementById('btn-consolidate').onclick = async () => {
+      document.getElementById('btn-consolidate').textContent = 'Consolidating…';
+      try {
+        const result = await api.admin.consolidate();
+        const summary = result.merged.map(m => `"${m.into}" ← ${m.absorbed.join(', ')}`).join('; ');
+        showToast(`Consolidated ${result.totalRemoved} duplicate item${result.totalRemoved !== 1 ? 's' : ''}: ${summary}`, 5000);
+        banner.style.display = 'none';
+        await loadCatalog();
+      } catch (err) { handleError(err, 'Consolidation failed'); }
+    };
+  } catch (_) {
+    banner.style.display = 'none';
   }
 }
 

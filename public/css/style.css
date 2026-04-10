@@ -287,6 +287,7 @@ a { color: var(--primary); text-decoration: none; }
 .badge-best    { background: rgba(52,211,153,0.12);  color: #34d399; }
 .badge-organic { background: rgba(52,211,153,0.12);  color: #34d399; }
 .badge-no-data { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+.badge-muted   { background: rgba(255,255,255,0.06); color: var(--text-muted); font-weight: 500; }
 
 /* ===== Price display ===== */
 .price-big { font-size: 1.125rem; font-weight: 700; font-family: var(--font-mono); }

@@ -161,6 +161,10 @@ const api = {
     changePassword: (data) => api.put('/auth/password', data),
     deleteAccount: (data) => api.request('DELETE', '/auth/account', data)
   },
+  admin: {
+    duplicateGroups: () => api.get('/admin/duplicate-groups'),
+    consolidate: (itemIds) => api.post('/admin/consolidate-items', itemIds ? { itemIds } : {})
+  },
   household: {
     get: () => api.get('/household'),
     update: (data) => api.put('/household', data),
