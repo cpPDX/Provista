@@ -449,6 +449,112 @@ function resolveStore(apiPath) {
 }
 
 // ============================================================
+<<<<<<< HEAD
+=======
+// Offline Query Filtering
+// ============================================================
+
+// Client-side filtering for endpoints that return subsets of a collection.
+// Returns filtered data, or null if no special filtering is needed.
+async function offlineFilter(store, path) {
+  // /prices/history/:itemId — all entries for one item, newest first
+  const historyMatch = path.match(/^\/prices\/history\/([a-f0-9]+)$/);
+  if (historyMatch) {
+    const itemId = historyMatch[1];
+    const all = await offlineDb.getAll('priceEntries');
+    return all
+      .filter(e => {
+        const eid = e.itemId?._id || e.itemId;
+        return String(eid) === itemId;
+      })
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  }
+
+  // /prices/compare/:itemId — latest approved price per store, sorted by pricePerUnit
+  const compareMatch = path.match(/^\/prices\/compare\/([a-f0-9]+)$/);
+  if (compareMatch) {
+    const itemId = compareMatch[1];
+    const all = await offlineDb.getAll('priceEntries');
+    const forItem = all.filter(e => {
+      const eid = e.itemId?._id || e.itemId;
+      return String(eid) === itemId && e.status === 'approved';
+    });
+    // Group by store, take most recent per store
+    const byStore = {};
+    for (const e of forItem) {
+      const sid = String(e.storeId?._id || e.storeId);
+      if (!byStore[sid] || new Date(e.date) > new Date(byStore[sid].date)) {
+        byStore[sid] = e;
+      }
+    }
+    return Object.values(byStore).sort((a, b) => a.pricePerUnit - b.pricePerUnit);
+  }
+
+  // /prices/last-purchased/:itemId — most recent approved entry per store
+  const lastPurchasedMatch = path.match(/^\/prices\/last-purchased\/([a-f0-9]+)$/);
+  if (lastPurchasedMatch) {
+    const itemId = lastPurchasedMatch[1];
+    const all = await offlineDb.getAll('priceEntries');
+    const forItem = all.filter(e => {
+      const eid = e.itemId?._id || e.itemId;
+      return String(eid) === itemId && e.status === 'approved';
+    });
+    const byStore = {};
+    for (const e of forItem) {
+      const sid = String(e.storeId?._id || e.storeId);
+      if (!byStore[sid] || new Date(e.date) > new Date(byStore[sid].date)) {
+        byStore[sid] = e;
+      }
+    }
+    return Object.values(byStore);
+  }
+
+  // /spend?month=YYYY-MM — cached spend data for a specific month
+  const spendMatch = path.match(/^\/spend\?month=(\d{4}-\d{2})$/);
+  if (spendMatch) {
+    const month = spendMatch[1];
+    const cached = await offlineDb.get('spendCache', month);
+    // Return the shape the spend tab expects
+    return cached || { month, total: 0, byCategory: [], byStore: [] };
+  }
+
+  // /spend/summary — all cached months
+  if (path === '/spend/summary') {
+    return offlineDb.getAll('spendCache');
+  }
+
+  // /inventory/low-stock — filter inventory to low stock items
+  if (path === '/inventory/low-stock') {
+    const all = await offlineDb.getAll('inventory');
+    return all.filter(i =>
+      i.lowStockThreshold != null && i.quantity <= i.lowStockThreshold
+    );
+  }
+
+  // /prices/pending — filter to pending entries
+  if (path === '/prices/pending') {
+    const all = await offlineDb.getAll('priceEntries');
+    return all.filter(e => e.status === 'pending');
+  }
+
+  // /prices with query params — filter price entries
+  if (path.startsWith('/prices?') || path === '/prices') {
+    return offlineDb.getAll('priceEntries');
+  }
+
+  // /items?search=... — filter items by search term
+  const itemSearchMatch = path.match(/^\/items\?search=(.+)$/);
+  if (itemSearchMatch) {
+    const query = decodeURIComponent(itemSearchMatch[1]).toLowerCase();
+    const all = await offlineDb.getAll('items');
+    return all.filter(i => i.name?.toLowerCase().includes(query));
+  }
+
+  return null; // No special filtering — caller will use getAll
+}
+
+// ============================================================
+>>>>>>> test
 // Failed Sync Sheet
 // ============================================================
 
