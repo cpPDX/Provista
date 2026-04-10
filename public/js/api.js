@@ -7,15 +7,6 @@ const api = {
     };
     if (body !== undefined) opts.body = JSON.stringify(body);
 
-<<<<<<< HEAD
-=======
-<<<<<<< Updated upstream
-    // Redirect to login on auth failure
-    if (res.status === 401) {
-      window.location.href = '/login.html';
-      throw new Error('Not authenticated');
-=======
->>>>>>> test
     // Check if offline features are available
     const hasOffline = typeof offlineDb !== 'undefined' && window.appAuth?.features?.offlineAccess;
 
@@ -69,10 +60,6 @@ const api = {
 
     if (method === 'GET') {
       if (!store) throw new Error('This data is not available offline');
-<<<<<<< HEAD
-      const data = await offlineDb.getAll(store);
-      return data;
-=======
 
       // Handle item-specific price endpoints that need client-side filtering
       const filtered = await offlineFilter(store, path);
@@ -80,8 +67,6 @@ const api = {
 
       const data = await offlineDb.getAll(store);
       return data;
->>>>>>> Stashed changes
->>>>>>> test
     }
 
     // Write operations: save to IndexedDB + sync queue
