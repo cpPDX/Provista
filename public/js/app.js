@@ -5,7 +5,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   const ok = await window.appAuth.load();
   if (!ok) return;
 
-  const { user, household } = window.appAuth;
+  const { user, household, features } = window.appAuth;
+
+  // Show session expiry notice if using cached auth
+  if (window.appAuth.offlineSession) {
+    const noCache = typeof offlineDb !== 'undefined' ? !(await offlineDb.hasData()) : true;
+    if (noCache) {
+      document.getElementById('app').innerHTML = `
+        <div class="empty-state" style="padding:2rem">
+          <div class="empty-icon">📡</div>
+          <p>You need to connect to the internet at least once to load your data for offline use.</p>
+        </div>`;
+      return;
+    }
+    showToast('Offline mode — your session expired. Connect to the internet to log back in.', 5000);
+  }
 
   // Apply role class to body for CSS visibility rules
   document.body.classList.add('role-' + user.role);
@@ -31,6 +45,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (confirm('Sign out?')) await window.appAuth.logout();
   });
 
+  // Attach event handlers immediately so the UI is interactive while offline
+  // support initializes in the background
   initNavigation();
   initModal();
   initPricesTab();
@@ -40,6 +56,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load default tab
   await loadPricesTab();
+
+  // Initialize offline support AFTER UI is interactive (non-blocking)
+  if (features?.offlineAccess) {
+    initOfflineSupport();
+  }
 
   // Setup wizard for new household owners
   const resumeBtn = document.getElementById('btn-resume-setup');
@@ -53,15 +74,58 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// ============================================================
+// Offline Support Initialization
+// ============================================================
+
+async function initOfflineSupport() {
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch {}
+  }
+
+  // Initialize offline manager (online/offline detection)
+  offlineManager.init();
+
+  // Initialize IndexedDB and bootstrap data
+  await offlineBootstrap.init();
+
+  // Initialize iOS install prompt
+  if (typeof initInstallPrompt === 'function') {
+    initInstallPrompt();
+  }
+}
+
 function capitalizeRole(role) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 function initNavigation() {
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => switchTab(item.dataset.tab));
+    item.addEventListener('click', () => handleNavTap(item.dataset.tab));
   });
   document.getElementById('btn-open-csv-import')?.addEventListener('click', () => openCsvImportModal());
+}
+
+function closeDetailPanel() {
+  const panel = document.getElementById('item-detail-panel');
+  if (panel && panel.classList.contains('open')) {
+    panel.classList.remove('open');
+    setTimeout(() => { panel.style.display = 'none'; }, 250);
+  }
+}
+
+function handleNavTap(tabId) {
+  closeDetailPanel();
+  const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
+  if (modalOpen && window._dirtyForm?.isDirty) {
+    showUnsavedPrompt(() => switchTab(tabId));
+  } else {
+    if (modalOpen) closeModal();
+    switchTab(tabId);
+  }
 }
 
 async function switchTab(tabId) {
@@ -85,8 +149,23 @@ async function switchTab(tabId) {
 }
 
 function initModal() {
-  document.getElementById('modal-close').addEventListener('click', closeModal);
+  function tryCloseModal() {
+    if (window._dirtyForm?.isDirty) {
+      showUnsavedPrompt(() => {});
+    } else {
+      closeModal();
+    }
+  }
+
+  document.getElementById('modal-close').addEventListener('click', tryCloseModal);
   document.getElementById('modal-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('modal-overlay')) closeModal();
+    if (e.target === document.getElementById('modal-overlay')) tryCloseModal();
+  });
+
+  // Escape key closes the modal (respects unsaved-changes guard)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
+    if (modalOpen) { e.preventDefault(); tryCloseModal(); }
   });
 }

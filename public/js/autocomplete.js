@@ -22,6 +22,7 @@ function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
         const items = await api.items.search(val);
         renderItemDropdown(items, val);
       } catch (e) {
+        console.error('Item autocomplete search failed:', e);
         closeDropdown();
       }
     }, 200);
@@ -36,8 +37,8 @@ function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
     items.forEach(item => {
       const div = document.createElement('div');
       div.className = 'autocomplete-item';
-      div.innerHTML = `<div class="autocomplete-item-name">${item.name}</div>
-        <div class="autocomplete-item-meta">${item.category} &middot; ${item.unit}</div>`;
+      div.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(item.name)}</div>
+        <div class="autocomplete-item-meta">${escapeHtml(item.category)} &middot; ${escapeHtml(item.unit)}</div>`;
       div.addEventListener('mousedown', () => {
         inputEl.value = item.name;
         closeDropdown();
@@ -105,8 +106,8 @@ function attachStoreAutocomplete(inputEl, dropdownEl, opts = {}) {
     stores.forEach(store => {
       const div = document.createElement('div');
       div.className = 'autocomplete-item';
-      div.innerHTML = `<div class="autocomplete-item-name">${store.name}</div>
-        ${store.location ? `<div class="autocomplete-item-meta">${store.location}</div>` : ''}`;
+      div.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(store.name)}</div>
+        ${store.location ? `<div class="autocomplete-item-meta">${escapeHtml(store.location)}</div>` : ''}`;
       div.addEventListener('mousedown', () => {
         inputEl.value = store.name;
         closeDropdown();
@@ -148,7 +149,7 @@ async function promptCreateItem(name, onCreated) {
     <form id="new-item-form">
       <div class="form-group">
         <label>Item Name</label>
-        <input class="form-control" name="name" value="${name || ''}" required placeholder="e.g. Large Eggs" />
+        <input class="form-control" name="name" value="${escapeAttr(name || '')}" required placeholder="e.g. Large Eggs" />
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -210,7 +211,7 @@ async function promptCreateStore(name, onCreated) {
     <form id="new-store-form">
       <div class="form-group">
         <label>Store Name</label>
-        <input class="form-control" name="name" value="${name || ''}" required placeholder="e.g. Trader Joe's" />
+        <input class="form-control" name="name" value="${escapeAttr(name || '')}" required placeholder="e.g. Trader Joe's" />
       </div>
       <div class="form-group">
         <label>Location (optional)</label>

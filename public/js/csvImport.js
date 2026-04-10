@@ -20,12 +20,14 @@ function normalizeCategory(raw) {
   return CATEGORY_NORMALIZE[key] || raw.trim();
 }
 
-// regular_price and sale_price are PER-UNIT shelf prices; quantity is how many units you bought
-const CSV_EXAMPLE_ROWS = [
-  ['Whole Milk', 'Dairy', 'gal', 'Costco', '4.99', '', '', '', '1', '2026-04-01', '', 'false'],
-  ['Avocado', 'Produce', 'each', 'Trader Joes', '0.79', '0.59', '', '', '3', '2026-04-01', '3 for $1.77 sale', 'false'],
-  ['Organic Carrots', 'Produce', 'lb', 'Fred Meyer', '2.49', '', '', '', '1', '2026-04-01', '', 'true'],
-];
+function getCsvExampleRows() {
+  const today = new Date().toISOString().slice(0, 10);
+  return [
+    ['Whole Milk 1gal', 'Dairy', 'gal', 'Costco', '4.99', '', '', '', '1', today, '', 'false'],
+    ['Sourdough Bread', 'Bakery', 'loaf', 'Trader Joes', '3.49', '2.99', '0.50', 'Ibotta', '2', today, 'On sale this week', 'false'],
+    ['Organic Carrots', 'Produce', 'lb', 'Fred Meyer', '2.49', '', '', '', '1', today, '', 'true'],
+  ];
+}
 
 /**
  * Parse CSV text into an array of row objects.
@@ -211,7 +213,7 @@ function downloadCsvTemplate() {
 
   const lines = [
     CSV_COLUMNS.join(','),
-    ...CSV_EXAMPLE_ROWS.map(row => row.map(escape).join(','))
+    ...getCsvExampleRows().map(row => row.map(escape).join(','))
   ];
 
   const csv = lines.join('\r\n');
@@ -230,8 +232,14 @@ function downloadCsvTemplate() {
  * Handle CSV file input change — reads, parses, imports, shows summary.
  * statusEl: DOM element to render results into.
  */
+const CSV_MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 async function processCsvFile(file, statusEl) {
   if (!file) return;
+  if (file.size > CSV_MAX_FILE_SIZE) {
+    statusEl.innerHTML = '<p class="csv-import-error">File is too large (max 10 MB). Please split it into smaller files.</p>';
+    return;
+  }
   statusEl.innerHTML = '<p class="text-muted text-sm">Importing…</p>';
   try {
     const text = await file.text();

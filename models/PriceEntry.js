@@ -18,7 +18,13 @@ const priceEntrySchema = new mongoose.Schema({
   status: { type: String, enum: ['approved', 'pending'], default: 'pending' },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   reviewedAt: { type: Date, default: null },
-  notes: { type: String, trim: true }
+  notes: { type: String, trim: true },
+  lastConflict: {
+    resolvedAt: { type: Date },
+    winnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    winnerName: { type: String },
+    overwrittenValue: { type: mongoose.Schema.Types.Mixed }
+  }
 }, { timestamps: true });
 
 priceEntrySchema.index({ householdId: 1, itemId: 1, date: -1 });
