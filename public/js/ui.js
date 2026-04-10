@@ -1,5 +1,23 @@
 // UI utilities shared across tabs
 
+// Escape HTML special characters for safe innerHTML insertion
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Escape for use inside HTML attribute values (quoted with ")
+function escapeAttr(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Format currency
 function formatCurrency(n) {
   return '$' + (n || 0).toFixed(2);
@@ -49,6 +67,30 @@ function openModal(title, bodyHTML, onConfirm) {
     }
   }
 
+  // Hoist .form-actions out of the scrollable modal-body into the modal footer,
+  // so buttons are never obscured by content above them.
+  const footer = document.getElementById('modal-footer');
+  const formActions = document.querySelector('#modal-body .form-actions');
+  if (footer && formActions) {
+    // Associate any submit buttons with their parent form so they still work
+    // when moved outside the <form> element.
+    const parentForm = formActions.closest('form');
+    if (parentForm) {
+      if (!parentForm.id) parentForm.id = '_mf_' + Date.now();
+      formActions.querySelectorAll('button[type="submit"], button:not([type])').forEach(btn => {
+        if (!btn.getAttribute('form')) btn.setAttribute('form', parentForm.id);
+      });
+    }
+    footer.appendChild(formActions);
+    footer.style.display = '';
+  } else if (footer) {
+    footer.style.display = 'none';
+  }
+
+  // Move focus to the first focusable field for keyboard/accessibility
+  const firstInput = document.querySelector('#modal-body input:not([type=hidden]), #modal-body select, #modal-body textarea');
+  if (firstInput) firstInput.focus();
+
   // Push modal above keyboard on mobile using visualViewport API
   if (window.visualViewport) {
     const vpHandler = () => {
@@ -69,11 +111,10 @@ window._dirtyForm = { isDirty: false, saveCallback: null };
 
 function registerDirtyForm(saveCallback) {
   window._dirtyForm = { isDirty: false, saveCallback };
-  // Mark dirty on any field change inside the modal
-  setTimeout(() => {
-    document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea')
-      .forEach(el => el.addEventListener('change', () => { window._dirtyForm.isDirty = true; }));
-  }, 0);
+  // Mark dirty on any field change inside the modal.
+  // No setTimeout needed — modal body innerHTML is set synchronously before this is called.
+  document.querySelectorAll('#modal-body input, #modal-body select, #modal-body textarea')
+    .forEach(el => el.addEventListener('change', () => { window._dirtyForm.isDirty = true; }));
 }
 
 function clearDirtyForm() {
@@ -106,6 +147,8 @@ function closeModal() {
   clearDirtyForm();
   document.getElementById('modal-overlay').style.display = 'none';
   document.getElementById('modal-body').innerHTML = '';
+  const footer = document.getElementById('modal-footer');
+  if (footer) { footer.innerHTML = ''; footer.style.display = 'none'; }
 
   // Clean up keyboard listener and reset margin
   if (window.visualViewport && window._modalVpHandler) {
@@ -131,9 +174,12 @@ function handleError(err, fallbackMsg) {
   console.error(err);
 }
 
-// Empty state
-function emptyState(icon, text) {
-  return `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${text}</p></div>`;
+// Empty state — accepts optional CTA { label, onclick } to render an action button
+function emptyState(icon, text, cta) {
+  const ctaHTML = cta
+    ? `<button class="btn btn-outline" style="margin-top:0.25rem" onclick="${escapeAttr(cta.onclick)}">${escapeHtml(cta.label)}</button>`
+    : '';
+  return `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${escapeHtml(text)}</p>${ctaHTML}</div>`;
 }
 
 function updatePendingBadge(count) {
@@ -164,8 +210,10 @@ function niceAxisScale(maxVal, steps = 4) {
   return { ceil, step: nice };
 }
 
-// Draw a simple bar chart on a canvas
-function drawBarChart(canvasId, labels, values, color = '#a855f7') {
+// Draw a simple bar chart on a canvas.
+// options.highlightLabel: YYYY-MM string for the bar to highlight (e.g. current month)
+function drawBarChart(canvasId, labels, values, color = '#a855f7', options = {}) {
+  const { highlightLabel } = options;
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -214,20 +262,35 @@ function drawBarChart(canvasId, labels, values, color = '#a855f7') {
 
   // Bars
   labels.forEach((label, i) => {
+    const isHighlight = highlightLabel && label === highlightLabel;
     const barH = Math.max((values[i] / axisMax) * H, values[i] > 0 ? 2 : 0);
     const x = padL + i * (W / labels.length) + (W / labels.length - barW) / 2;
     const y = padT + H - barH;
-    ctx.fillStyle = color;
+    ctx.fillStyle = isHighlight ? color : color + '66'; // dim non-current bars
     ctx.beginPath();
     ctx.roundRect(x, y, barW, barH, [3, 3, 0, 0]);
     ctx.fill();
 
+    // Highlight ring + value label for current month
+    if (isHighlight && values[i] > 0) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(x - 1, y - 1, barW + 2, barH + 1, [3, 3, 0, 0]);
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillText('$' + (values[i] >= 1000 ? (values[i] / 1000).toFixed(1) + 'k' : values[i].toFixed(0)), x + barW / 2, y - 5);
+    }
+
     // X label: show last 2 chars of month (e.g. '03' → '03') or abbreviate
-    ctx.fillStyle = '#71717a';
+    ctx.fillStyle = isHighlight ? color : '#71717a';
     ctx.textAlign = 'center';
     // label format is YYYY-MM; show abbreviated month
     const [, mm] = label.split('-');
     const monthAbbr = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mm, 10) - 1] || mm;
+    ctx.font = isHighlight ? 'bold 11px system-ui, sans-serif' : '11px system-ui, sans-serif';
     ctx.fillText(monthAbbr, x + barW / 2, padT + H + 20);
   });
 }

@@ -74,6 +74,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
+// ============================================================
+// Offline Support Initialization
+// ============================================================
+
+async function initOfflineSupport() {
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+    } catch {}
+  }
+
+  // Initialize offline manager (online/offline detection)
+  offlineManager.init();
+
+  // Initialize IndexedDB and bootstrap data
+  await offlineBootstrap.init();
+
+  // Initialize iOS install prompt
+  if (typeof initInstallPrompt === 'function') {
+    initInstallPrompt();
+  }
+}
+
 function capitalizeRole(role) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
@@ -125,8 +149,23 @@ async function switchTab(tabId) {
 }
 
 function initModal() {
-  document.getElementById('modal-close').addEventListener('click', closeModal);
+  function tryCloseModal() {
+    if (window._dirtyForm?.isDirty) {
+      showUnsavedPrompt(() => {});
+    } else {
+      closeModal();
+    }
+  }
+
+  document.getElementById('modal-close').addEventListener('click', tryCloseModal);
   document.getElementById('modal-overlay').addEventListener('click', (e) => {
-    if (e.target === document.getElementById('modal-overlay')) closeModal();
+    if (e.target === document.getElementById('modal-overlay')) tryCloseModal();
+  });
+
+  // Escape key closes the modal (respects unsaved-changes guard)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
+    if (modalOpen) { e.preventDefault(); tryCloseModal(); }
   });
 }

@@ -7,12 +7,16 @@ function showMoreSection(sectionId) {
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
   const el = document.getElementById('section-' + sectionId);
   if (el) el.style.display = '';
+  // Show quick-access row so you can jump between sections without going back
+  document.getElementById('more-quick-access')?.style.removeProperty('display');
 }
 
 function hideMoreSection() {
   document.querySelector('#tab-more .page-header')?.style.removeProperty('display');
   document.querySelector('.more-menu').style.display = '';
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
+  // Hide quick-access row on the main menu — it's redundant there
+  document.getElementById('more-quick-access')?.style.setProperty('display', 'none');
 }
 
 // ===== Account Settings (all roles) =====
@@ -158,9 +162,9 @@ function renderInventory() {
     return;
   }
   container.innerHTML = items.map(inv => {
-    const name = inv.itemId?.name || 'Unknown';
-    const unit = inv.unit || inv.itemId?.unit || '';
-    const cat = inv.itemId?.category || '';
+    const name = escapeHtml(inv.itemId?.name || 'Unknown');
+    const unit = escapeHtml(inv.unit || inv.itemId?.unit || '');
+    const cat = escapeHtml(inv.itemId?.category || '');
     const isLow = inv.lowStockThreshold != null && inv.quantity <= inv.lowStockThreshold;
     const thresholdText = inv.lowStockThreshold != null ? `Alert ≤ ${inv.lowStockThreshold}` : '';
     return `
@@ -168,7 +172,7 @@ function renderInventory() {
         <div class="card-body">
           <div class="card-title">${name}${isLow ? ' <span class="badge badge-low-stock">Low</span>' : ''}</div>
           <div class="card-subtitle">${cat} &middot; Updated ${formatDate(inv.lastUpdated)}</div>
-          ${inv.notes ? `<div class="text-muted text-sm">${inv.notes}</div>` : ''}
+          ${inv.notes ? `<div class="text-muted text-sm">${escapeHtml(inv.notes)}</div>` : ''}
           ${thresholdText ? `<div class="text-muted text-sm">${thresholdText}</div>` : ''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.375rem">
@@ -190,7 +194,11 @@ async function adjustInventory(id, newQty) {
   try {
     await api.inventory.update(id, { quantity: newQty });
     const item = inventoryState.items.find(i => i._id === id);
-    if (item) item.quantity = newQty;
+    if (item) {
+      const unit = item.unit || item.itemId?.unit || '';
+      showToast(`Updated to ${newQty}${unit ? ' ' + unit : ''}`);
+      item.quantity = newQty;
+    }
     if (newQty === 0) inventoryState.items = inventoryState.items.filter(i => i._id !== id);
     renderInventory();
   } catch (err) {
@@ -289,11 +297,11 @@ function openEditInventoryModal(id) {
       </div>
       <div class="form-group">
         <label>Notes (optional)</label>
-        <input class="form-control" id="edit-inv-notes" value="${inv.notes || ''}" placeholder="e.g. expires Friday" />
+        <input class="form-control" id="edit-inv-notes" value="${escapeAttr(inv.notes || '')}" placeholder="e.g. expires Friday" />
       </div>
       <div class="form-group">
         <label>Low Stock Alert (optional)</label>
-        <input class="form-control" type="number" id="edit-inv-threshold" value="${inv.lowStockThreshold ?? ''}" placeholder="e.g. 2 (alert when quantity ≤ this)" min="0" step="any" />
+        <input class="form-control" type="number" id="edit-inv-threshold" value="${escapeAttr(inv.lowStockThreshold ?? '')}" placeholder="e.g. 2 (alert when quantity ≤ this)" min="0" step="any" />
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
@@ -412,7 +420,7 @@ function openCatalogFilterSheet() {
     ${cats.length ? `<div>
       <div class="filter-section-label">Category</div>
       <div class="filter-chips">
-        ${cats.map(c => `<button class="filter-chip${f.categories.includes(c)?' selected':''}" onclick="toggleCatalogFilterCat(this,'${c.replace(/'/g,"\\'")}')">${c}</button>`).join('')}
+        ${cats.map(c => `<button class="filter-chip${f.categories.includes(c)?' selected':''}" data-cat="${escapeAttr(c)}" onclick="toggleCatalogFilterCat(this)">${escapeHtml(c)}</button>`).join('')}
       </div>
     </div>` : ''}
     <div>
@@ -435,7 +443,8 @@ function openCatalogFilterSheet() {
   };
 }
 
-function toggleCatalogFilterCat(btn, cat) {
+function toggleCatalogFilterCat(btn) {
+  const cat = btn.dataset.cat;
   const f = catalogFilterState;
   if (f.categories.includes(cat)) { f.categories = f.categories.filter(c => c !== cat); btn.classList.remove('selected'); }
   else { f.categories.push(cat); btn.classList.add('selected'); }
@@ -462,8 +471,8 @@ function renderCatalog() {
     <div class="card swipeable" data-item-id="${item._id}">
       <div class="card-body-wrap">
         <div class="card-body">
-          <div class="card-title">${item.name}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
-          <div class="card-subtitle">${item.category} &middot; ${item.unit}</div>
+          <div class="card-title">${escapeHtml(item.name)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
+          <div class="card-subtitle">${escapeHtml(item.category)} &middot; ${escapeHtml(item.unit)}</div>
         </div>
       </div>
       <div class="card-swipe-delete">Delete</div>
@@ -487,12 +496,12 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
     <form id="edit-item-form">
       <div class="form-group">
         <label>Item Name</label>
-        <input class="form-control" name="name" value="${name}" required />
+        <input class="form-control" name="name" value="${escapeAttr(name)}" required />
       </div>
       <div class="form-row">
         <div class="form-group">
           <label>Category</label>
-          <input class="form-control" name="category" value="${category}" required list="cat-dl" />
+          <input class="form-control" name="category" value="${escapeAttr(category)}" required list="cat-dl" />
           <datalist id="cat-dl">
             <option value="Produce"/><option value="Dairy"/><option value="Meat &amp; Seafood"/>
             <option value="Bakery"/><option value="Pantry"/><option value="Frozen"/>
@@ -502,7 +511,7 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
         </div>
         <div class="form-group">
           <label>Unit</label>
-          <input class="form-control" name="unit" value="${unit}" required list="unit-dl" />
+          <input class="form-control" name="unit" value="${escapeAttr(unit)}" required list="unit-dl" />
           <datalist id="unit-dl">
             <option value="lb"/><option value="oz"/><option value="each"/>
             <option value="fl oz"/><option value="gal"/><option value="dozen"/>
@@ -566,8 +575,8 @@ function renderStores() {
     <div class="card swipeable" data-store-id="${store._id}">
       <div class="card-body-wrap">
         <div class="card-body">
-          <div class="card-title">${store.name}</div>
-          ${store.location ? `<div class="card-subtitle">${store.location}</div>` : ''}
+          <div class="card-title">${escapeHtml(store.name)}</div>
+          ${store.location ? `<div class="card-subtitle">${escapeHtml(store.location)}</div>` : ''}
         </div>
       </div>
       <div class="card-swipe-delete">Delete</div>
@@ -591,11 +600,11 @@ function openEditStoreModal(id, name, location) {
     <form id="edit-store-form">
       <div class="form-group">
         <label>Store Name</label>
-        <input class="form-control" name="name" value="${name}" required />
+        <input class="form-control" name="name" value="${escapeAttr(name)}" required />
       </div>
       <div class="form-group">
         <label>Location (optional)</label>
-        <input class="form-control" name="location" value="${location}" />
+        <input class="form-control" name="location" value="${escapeAttr(location)}" />
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
@@ -635,7 +644,7 @@ async function loadHousehold() {
     let html = `
       <div class="card" style="margin-bottom:0.75rem">
         <div class="card-body">
-          <div class="card-title">${household.name}</div>
+          <div class="card-title">${escapeHtml(household.name)}</div>
           <div class="card-subtitle">Household</div>
         </div>
         ${auth.isOwner() ? `<button class="btn btn-outline btn-sm" onclick="openRenameHouseholdModal('${escapeAttr(household.name)}')">Rename</button>` : ''}
@@ -683,8 +692,8 @@ async function loadHousehold() {
           </ul>
           <form id="delete-household-form">
             <div class="form-group">
-              <label>Type the household name to confirm: <strong>${hhName}</strong></label>
-              <input class="form-control" id="dh-name-confirm" required autocomplete="off" placeholder="${hhName}" />
+              <label>Type the household name to confirm: <strong>${escapeHtml(hhName)}</strong></label>
+              <input class="form-control" id="dh-name-confirm" required autocomplete="off" placeholder="${escapeAttr(hhName)}" />
             </div>
             <div class="form-group">
               <label>Enter your password</label>
@@ -742,10 +751,10 @@ function renderMemberCard(m, auth, household) {
 
   return `
     <div class="member-card">
-      <div class="member-avatar">${(m.name || '?')[0].toUpperCase()}</div>
+      <div class="member-avatar">${escapeHtml((m.name || '?')[0].toUpperCase())}</div>
       <div class="member-info">
-        <div class="member-name">${m.name}${isMe ? ' (you)' : ''}</div>
-        <div class="member-role">${roleLabel}</div>
+        <div class="member-name">${escapeHtml(m.name)}${isMe ? ' (you)' : ''}</div>
+        <div class="member-role">${escapeHtml(roleLabel)}</div>
       </div>
       <div class="member-actions">${actions}</div>
     </div>`;
@@ -773,7 +782,7 @@ function openRenameHouseholdModal(currentName) {
     <form id="rename-household-form">
       <div class="form-group">
         <label>Household Name</label>
-        <input class="form-control" name="name" value="${currentName}" required />
+        <input class="form-control" name="name" value="${escapeAttr(currentName)}" required />
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
@@ -821,11 +830,6 @@ async function loadInviteCode() {
   }
 }
 
-// ===== Helper =====
-function escapeAttr(str) {
-  return (str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
-
 function openAddCatalogItemModal() {
   promptCreateItem('', async () => {
     await loadCatalog();
@@ -838,8 +842,13 @@ function loadAboutSection() {
   const isAdmin = window.appAuth?.isAdmin();
   document.getElementById('about-content').innerHTML = `
     <div style="text-align:center;padding:1rem 0 1.5rem">
-      <div style="font-size:2.5rem;margin-bottom:0.5rem">🛒</div>
-      <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Grocery Tracker</h2>
+      <div style="margin-bottom:0.75rem">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="display:inline-block">
+          <rect width="48" height="48" rx="12" fill="#21ABCD"/>
+          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="white" text-anchor="middle" letter-spacing="-0.5">P</text>
+        </svg>
+      </div>
+      <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Provista</h2>
       <p class="text-muted text-sm">Version 1.0</p>
     </div>
     <div class="card" style="margin-bottom:1rem">
@@ -952,18 +961,21 @@ function attachSwipeDelete(card) {
 }
 
 // ===== Init =====
+async function handleMoreSectionNav(section) {
+  showMoreSection(section);
+  if (section === 'items') await loadCatalog();
+  else if (section === 'stores') await loadStores();
+  else if (section === 'household') await loadHousehold();
+  else if (section === 'account') await loadAccountSettings();
+  else if (section === 'about') loadAboutSection();
+}
+
 function initMoreTab() {
-  document.querySelectorAll('.more-item[data-section]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const section = btn.dataset.section;
-      showMoreSection(section);
-      if (section === 'items') await loadCatalog();
-      else if (section === 'stores') await loadStores();
-      else if (section === 'household') await loadHousehold();
-      else if (section === 'account') await loadAccountSettings();
-      else if (section === 'about') loadAboutSection();
-    });
+  document.querySelectorAll('.more-item[data-section], .quick-tile[data-section]').forEach(btn => {
+    btn.addEventListener('click', () => handleMoreSectionNav(btn.dataset.section));
   });
+
+  document.getElementById('quick-tile-csv')?.addEventListener('click', () => openCsvImportModal());
 
   document.querySelectorAll('.back-btn').forEach(btn => {
     btn.addEventListener('click', hideMoreSection);

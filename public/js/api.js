@@ -1,4 +1,4 @@
-// Centralized API helper
+// Centralized API helper with offline support
 const api = {
   async request(method, path, body) {
     const opts = {
@@ -6,14 +6,16 @@ const api = {
       headers: { 'Content-Type': 'application/json' }
     };
     if (body !== undefined) opts.body = JSON.stringify(body);
-    const res = await fetch('/api' + path, opts);
 
+<<<<<<< HEAD
+=======
 <<<<<<< Updated upstream
     // Redirect to login on auth failure
     if (res.status === 401) {
       window.location.href = '/login.html';
       throw new Error('Not authenticated');
 =======
+>>>>>>> test
     // Check if offline features are available
     const hasOffline = typeof offlineDb !== 'undefined' && window.appAuth?.features?.offlineAccess;
 
@@ -67,6 +69,10 @@ const api = {
 
     if (method === 'GET') {
       if (!store) throw new Error('This data is not available offline');
+<<<<<<< HEAD
+      const data = await offlineDb.getAll(store);
+      return data;
+=======
 
       // Handle item-specific price endpoints that need client-side filtering
       const filtered = await offlineFilter(store, path);
@@ -75,11 +81,35 @@ const api = {
       const data = await offlineDb.getAll(store);
       return data;
 >>>>>>> Stashed changes
+>>>>>>> test
     }
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+    // Write operations: save to IndexedDB + sync queue
+    if (!store) throw new Error('Cannot save this data offline');
+
+    const operation = method === 'POST' ? 'CREATE' : method === 'PUT' ? 'UPDATE' : 'DELETE';
+
+    if (method === 'DELETE') {
+      // Extract ID from path (e.g., /items/abc123)
+      const parts = path.split('/');
+      const id = parts[parts.length - 1];
+      if (id && id !== parts[1]) {
+        await offlineDb.delete(store, id);
+      }
+      await syncQueue.add(operation, store, null, path, method);
+      showToast('Saved offline. Will sync when back online.', 3000);
+      return { success: true };
+    }
+
+    // POST/PUT: store optimistic data locally
+    const optimistic = { ...body };
+    if (!optimistic._id) {
+      optimistic._id = 'offline_' + crypto.randomUUID();
+    }
+    await offlineDb.put(store, optimistic);
+    await syncQueue.add(operation, store, body, path, method);
+    showToast('Saved offline. Will sync when back online.', 3000);
+    return optimistic;
   },
   get: (path) => api.request('GET', path),
   post: (path, body) => api.request('POST', path, body),
