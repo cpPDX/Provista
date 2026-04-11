@@ -39,7 +39,7 @@ router.get('/', requireAuth, async (req, res) => {
       status: 'approved',
       date: { $gte: start, $lt: end }
     })
-      .populate('itemId', 'name category')
+      .populate('itemId', 'name brand category size')
       .populate('storeId', 'name');
 
     let total = 0;

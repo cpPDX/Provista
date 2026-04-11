@@ -8,7 +8,7 @@ router.get('/low-stock', requireAuth, async (req, res) => {
     const items = await InventoryItem.find({
       householdId: req.user.householdId,
       lowStockThreshold: { $ne: null }
-    }).populate('itemId', 'name unit category');
+    }).populate('itemId', 'name brand unit size category isOrganic');
     const low = items.filter(i => i.quantity <= i.lowStockThreshold);
     res.json(low);
   } catch (err) {
@@ -19,7 +19,7 @@ router.get('/low-stock', requireAuth, async (req, res) => {
 router.get('/', requireAuth, requireAdmin, async (req, res) => {
   try {
     const items = await InventoryItem.find({ householdId: req.user.householdId, quantity: { $gt: 0 } })
-      .populate('itemId', 'name category unit')
+      .populate('itemId', 'name brand category unit size isOrganic')
       .sort({ updatedAt: -1 });
     res.json(items);
   } catch (err) {
@@ -50,7 +50,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
       });
       await inv.save();
     }
-    await inv.populate('itemId', 'name category unit');
+    await inv.populate('itemId', 'name brand category unit size isOrganic');
     res.status(201).json(inv);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -64,7 +64,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
       { _id: req.params.id, householdId: req.user.householdId },
       update,
       { new: true, runValidators: true }
-    ).populate('itemId', 'name category unit');
+    ).populate('itemId', 'name brand category unit size isOrganic');
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
     res.json(inv);
   } catch (err) {

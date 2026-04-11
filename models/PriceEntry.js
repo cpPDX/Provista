@@ -13,7 +13,6 @@ const priceEntrySchema = new mongoose.Schema({
   quantity: { type: Number, required: true, default: 1 },
   pricePerUnit: { type: Number, required: true },         // finalPrice / quantity
   date: { type: Date, default: Date.now },
-  isOrganic: { type: Boolean, default: false },
   source: { type: String, enum: ['manual', 'csv'], default: 'manual' },
   status: { type: String, enum: ['approved', 'pending'], default: 'pending' },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },

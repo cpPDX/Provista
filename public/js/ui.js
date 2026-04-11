@@ -28,6 +28,16 @@ function formatPPU(ppu, unit) {
   return `${formatCurrency(ppu)}/${unit || 'unit'}`;
 }
 
+// Format item metadata line: "Brand · Size unit · Category"
+function formatItemMeta(item) {
+  const parts = [];
+  if (item.brand) parts.push(escapeHtml(item.brand));
+  if (item.size && item.unit) parts.push(escapeHtml(item.size + ' ' + item.unit));
+  else if (item.unit) parts.push(escapeHtml(item.unit));
+  if (item.category) parts.push(escapeHtml(item.category));
+  return parts.join(' &middot; ');
+}
+
 // Format date
 function formatDate(d) {
   if (!d) return '';
@@ -91,14 +101,12 @@ function openModal(title, bodyHTML, onConfirm) {
   const firstInput = document.querySelector('#modal-body input:not([type=hidden]), #modal-body select, #modal-body textarea');
   if (firstInput) firstInput.focus();
 
-  // Push modal above keyboard on mobile using visualViewport API
+  // Resize modal to fit above the virtual keyboard on mobile
   if (window.visualViewport) {
     const vpHandler = () => {
       const modal = document.querySelector('.modal');
       if (!modal) return;
-      const offsetFromBottom = window.innerHeight
-        - (window.visualViewport.height + window.visualViewport.offsetTop);
-      modal.style.marginBottom = Math.max(0, offsetFromBottom) + 'px';
+      modal.style.maxHeight = (window.visualViewport.height * 0.92) + 'px';
     };
     window.visualViewport.addEventListener('resize', vpHandler);
     window.visualViewport.addEventListener('scroll', vpHandler);
@@ -157,7 +165,7 @@ function closeModal() {
     delete window._modalVpHandler;
   }
   const modal = document.querySelector('.modal');
-  if (modal) modal.style.marginBottom = '';
+  if (modal) modal.style.maxHeight = '';
 
   // Fire optional close callback (e.g. shopping list price confirmation dismiss)
   if (window._modalCloseCallback) {

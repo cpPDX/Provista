@@ -170,8 +170,8 @@ function renderInventory() {
     return `
       <div class="card" data-inv-id="${inv._id}">
         <div class="card-body">
-          <div class="card-title">${name}${isLow ? ' <span class="badge badge-low-stock">Low</span>' : ''}</div>
-          <div class="card-subtitle">${cat} &middot; Updated ${formatDate(inv.lastUpdated)}</div>
+          <div class="card-title">${name}${inv.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(inv.itemId.brand) + ')</span>' : ''}${isLow ? ' <span class="badge badge-low-stock">Low</span>' : ''}</div>
+          <div class="card-subtitle">${inv.itemId ? formatItemMeta(inv.itemId) : cat} &middot; Updated ${formatDate(inv.lastUpdated)}</div>
           ${inv.notes ? `<div class="text-muted text-sm">${escapeHtml(inv.notes)}</div>` : ''}
           ${thresholdText ? `<div class="text-muted text-sm">${thresholdText}</div>` : ''}
         </div>
@@ -375,7 +375,7 @@ function applyCatalogFilter() {
   const q = (document.getElementById('catalog-search')?.value || '').toLowerCase();
 
   let items = catalogState.items.filter(item => {
-    if (q && !(item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q))) return false;
+    if (q && !(item.name.toLowerCase().includes(q) || item.category.toLowerCase().includes(q) || (item.brand || '').toLowerCase().includes(q))) return false;
     if (categories.length && !categories.includes(item.category)) return false;
     if (organic === 'organic' && !item.isOrganic) return false;
     if (organic === 'conventional' && item.isOrganic) return false;
@@ -499,7 +499,7 @@ function renderCatalog() {
       <div class="card-body-wrap">
         <div class="card-body">
           <div class="card-title">${escapeHtml(item.name)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
-          <div class="card-subtitle">${escapeHtml(item.category)} &middot; ${escapeHtml(item.unit)}</div>
+          <div class="card-subtitle">${formatItemMeta(item)}</div>
         </div>
       </div>
       <div class="card-swipe-delete">Delete</div>
@@ -511,19 +511,23 @@ function renderCatalog() {
     const item = items.find(i => i._id === id);
     if (!item) return;
     card.querySelector('.card-body-wrap').addEventListener('click', () => {
-      openEditItemModal(id, item.name, item.category, item.unit, !!item.isOrganic);
+      openEditItemModal(id, item.name, item.category, item.unit, !!item.isOrganic, item.brand || '', item.size);
     });
     card.querySelector('.card-swipe-delete').addEventListener('click', () => deleteItem(id));
     attachSwipeDelete(card);
   });
 }
 
-function openEditItemModal(id, name, category, unit, isOrganic = false) {
+function openEditItemModal(id, name, category, unit, isOrganic = false, brand = '', size = null) {
   const bodyHTML = `
     <form id="edit-item-form">
       <div class="form-group">
         <label>Item Name</label>
         <input class="form-control" name="name" value="${escapeAttr(name)}" required />
+      </div>
+      <div class="form-group">
+        <label>Brand <span class="text-muted text-sm">(optional)</span></label>
+        <input class="form-control" name="brand" value="${escapeAttr(brand)}" placeholder="e.g. Great Value, Kirkland" />
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -545,6 +549,10 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
             <option value="pack"/><option value="count"/><option value="loaf"/>
           </datalist>
         </div>
+      </div>
+      <div class="form-group">
+        <label>Size <span class="text-muted text-sm">(optional)</span></label>
+        <input class="form-control" type="number" name="size" step="any" min="0" value="${size != null ? size : ''}" placeholder="e.g. 28 (for 28 oz)" />
       </div>
       <div class="form-group" style="display:flex;align-items:center;gap:0.5rem">
         <input type="checkbox" name="isOrganic" id="edit-item-organic" ${isOrganic ? 'checked' : ''} />
@@ -572,10 +580,13 @@ function openEditItemModal(id, name, category, unit, isOrganic = false) {
     e.preventDefault();
     const form = e.target;
     try {
+      const sizeVal = parseFloat(form.size.value);
       await api.items.update(id, {
         name: form.name.value.trim(),
+        brand: form.brand.value.trim(),
         category: form.category.value.trim(),
         unit: form.unit.value.trim(),
+        size: !isNaN(sizeVal) && sizeVal > 0 ? sizeVal : null,
         isOrganic: form.isOrganic.checked
       });
       closeModal();

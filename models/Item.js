@@ -3,8 +3,10 @@ const mongoose = require('mongoose');
 const itemSchema = new mongoose.Schema({
   householdId: { type: mongoose.Schema.Types.ObjectId, ref: 'Household', required: true },
   name: { type: String, required: true, trim: true },
+  brand: { type: String, trim: true, default: '' },
   category: { type: String, required: true, trim: true },
   unit: { type: String, required: true, trim: true },
+  size: { type: Number, default: null },
   barcode: { type: String, trim: true },
   isOrganic: { type: Boolean, default: false },
   isSeeded: { type: Boolean, default: false },

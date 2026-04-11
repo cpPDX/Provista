@@ -8,7 +8,7 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 router.get('/', requireAuth, async (req, res) => {
   try {
     const listItems = await ShoppingListItem.find({ householdId: req.user.householdId })
-      .populate('itemId', 'name category unit')
+      .populate('itemId', 'name brand category unit size isOrganic')
       .populate('addedBy', 'name')
       .sort({ checked: 1, addedAt: -1 });
 
@@ -52,7 +52,7 @@ router.post('/', requireAuth, async (req, res) => {
       addedAt: new Date()
     });
     await item.save();
-    await item.populate('itemId', 'name category unit');
+    await item.populate('itemId', 'name brand category unit size isOrganic');
     res.status(201).json(item);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -66,7 +66,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       { _id: req.params.id, householdId: req.user.householdId },
       req.body,
       { new: true }
-    ).populate('itemId', 'name category unit');
+    ).populate('itemId', 'name brand category unit size isOrganic');
     if (!item) return res.status(404).json({ error: 'Item not found' });
     res.json(item);
   } catch (err) {

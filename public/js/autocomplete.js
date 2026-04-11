@@ -37,8 +37,8 @@ function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
     items.forEach(item => {
       const div = document.createElement('div');
       div.className = 'autocomplete-item';
-      div.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(item.name)}</div>
-        <div class="autocomplete-item-meta">${escapeHtml(item.category)} &middot; ${escapeHtml(item.unit)}</div>`;
+      div.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(item.name)}${item.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.brand) + ')</span>' : ''}</div>
+        <div class="autocomplete-item-meta">${formatItemMeta(item)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>`;
       div.addEventListener('mousedown', () => {
         inputEl.value = item.name;
         closeDropdown();
@@ -151,6 +151,10 @@ async function promptCreateItem(name, onCreated) {
         <label>Item Name</label>
         <input class="form-control" name="name" value="${escapeAttr(name || '')}" required placeholder="e.g. Large Eggs" />
       </div>
+      <div class="form-group">
+        <label>Brand <span class="text-muted text-sm">(optional)</span></label>
+        <input class="form-control" name="brand" placeholder="e.g. Great Value, Kirkland" />
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>Category</label>
@@ -173,6 +177,10 @@ async function promptCreateItem(name, onCreated) {
           </datalist>
         </div>
       </div>
+      <div class="form-group">
+        <label>Size <span class="text-muted text-sm">(optional)</span></label>
+        <input class="form-control" type="number" name="size" step="any" min="0" placeholder="e.g. 28 (for 28 oz)" />
+      </div>
       <div class="form-group" style="display:flex;align-items:center;gap:0.5rem">
         <input type="checkbox" name="isOrganic" id="new-item-organic" />
         <label for="new-item-organic" style="margin:0;font-weight:500">Organic product</label>
@@ -188,10 +196,13 @@ async function promptCreateItem(name, onCreated) {
   document.getElementById('new-item-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const form = e.target;
+    const sizeVal = parseFloat(form.size.value);
     const data = {
       name: form.name.value.trim(),
+      brand: form.brand.value.trim(),
       category: form.category.value.trim(),
       unit: form.unit.value.trim(),
+      size: !isNaN(sizeVal) && sizeVal > 0 ? sizeVal : null,
       isOrganic: form.isOrganic.checked,
       isSeeded: false
     };

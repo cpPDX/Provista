@@ -13,7 +13,7 @@ function calcFinalPrice(regularPrice, salePrice, couponAmount) {
 router.get('/pending', requireAuth, requireAdmin, async (req, res) => {
   try {
     const entries = await PriceEntry.find({ householdId: req.user.householdId, status: 'pending' })
-      .populate('itemId', 'name unit category')
+      .populate('itemId', 'name brand unit size category isOrganic')
       .populate('storeId', 'name')
       .populate('submittedBy', 'name')
       .sort({ createdAt: -1 });
@@ -35,7 +35,7 @@ router.put('/:id/approve', requireAuth, requireAdmin, async (req, res) => {
       reviewedAt: new Date()
     };
 
-    const editable = ['regularPrice', 'salePrice', 'couponAmount', 'couponCode', 'date', 'notes', 'storeId', 'isOrganic'];
+    const editable = ['regularPrice', 'salePrice', 'couponAmount', 'couponCode', 'date', 'notes', 'storeId'];
     editable.forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
 
     // Recalculate derived fields
@@ -50,7 +50,7 @@ router.put('/:id/approve', requireAuth, requireAdmin, async (req, res) => {
       { _id: req.params.id, householdId: req.user.householdId },
       update,
       { new: true }
-    ).populate('itemId', 'name unit category').populate('storeId', 'name').populate('submittedBy', 'name');
+    ).populate('itemId', 'name brand unit size category isOrganic').populate('storeId', 'name').populate('submittedBy', 'name');
     res.json(entry);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -107,7 +107,7 @@ router.get('/history/:itemId', requireAuth, async (req, res) => {
       $or: [{ status: 'approved' }, { status: 'pending', submittedBy: req.user._id }]
     })
       .populate('storeId', 'name location')
-      .populate('itemId', 'name unit category')
+      .populate('itemId', 'name brand unit size category isOrganic')
       .populate('submittedBy', 'name')
       .sort({ date: -1 });
     res.json(entries);
@@ -166,7 +166,7 @@ router.get('/', requireAuth, async (req, res) => {
       if (endDate) query.date.$lte = new Date(endDate);
     }
     const entries = await PriceEntry.find(query)
-      .populate('itemId', 'name unit category')
+      .populate('itemId', 'name brand unit size category isOrganic')
       .populate('storeId', 'name location')
       .sort({ date: -1 })
       .limit(100);
@@ -199,7 +199,7 @@ router.post('/', requireAuth, async (req, res) => {
     });
     await entry.save();
     const populated = await entry.populate([
-      { path: 'itemId', select: 'name unit category' },
+      { path: 'itemId', select: 'name brand unit size category isOrganic' },
       { path: 'storeId', select: 'name location' }
     ]);
     res.status(201).json(populated);

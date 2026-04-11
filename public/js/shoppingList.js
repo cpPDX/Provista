@@ -74,8 +74,8 @@ function renderShoppingList() {
           <div class="list-item-check ${checked ? 'checked' : ''}">${checked ? '✓' : ''}</div>
         </div>
         <div class="card-body">
-          <div class="card-title">${name}</div>
-          <div class="list-item-meta">${cat}${cat && unit ? ' &middot; ' : ''}qty ${item.quantity}${unit ? ' ' + unit : ''}</div>
+          <div class="card-title">${name}${item.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.itemId.brand) + ')</span>' : ''}</div>
+          <div class="list-item-meta">${item.itemId ? formatItemMeta(item.itemId) : cat} &middot; qty ${item.quantity}</div>
           <div class="list-item-meta">Added by ${item.addedBy?.name || 'unknown'}</div>
           ${priceInfo}
         </div>
@@ -415,7 +415,7 @@ function openLowStockReview() {
         return `
           <div class="card" style="margin-bottom:0.5rem">
             <div class="card-body">
-              <div class="card-title">${name}</div>
+              <div class="card-title">${name}${inv.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(inv.itemId.brand) + ')</span>' : ''}</div>
               <div class="card-subtitle">
                 ${inv.quantity} / ${inv.lowStockThreshold} ${unit} remaining
                 ${alreadyOn ? '<span class="badge badge-no-data">Already on list</span>' : ''}

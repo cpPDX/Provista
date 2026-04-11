@@ -12,7 +12,8 @@ router.get('/', requireAuth, async (req, res) => {
     const { search } = req.query;
     const query = { householdId: req.user.householdId };
     if (search && search.length >= 2) {
-      query.name = { $regex: search, $options: 'i' };
+      const re = { $regex: search, $options: 'i' };
+      query.$or = [{ name: re }, { brand: re }];
     }
     const items = await Item.find(query).sort({ name: 1 }).limit(search ? 8 : 0);
     res.json(items);

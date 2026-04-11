@@ -112,8 +112,8 @@ function renderPricesList(clusters) {
     return `
       <div class="card price-list-card" data-cluster-idx="${idx}">
         <div class="card-body">
-          <div class="card-title">${escapeHtml(item?.name || 'Unknown item')}</div>
-          <div class="card-subtitle">${escapeHtml(item?.category || '')} &middot; ${storeName} &middot; ${formatDate(latest.date)}</div>
+          <div class="card-title">${escapeHtml(item?.name || 'Unknown item')}${item?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.brand) + ')</span>' : ''}</div>
+          <div class="card-subtitle">${item ? formatItemMeta(item) : ''} &middot; ${storeName} &middot; ${formatDate(latest.date)}</div>
           <div style="margin-top:4px">${badges}</div>
         </div>
         <div class="card-meta">
@@ -441,7 +441,7 @@ function navigateToCatalogItem(itemId, itemName) {
   loadCatalog().then(() => {
     const item = catalogState?.items.find(i => i._id === itemId);
     if (item) {
-      openEditItemModal(item._id, item.name, item.category, item.unit, !!item.isOrganic);
+      openEditItemModal(item._id, item.name, item.category, item.unit, !!item.isOrganic, item.brand || '', item.size);
     } else {
       // Item not in catalog yet — just scroll to card if present
       const card = document.querySelector(`[data-item-id="${itemId}"]`);
@@ -482,7 +482,7 @@ async function loadDetailHistory(itemId) {
           ${hasCoupon ? `<span class="price-breakdown-coupon">− ${formatCurrency(e.couponAmount)} coupon${e.couponCode ? ` (${e.couponCode})` : ''}</span>` : ''}
         </div>` : '';
 
-      const organicBadge = e.isOrganic ? `<span class="badge badge-organic">🌿 Organic</span> ` : '';
+      const organicBadge = e.itemId?.isOrganic ? `<span class="badge badge-organic">🌿 Organic</span> ` : '';
       const saleBadge = hasSale ? `<span class="badge badge-sale">🏷️ Sale</span> ` : '';
       const couponBadge = hasCoupon ? `<span class="badge badge-coupon">✂️ Coupon</span> ` : '';
       const canDelete = window.appAuth?.isAdmin() && !isPending;
@@ -615,6 +615,9 @@ function openAddPriceModal(prefillItem, onSaved) {
         </div>
         <input type="hidden" id="price-item-id" value="${prefillItem ? escapeAttr(prefillItem._id) : ''}" />
         <input type="hidden" id="price-item-unit" value="${prefillItem ? escapeAttr(prefillItem.unit) : ''}" />
+        <div id="price-item-context" class="item-context" style="display:${prefillItem ? '' : 'none'}">
+          ${prefillItem ? `${formatItemMeta(prefillItem)}${prefillItem.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}` : ''}
+        </div>
       </div>
       <div class="form-group">
         <label>Store <span class="required-star">*</span></label>
@@ -667,11 +670,6 @@ function openAddPriceModal(prefillItem, onSaved) {
 
       <div id="price-calc-preview" class="price-calc-preview price-calc-placeholder">Enter a price above to see the final calculation</div>
 
-      <div class="checkbox-row">
-        <input type="checkbox" id="price-organic" />
-        <label for="price-organic">Organic</label>
-      </div>
-
       <div class="form-group" style="margin-top:0.5rem">
         <label>Notes (optional)</label>
         <input class="form-control" id="price-notes" placeholder="e.g. Store brand" />
@@ -708,6 +706,11 @@ function openAddPriceModal(prefillItem, onSaved) {
     onSelect(item) {
       document.getElementById('price-item-id').value = item._id;
       document.getElementById('price-item-unit').value = item.unit;
+      const ctx = document.getElementById('price-item-context');
+      if (ctx) {
+        ctx.innerHTML = `${formatItemMeta(item)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}`;
+        ctx.style.display = '';
+      }
       recalcPricePreview();
     },
     onCreateNew: isAdmin ? (name) => {
@@ -756,7 +759,6 @@ function openAddPriceModal(prefillItem, onSaved) {
       couponAmount,
       couponCode,
       quantity,
-      isOrganic: document.getElementById('price-organic').checked,
       date: document.getElementById('price-date').value,
       notes: document.getElementById('price-notes').value.trim(),
       source: 'manual'
@@ -805,13 +807,13 @@ async function loadScanPendingSection() {
       const submitter = escapeHtml(e.submittedBy?.name || 'Unknown');
       const hasSale = e.salePrice != null;
       const hasCoupon = e.couponAmount != null && e.couponAmount > 0;
-      const isOrganic = e.isOrganic;
+      const isOrganic = e.itemId?.isOrganic;
       return `
         <div class="pending-card" id="pending-${e._id}">
           <div class="pending-card-header">
             <div>
-              <div style="font-weight:600">${name}${isOrganic ? ' <span class="badge badge-organic">🌿 Organic</span>' : ''}</div>
-              <div class="text-muted text-sm">${store} &middot; ${formatDate(e.date)} &middot; by ${submitter}</div>
+              <div style="font-weight:600">${name}${e.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(e.itemId.brand) + ')</span>' : ''}${isOrganic ? ' <span class="badge badge-organic">🌿 Organic</span>' : ''}</div>
+              <div class="text-muted text-sm">${e.itemId ? formatItemMeta(e.itemId) : ''} &middot; ${store} &middot; ${formatDate(e.date)} &middot; by ${submitter}</div>
             </div>
             <div style="text-align:right">
               <div style="font-weight:700;font-size:1.1rem">${formatCurrency(e.finalPrice)}</div>
@@ -876,10 +878,6 @@ function openApproveModal(id, entryRaw, onSuccess) {
         </div>
       </div>
       <div class="checkbox-row">
-        <input type="checkbox" id="approve-organic" ${entryRaw.isOrganic ? 'checked' : ''} />
-        <label for="approve-organic">Organic</label>
-      </div>
-      <div class="checkbox-row">
         <input type="checkbox" id="approve-sale" ${entryRaw.salePrice != null ? 'checked' : ''} />
         <label for="approve-sale">On Sale</label>
       </div>
@@ -935,7 +933,6 @@ function openApproveModal(id, entryRaw, onSuccess) {
     const couponOn = document.getElementById('approve-coupon').checked;
     try {
       await api.prices.approve(id, {
-        isOrganic: document.getElementById('approve-organic').checked,
         regularPrice: parseFloat(document.getElementById('approve-reg-price').value),
         quantity: parseFloat(document.getElementById('approve-qty').value),
         salePrice: saleOn ? (parseFloat(document.getElementById('approve-sale-price').value) || null) : null,
