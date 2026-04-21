@@ -464,6 +464,29 @@ function initShoppingListTab() {
 
   document.getElementById('btn-add-list-item').addEventListener('click', openAddListItemModal);
 
+  const scanListBtn = document.getElementById('btn-scan-list-item');
+  if (scanListBtn) {
+    if (!window.appAuth?.features?.barcodeScanning) {
+      scanListBtn.style.display = 'none';
+    } else {
+      scanListBtn.addEventListener('click', () => {
+        if (!window.BarcodeScanner) return;
+        BarcodeScanner.open(async (upc) => {
+          if (!upc) return;
+          await handleBarcodeResult(upc, async (item) => {
+            try {
+              await api.shoppingList.add({ itemId: item._id, quantity: 1 });
+              await loadShoppingListTab();
+              showToast(`${item.name} added to list`);
+            } catch (err) {
+              handleError(err, 'Failed to add item to list');
+            }
+          });
+        });
+      });
+    }
+  }
+
   document.getElementById('btn-deselect-all')?.addEventListener('click', deselectAll);
 
   document.getElementById('btn-done-shopping')?.addEventListener('click', async () => {

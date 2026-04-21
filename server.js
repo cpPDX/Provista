@@ -33,6 +33,7 @@ app.use('/api/spend', require('./routes/spend'));
 app.use('/api/meal-plan', require('./routes/mealPlan'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/sync', require('./routes/sync'));
+app.use('/api/barcode', require('./routes/barcode'));
 
 // Serve login page for /join route (join via QR code link)
 app.get('/join', (req, res) => {
