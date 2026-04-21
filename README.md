@@ -1,6 +1,6 @@
-# Grocery Tracker
+# Provista
 
-A browser-based grocery price tracker for households — log prices, scan receipts, compare stores, and see where your grocery budget is actually going.
+A browser-based grocery price tracker for households — log prices, scan barcodes, compare stores, and see where your grocery budget is actually going.
 
 ---
 
@@ -16,9 +16,9 @@ Grocery prices change constantly, vary by store, and go on sale in unpredictable
 
 ## How We're Solving It
 
-Grocery Tracker gives households a shared, running log of prices — tied to specific stores, with sale prices, coupon tracking, and a price-per-unit breakdown so you can compare apples to apples (literally).
+Provista gives households a shared, running log of prices — tied to specific stores, with sale prices, coupon tracking, and a price-per-unit breakdown so you can compare apples to apples (literally).
 
-- **Receipt scanning** captures prices without manual entry
+- **Barcode scanning** captures item details without manual entry
 - **Shopping list** shows the best-known price and which store to go to for each item
 - **Spend analytics** break down monthly spend by category and store
 - **Inventory tracking** prevents over-buying
@@ -31,8 +31,8 @@ Grocery Tracker gives households a shared, running log of prices — tied to spe
 - **Auth & Households** — JWT auth (httpOnly cookies), multi-user households with Owner/Admin/Member roles
 - **Invite System** — 6-character invite codes + QR codes; 48-hour expiry, admin-regeneratable
 - **Price Tracking** — Log prices per item per store with regular price, sale price, and coupon breakdown; compare stores; view trends over time
-- **Pending Approval** — Members submit prices for admin review; admins see a badge and inline review queue in the Scan tab
-- **Receipt Scanning** — OCR-powered receipt parsing via Tesseract.js (runs entirely in-browser, no API key)
+- **Pending Approval** — Members submit prices for admin review; admins see a badge and inline review queue
+- **Barcode Scanning** — Scan UPC/EAN barcodes to auto-populate item details via Open Food Facts; partial matches let you fill in gaps and save them for future scans
 - **Shopping List** — Persistent list with best-price-per-store suggestions and "added by" attribution
 - **Spend Analytics** — Monthly spend totals with breakdowns by category and store
 - **Inventory** — Basic in-stock tracking with quantity management (admin only)
@@ -44,7 +44,7 @@ Grocery Tracker gives households a shared, running log of prices — tied to spe
 - **Backend**: Node.js + Express
 - **Database**: MongoDB (Atlas free tier or local)
 - **Frontend**: Vanilla HTML/CSS/JavaScript — mobile-first, no frameworks, no build step
-- **OCR**: Tesseract.js v5 (client-side, loaded on demand from CDN)
+- **Barcode**: ZXing (client-side, loaded on demand from CDN) + Open Food Facts public API
 - **Auth**: JWT stored in httpOnly cookies, bcrypt password hashing
 
 ---
@@ -76,9 +76,9 @@ It looks like:
 mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
 ```
 
-Add `/grocery-tracker` before the `?` to set the database name:
+Add `/provista` before the `?` to set the database name:
 ```
-mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/grocery-tracker?retryWrites=true&w=majority
+mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/provista?retryWrites=true&w=majority
 ```
 
 ---
@@ -87,8 +87,8 @@ mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/grocery-tracker?r
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/cppdx/grocerytracker.git
-cd grocerytracker
+git clone https://github.com/cppdx/provista.git
+cd provista
 
 # 2. Install dependencies
 npm install
@@ -99,7 +99,7 @@ npm install
 Create a `.env` file in the project root:
 
 ```env
-MONGODB_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/grocery-tracker?retryWrites=true&w=majority
+MONGODB_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/provista?retryWrites=true&w=majority
 JWT_SECRET=any-long-random-string-you-make-up
 PORT=3000
 ```
@@ -169,7 +169,7 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MONGODB_URI` | `mongodb://localhost:27017/grocerytracker` | MongoDB connection string |
+| `MONGODB_URI` | `mongodb://localhost:27017/provista` | MongoDB connection string |
 | `PORT` | `3000` | HTTP port (auto-set by Railway) |
 | `JWT_SECRET` | *(required)* | Long random secret for signing JWTs |
 | `NODE_ENV` | `development` | Set to `production` for secure cookies |
@@ -190,19 +190,24 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 │   └── ShoppingListItem.js
 ├── routes/
 │   ├── auth.js            # Register, login, logout, profile, password
-│   ├── household.js       # Members, roles, invite codes
+│   ├── household.js       # Members, roles, invite codes, settings
 │   ├── items.js
 │   ├── stores.js
 │   ├── prices.js          # Price CRUD, compare, history, pending approval
+│   ├── barcode.js         # UPC lookup via local catalog + Open Food Facts
 │   ├── inventory.js
 │   ├── shoppingList.js
 │   └── spend.js
 ├── middleware/
 │   └── auth.js            # requireAuth, requireAdmin, requireOwner
 ├── utils/
-│   └── seed.js            # seedHousehold() — called on household creation
+│   ├── seed.js            # seedHousehold() — called on household creation
+│   ├── upc.js             # UPC-A / EAN-13 / UPC-E normalization
+│   └── categoryMap.js     # Open Food Facts → local category mapping
 ├── seeds/
 │   └── items.json         # ~200 seeded grocery items
+├── scripts/
+│   └── backfill-upcs.js   # One-time UPC backfill for seeded items
 └── public/
     ├── index.html
     ├── login.html
@@ -214,9 +219,9 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
         ├── auth.js         # window.appAuth singleton
         ├── ui.js           # Shared utilities, formatting, charting
         ├── autocomplete.js # Reusable item + store autocomplete
+        ├── scanner.js      # Barcode scanner (ZXing) + confirmation flow
         ├── prices.js       # Price log tab
         ├── shoppingList.js # Shopping list tab
-        ├── scan.js         # Receipt OCR + pending review queue
         ├── spend.js        # Analytics tab
         ├── more.js         # Inventory, catalog, stores, household, account
         └── app.js          # Tab navigation + initialization
@@ -230,12 +235,13 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 POST   /api/auth/register             create account
 POST   /api/auth/login                login
 POST   /api/auth/logout               clear cookie
-GET    /api/auth/me                   current user + household
-PUT    /api/auth/profile              update name/email
+GET    /api/auth/me                   current user + household + feature flags
+PUT    /api/auth/profile              update name/email/barcode preference
 PUT    /api/auth/password             change password
 
 GET    /api/household                 members list
 PUT    /api/household                 rename household (owner only)
+PATCH  /api/household/settings        update household settings (admin+)
 GET    /api/household/invite          get current invite code + QR data
 POST   /api/household/invite          regenerate invite code
 DELETE /api/household/members/:id     remove member
@@ -259,6 +265,8 @@ GET    /api/prices/pending            list pending entries (admin+)
 GET    /api/prices/compare/:itemId    latest approved price per store for an item
 GET    /api/prices/history/:itemId    full approved price history for an item
 GET    /api/prices/last-purchased/:itemId  most recent approved entry per store
+
+GET    /api/barcode/:upc              look up item by UPC (local catalog, then Open Food Facts)
 
 GET    /api/inventory                 list inventory (quantity > 0)
 POST   /api/inventory                 add or update inventory item
