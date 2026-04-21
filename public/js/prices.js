@@ -608,10 +608,13 @@ function openAddPriceModal(prefillItem, onSaved) {
     <form id="add-price-form">
       <div class="form-group">
         <label>Item <span class="required-star">*</span></label>
-        <div class="autocomplete-wrap">
-          <input class="form-control" id="price-item-input" placeholder="Search or create item..." autocomplete="off"
-            value="${prefillItem ? escapeAttr(prefillItem.name) : ''}" required />
-          <div class="autocomplete-dropdown" id="price-item-dropdown"></div>
+        <div class="autocomplete-wrap" style="display:flex;gap:0.375rem;align-items:flex-start">
+          <div style="flex:1;position:relative">
+            <input class="form-control" id="price-item-input" placeholder="Search or create item..." autocomplete="off"
+              value="${prefillItem ? escapeAttr(prefillItem.name) : ''}" required />
+            <div class="autocomplete-dropdown" id="price-item-dropdown"></div>
+          </div>
+          ${window.appAuth?.features?.barcodeScanning ? `<button type="button" id="price-scan-btn" class="btn-icon" title="Scan barcode">&#9638;</button>` : ''}
         </div>
         <input type="hidden" id="price-item-id" value="${prefillItem ? escapeAttr(prefillItem._id) : ''}" />
         <input type="hidden" id="price-item-unit" value="${prefillItem ? escapeAttr(prefillItem.unit) : ''}" />
@@ -722,6 +725,27 @@ function openAddPriceModal(prefillItem, onSaved) {
       });
     } : null
   });
+
+  // Barcode scan button
+  const priceScanBtn = document.getElementById('price-scan-btn');
+  if (priceScanBtn && window.BarcodeScanner) {
+    priceScanBtn.addEventListener('click', () => {
+      BarcodeScanner.open(async (upc) => {
+        if (!upc) return;
+        await handleBarcodeResult(upc, (item) => {
+          itemInput.value = item.name;
+          document.getElementById('price-item-id').value = item._id;
+          document.getElementById('price-item-unit').value = item.unit || '';
+          const ctx = document.getElementById('price-item-context');
+          if (ctx) {
+            ctx.innerHTML = `${formatItemMeta(item)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}`;
+            ctx.style.display = '';
+          }
+          recalcPricePreview();
+        });
+      });
+    });
+  }
 
   // Store autocomplete
   const storeInput = document.getElementById('price-store-input');

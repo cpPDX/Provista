@@ -109,6 +109,7 @@ const api = {
   get: (path) => api.request('GET', path),
   post: (path, body) => api.request('POST', path, body),
   put: (path, body) => api.request('PUT', path, body),
+  patch: (path, body) => api.request('PATCH', path, body),
   delete: (path) => api.request('DELETE', path),
 
   items: {
@@ -168,10 +169,14 @@ const api = {
   household: {
     get: () => api.get('/household'),
     update: (data) => api.put('/household', data),
+    updateSettings: (data) => api.patch('/household/settings', data),
     getInvite: () => api.get('/household/invite'),
     regenerateInvite: () => api.post('/household/invite', {}),
     removeMember: (id) => api.delete(`/household/members/${id}`),
     updateMemberRole: (id, role) => api.put(`/household/members/${id}`, { role }),
     deleteHousehold: (data) => api.request('DELETE', '/household', data)
+  },
+  barcode: {
+    lookup: (upc) => api.get(`/barcode/${encodeURIComponent(upc)}`)
   }
 };

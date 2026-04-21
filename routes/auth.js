@@ -116,7 +116,8 @@ router.get('/me', async (req, res) => {
     // Feature flags — offlineAccess is on for all households for now
     const features = {
       offlineAccess: true,
-      advancedAnalytics: false
+      advancedAnalytics: false,
+      barcodeScanning: true
     };
 
     res.json({ user, household, features });
@@ -131,8 +132,10 @@ router.put('/profile', async (req, res) => {
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const { name, email } = req.body;
-    if (!name && !email) return res.status(400).json({ error: 'Nothing to update' });
+    const { name, email, barcodeAutoAccept } = req.body;
+    if (name === undefined && email === undefined && barcodeAutoAccept === undefined) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
 
     const update = {};
     if (name) update.name = name.trim();
@@ -140,6 +143,10 @@ router.put('/profile', async (req, res) => {
       const existing = await User.findOne({ email: email.toLowerCase(), _id: { $ne: payload.userId } });
       if (existing) return res.status(409).json({ error: 'Email already in use' });
       update.email = email.toLowerCase().trim();
+    }
+    if (barcodeAutoAccept !== undefined) {
+      // null = inherit household, true/false = explicit override
+      update['preferences.barcodeAutoAccept'] = barcodeAutoAccept === null ? null : Boolean(barcodeAutoAccept);
     }
 
     const user = await User.findByIdAndUpdate(payload.userId, update, { new: true }).select('-passwordHash');
