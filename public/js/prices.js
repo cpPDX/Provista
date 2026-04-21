@@ -728,8 +728,12 @@ function openAddPriceModal(prefillItem, onSaved) {
 
   // Barcode scan button
   const priceScanBtn = document.getElementById('price-scan-btn');
-  if (priceScanBtn && window.BarcodeScanner) {
+  if (priceScanBtn) {
     priceScanBtn.addEventListener('click', () => {
+      if (!window.BarcodeScanner) {
+        showToast('Scanner unavailable. Try reloading the page.', 3000);
+        return;
+      }
       BarcodeScanner.open(async (upc) => {
         if (!upc) return;
         await handleBarcodeResult(upc, (item) => {

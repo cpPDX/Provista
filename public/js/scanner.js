@@ -2,7 +2,6 @@
 // Provides window.BarcodeScanner singleton and window.handleBarcodeResult helper.
 
 window.BarcodeScanner = (() => {
-  let _stream = null;
   let _codeReader = null;
   let _onResultCallback = null;
 
@@ -17,22 +16,18 @@ window.BarcodeScanner = (() => {
         _codeReader = null;
       }
     } catch (_) {}
-    try {
-      if (_stream) {
-        _stream.getTracks().forEach(t => t.stop());
-        _stream = null;
-      }
-    } catch (_) {}
-    const video = document.getElementById('scanner-video');
-    if (video) { video.srcObject = null; }
   }
 
   function close() {
     _stopCamera();
-    document.getElementById('scanner-overlay').style.display = 'none';
-    document.getElementById('scanner-manual-wrap').style.display = 'none';
-    document.getElementById('scanner-manual-input').value = '';
-    document.getElementById('scanner-status').textContent = 'Align barcode within the frame';
+    const overlay = document.getElementById('scanner-overlay');
+    if (overlay) overlay.style.display = 'none';
+    const manualWrap = document.getElementById('scanner-manual-wrap');
+    if (manualWrap) manualWrap.style.display = 'none';
+    const manualInput = document.getElementById('scanner-manual-input');
+    if (manualInput) manualInput.value = '';
+    const status = document.getElementById('scanner-status');
+    if (status) status.textContent = 'Align barcode within the frame';
     _onResultCallback = null;
   }
 
@@ -40,6 +35,13 @@ window.BarcodeScanner = (() => {
     const cb = _onResultCallback;
     close();
     if (cb) cb(upc);
+  }
+
+  function _showError(message) {
+    const status = document.getElementById('scanner-status');
+    if (status) status.textContent = message;
+    const manualWrap = document.getElementById('scanner-manual-wrap');
+    if (manualWrap) manualWrap.style.display = 'flex';
   }
 
   async function open(onResult) {
@@ -51,6 +53,12 @@ window.BarcodeScanner = (() => {
     _onResultCallback = onResult;
 
     const overlay = document.getElementById('scanner-overlay');
+    if (!overlay) {
+      // scanner HTML missing from DOM — likely a stale service worker cache
+      showToast('Scanner unavailable. Try reloading the page.', 4000);
+      if (onResult) onResult(null);
+      return;
+    }
     overlay.style.display = 'flex';
 
     // Wire close button
@@ -62,8 +70,7 @@ window.BarcodeScanner = (() => {
     // Wire manual toggle
     document.getElementById('scanner-manual-toggle').onclick = () => {
       _stopCamera();
-      const manualWrap = document.getElementById('scanner-manual-wrap');
-      manualWrap.style.display = 'flex';
+      document.getElementById('scanner-manual-wrap').style.display = 'flex';
       document.getElementById('scanner-manual-input').focus();
     };
 
@@ -79,55 +86,38 @@ window.BarcodeScanner = (() => {
       }
     };
 
-    const status = document.getElementById('scanner-status');
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      status.textContent = 'Camera not supported on this device.';
-      document.getElementById('scanner-manual-wrap').style.display = 'flex';
+    if (!window.ZXing?.BrowserMultiFormatReader) {
+      _showError('Barcode library not loaded. Use manual entry below.');
       return;
     }
+
+    // Use decodeFromConstraints — lets ZXing call getUserMedia internally,
+    // which is required for reliable camera access on iOS Safari.
+    // Do NOT construct hints using ZXing.BarcodeFormat: those enum references
+    // are unreliable in the UMD bundle and cause silent TypeErrors on some browsers.
+    _codeReader = new ZXing.BrowserMultiFormatReader();
 
     try {
-      _stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } }
-      });
-    } catch (err) {
-      console.warn('Camera access denied:', err);
-      status.textContent = 'Camera access denied. Use manual entry below.';
-      document.getElementById('scanner-manual-wrap').style.display = 'flex';
-      return;
-    }
-
-    const video = document.getElementById('scanner-video');
-    video.srcObject = _stream;
-
-    if (!window.ZXing) {
-      status.textContent = 'Barcode library not loaded. Use manual entry.';
-      document.getElementById('scanner-manual-wrap').style.display = 'flex';
-      return;
-    }
-
-    const hints = new Map();
-    const formats = [
-      ZXing.BarcodeFormat.UPC_A,
-      ZXing.BarcodeFormat.UPC_E,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8
-    ];
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
-
-    _codeReader = new ZXing.BrowserMultiFormatReader(hints);
-
-    try {
-      await _codeReader.decodeFromStream(_stream, video, (result, err) => {
-        if (result) {
-          _deliver(result.getText());
+      const video = document.getElementById('scanner-video');
+      await _codeReader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' } } },
+        video,
+        (result, err) => {
+          if (result) {
+            _deliver(result.getText());
+          }
+          // err fires on every frame that doesn't decode — that's expected, ignore it
         }
-      });
+      );
     } catch (err) {
-      console.warn('ZXing decode error:', err);
-      status.textContent = 'Could not start scanner. Use manual entry.';
-      document.getElementById('scanner-manual-wrap').style.display = 'flex';
+      console.warn('ZXing scanner error:', err);
+      if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+        _showError('Camera access denied. Use manual entry below.');
+      } else if (err && err.name === 'NotFoundError') {
+        _showError('No camera found. Use manual entry below.');
+      } else {
+        _showError('Could not start scanner. Use manual entry below.');
+      }
     }
   }
 
@@ -154,31 +144,26 @@ async function handleBarcodeResult(upc, onItem) {
   }
 
   if (!result.found) {
-    // Not found anywhere — open create item modal with UPC pre-noted
     _openBarcodeConfirmModal(result, onItem);
     return;
   }
 
   if (result.source === 'local') {
-    // Already in household catalog — use directly
     onItem(result.item);
     return;
   }
 
   // Found on Open Food Facts
   if (result.confidence === 'full' && result.autoAccept) {
-    // Auto-accept: create silently and hand back
     await _createItemFromBarcode(result.item, onItem);
     return;
   }
 
-  // Show confirmation UI
   _openBarcodeConfirmModal(result, onItem);
 }
 
 function _openBarcodeConfirmModal(result, onItem) {
   const item = result.item || {};
-  const missing = result.missingFields || ['name', 'category', 'unit'];
   const isNotFound = !result.found;
 
   const categories = [
@@ -199,7 +184,6 @@ function _openBarcodeConfirmModal(result, onItem) {
   let bodyHTML;
 
   if (!isPartial) {
-    // Full match — just confirm
     bodyHTML = `
       <div class="barcode-result-summary">
         <div class="barcode-result-name">${escapeHtml(item.name)}</div>
@@ -218,7 +202,6 @@ function _openBarcodeConfirmModal(result, onItem) {
         </div>
       </form>`;
   } else {
-    // Partial or not found — editable form
     const helpText = isNotFound
       ? 'Barcode not in our database. Fill in the details to add it.'
       : 'Some details are missing. Fill them in to complete the item.';
