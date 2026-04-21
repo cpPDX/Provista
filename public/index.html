@@ -50,6 +50,7 @@
             🔴 Low Stock <span id="low-stock-count" class="badge-num"></span>
           </button>
           <button class="btn btn-primary btn-sm" id="btn-add-list-item">+ Add</button>
+          <button class="btn btn-outline btn-sm" id="btn-scan-list-item" title="Scan barcode to add item">&#9638;</button>
         </div>
       </header>
       <div id="list-summary" class="store-summary"></div>
@@ -172,6 +173,7 @@
           <div style="display:flex;gap:0.375rem;align-items:center">
             <button class="btn btn-icon" id="btn-catalog-filter" style="position:relative" title="Filter &amp; Sort">⚙<span id="catalog-filter-dot" class="filter-active-dot" style="display:none"></span></button>
             <button class="btn btn-primary btn-sm" id="btn-add-item-catalog">+ Add Item</button>
+            <button class="btn btn-outline btn-sm admin-only" id="btn-scan-catalog" title="Scan barcode to add item">&#9638; Scan</button>
           </div>
         </div>
         <div id="catalog-back-banner" class="catalog-back-banner" style="display:none">
@@ -321,6 +323,30 @@
     </div>
   </div>
 
+  <!-- Barcode scanner sheet -->
+  <div id="scanner-overlay" class="filter-sheet-overlay" style="display:none">
+    <div class="scanner-sheet">
+      <div class="scanner-sheet-header">
+        <span>Scan Barcode</span>
+        <button class="btn-link" id="scanner-close-btn">&#x2715; Cancel</button>
+      </div>
+      <div class="scanner-sheet-body">
+        <div class="scanner-viewfinder-wrap">
+          <video id="scanner-video" playsinline autoplay muted></video>
+          <div class="scanner-viewfinder"></div>
+        </div>
+        <p id="scanner-status" class="scanner-status">Align barcode within the frame</p>
+        <div id="scanner-manual-wrap" class="scanner-manual-wrap" style="display:none">
+          <input type="text" id="scanner-manual-input" class="form-control" inputmode="numeric" placeholder="Enter UPC barcode number">
+          <button id="scanner-manual-submit" class="btn btn-primary btn-sm">Look Up</button>
+        </div>
+      </div>
+      <div class="scanner-sheet-footer">
+        <button class="btn-link" id="scanner-manual-toggle">Enter barcode manually</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Filter sheet (shared by prices + catalog) -->
   <div id="filter-sheet-overlay" class="filter-sheet-overlay" style="display:none">
     <div class="filter-sheet" id="filter-sheet">
@@ -349,7 +375,8 @@
   <script src="/js/mealPlan.js"></script>
   <script src="/js/onboarding.js"></script>
   <script src="/js/install-prompt.js"></script>
+  <script src="https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js"></script>
+  <script src="/js/scanner.js"></script>
   <script src="/js/app.js"></script>
-  <!-- scan.js removed: receipt scanning feature removed -->
 </body>
 </html>

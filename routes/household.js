@@ -36,6 +36,26 @@ router.put('/', requireAuth, requireOwner, async (req, res) => {
   }
 });
 
+// PATCH /api/household/settings - update household-level settings (admin+)
+router.patch('/settings', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { barcodeAutoAccept } = req.body;
+    const update = {};
+    if (typeof barcodeAutoAccept === 'boolean') {
+      update['settings.barcodeAutoAccept'] = barcodeAutoAccept;
+    }
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ error: 'No valid settings provided' });
+    }
+    const household = await Household.findByIdAndUpdate(
+      req.user.householdId, { $set: update }, { new: true }
+    ).select('settings');
+    res.json({ settings: household.settings });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/household/invite - get invite code and QR data (admin+)
 router.get('/invite', requireAuth, requireAdmin, async (req, res) => {
   try {

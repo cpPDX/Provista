@@ -44,6 +44,20 @@ async function loadAccountSettings() {
       <button type="submit" class="btn btn-primary btn-full">Save Profile</button>
     </form>
 
+    ${auth.features?.barcodeScanning ? `
+    <h3 style="margin:0 0 0.75rem;font-size:1rem">Barcode Scanning</h3>
+    <div style="margin-bottom:1.5rem">
+      <div class="filter-toggle-row">
+        <span>Auto-accept barcode matches for me</span>
+        <select id="barcode-accept-pref" class="form-control" style="width:auto">
+          <option value="inherit">Inherit from household</option>
+          <option value="true">Always auto-accept</option>
+          <option value="false">Always confirm</option>
+        </select>
+      </div>
+      <p class="text-muted text-sm" style="margin-top:0.5rem">Override the household barcode setting for your scans only.</p>
+    </div>` : ''}
+
     <h3 style="margin:0 0 0.75rem;font-size:1rem">Change Password</h3>
     <form id="password-form" style="margin-bottom:1.5rem">
       <div class="form-group">
@@ -82,6 +96,24 @@ async function loadAccountSettings() {
       handleError(err, 'Failed to update profile');
     }
   });
+
+  // Barcode preference selector
+  const barcodePrefSel = document.getElementById('barcode-accept-pref');
+  if (barcodePrefSel) {
+    const current = user.preferences?.barcodeAutoAccept;
+    barcodePrefSel.value = current === null || current === undefined ? 'inherit' : String(current);
+    barcodePrefSel.addEventListener('change', async () => {
+      const val = barcodePrefSel.value;
+      const barcodeAutoAccept = val === 'inherit' ? null : val === 'true';
+      try {
+        await api.auth.updateProfile({ barcodeAutoAccept });
+        if (auth.user.preferences) auth.user.preferences.barcodeAutoAccept = barcodeAutoAccept;
+        showToast('Preference saved');
+      } catch (err) {
+        handleError(err, 'Failed to save preference');
+      }
+    });
+  }
 
   document.getElementById('password-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -752,6 +784,18 @@ async function loadHousehold() {
         </div>`;
     }
 
+    // Barcode scanning settings (admin+, only if feature enabled)
+    if (auth.isAdmin() && auth.features?.barcodeScanning) {
+      const autoAcceptChecked = household.settings?.barcodeAutoAccept ? ' checked' : '';
+      html += `
+        <h2 class="section-title" style="padding-left:0;margin-top:0.5rem">Barcode Scanning</h2>
+        <div class="filter-toggle-row" style="margin-bottom:0.5rem">
+          <label for="household-barcode-autaccept" style="cursor:pointer">Auto-accept barcode matches for new items</label>
+          <input type="checkbox" id="household-barcode-autaccept"${autoAcceptChecked} />
+        </div>
+        <p class="text-muted text-sm">When enabled, confident barcode matches are saved automatically without requiring review.</p>`;
+    }
+
     // Danger zone — delete household (owner only)
     if (auth.isOwner()) {
       html += `
@@ -766,6 +810,19 @@ async function loadHousehold() {
 
     if (auth.isAdmin()) {
       document.getElementById('btn-show-invite').addEventListener('click', loadInviteCode);
+    }
+
+    const hhBarcodeToggle = document.getElementById('household-barcode-autaccept');
+    if (hhBarcodeToggle) {
+      hhBarcodeToggle.addEventListener('change', async () => {
+        try {
+          await api.household.updateSettings({ barcodeAutoAccept: hhBarcodeToggle.checked });
+          showToast('Setting saved');
+        } catch (err) {
+          handleError(err, 'Failed to save setting');
+          hhBarcodeToggle.checked = !hhBarcodeToggle.checked; // revert
+        }
+      });
     }
 
     if (auth.isOwner()) {
@@ -926,6 +983,17 @@ function openAddCatalogItemModal() {
   });
 }
 
+function openScanCatalogItemModal() {
+  if (!window.BarcodeScanner) return;
+  BarcodeScanner.open(async (upc) => {
+    if (!upc) return;
+    await handleBarcodeResult(upc, async () => {
+      await loadCatalog();
+      showToast('Item added via barcode scan');
+    });
+  });
+}
+
 // ===== About =====
 function loadAboutSection() {
   const isAdmin = window.appAuth?.isAdmin();
@@ -1072,6 +1140,11 @@ function initMoreTab() {
 
   document.getElementById('btn-add-inventory').addEventListener('click', openAddInventoryModal);
   document.getElementById('btn-add-item-catalog').addEventListener('click', openAddCatalogItemModal);
+  const scanCatalogBtn = document.getElementById('btn-scan-catalog');
+  if (scanCatalogBtn) {
+    scanCatalogBtn.addEventListener('click', openScanCatalogItemModal);
+    if (!window.appAuth?.features?.barcodeScanning) scanCatalogBtn.style.display = 'none';
+  }
   document.getElementById('btn-add-store').addEventListener('click', () => {
     promptCreateStore('', async (store) => {
       await loadStores();
