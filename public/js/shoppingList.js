@@ -470,7 +470,7 @@ function initShoppingListTab() {
       scanListBtn.style.display = 'none';
     } else {
       scanListBtn.addEventListener('click', () => {
-        if (!window.BarcodeScanner) return;
+        if (!window.BarcodeScanner) { showToast('Scanner unavailable. Try reloading the page.', 3000); return; }
         BarcodeScanner.open(async (upc) => {
           if (!upc) return;
           await handleBarcodeResult(upc, async (item) => {
