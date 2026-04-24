@@ -86,6 +86,16 @@ window.BarcodeScanner = (() => {
       }
     };
 
+    // Load ZXing on demand — only when the scanner is actually opened and the feature is on
+    if (!window.ZXing?.BrowserMultiFormatReader) {
+      try {
+        await _loadScript('https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js');
+      } catch {
+        _showError('Barcode library failed to load. Use manual entry below.');
+        return;
+      }
+    }
+
     if (!window.ZXing?.BrowserMultiFormatReader) {
       _showError('Barcode library not loaded. Use manual entry below.');
       return;
@@ -110,6 +120,7 @@ window.BarcodeScanner = (() => {
         }
       );
     } catch (err) {
+      _stopCamera();
       console.warn('ZXing scanner error:', err);
       if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
         _showError('Camera access denied. Use manual entry below.');
@@ -119,6 +130,16 @@ window.BarcodeScanner = (() => {
         _showError('Could not start scanner. Use manual entry below.');
       }
     }
+  }
+
+  function _loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
   }
 
   return { open, close };
@@ -189,7 +210,7 @@ function _openBarcodeConfirmModal(result, onItem) {
         <div class="barcode-result-name">${escapeHtml(item.name)}</div>
         ${item.brand ? `<div class="text-muted text-sm">${escapeHtml(item.brand)}</div>` : ''}
         <div class="barcode-result-meta">
-          ${escapeHtml(item.category)} &middot; ${escapeHtml(item.unit)}
+          ${escapeHtml(item.category)} &middot; ${escapeHtml(item.unit)}${item.size ? ' &middot; ' + escapeHtml(String(item.size)) : ''}
           ${item.isOrganic ? '<span class="badge badge-organic">Organic</span>' : ''}
         </div>
         <div class="barcode-upc-display">${escapeHtml(item.upc || '')}</div>
@@ -232,6 +253,10 @@ function _openBarcodeConfirmModal(result, onItem) {
             ${unitOptions}
           </select>
         </div>
+        <div class="form-group">
+          <label>Size <span class="text-muted">(optional)</span></label>
+          <input type="number" name="size" class="form-control" step="any" min="0" value="${escapeAttr(item.size != null ? String(item.size) : '')}" placeholder="e.g. 64">
+        </div>
         <div class="form-group form-check">
           <label><input type="checkbox" name="isOrganic"${item.isOrganic ? ' checked' : ''}> Organic</label>
         </div>
@@ -243,17 +268,20 @@ function _openBarcodeConfirmModal(result, onItem) {
   }
 
   openModal(isNotFound ? 'Add New Item' : 'Confirm Item', bodyHTML, async (form) => {
+    const sizeVal = isPartial && form.size?.value ? parseFloat(form.size.value) : null;
     const data = isPartial
       ? {
           name: form.name.value.trim(),
           brand: form.brand.value.trim(),
           category: form.category.value,
           unit: form.unit.value,
+          size: sizeVal && !isNaN(sizeVal) ? sizeVal : null,
           isOrganic: form.isOrganic?.checked || false,
           upc: item.upc || null,
-          upcSource: 'scan'
+          upcSource: 'scan',
+          upcPendingLookup: false
         }
-      : { ...item, upcSource: 'scan' };
+      : { ...item, upcSource: 'scan', upcPendingLookup: false };
 
     if (!data.name) { showToast('Item name is required', 2500); return; }
     if (!data.category) { showToast('Category is required', 2500); return; }

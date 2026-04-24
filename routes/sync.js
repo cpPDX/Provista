@@ -10,6 +10,9 @@ const MealPlan = require('../models/MealPlan');
 const User = require('../models/User');
 const Household = require('../models/Household');
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 // GET /api/sync/bootstrap - returns all household data for offline cache population
 router.get('/bootstrap', requireAuth, async (req, res) => {
   try {
@@ -85,7 +88,7 @@ router.get('/bootstrap', requireAuth, async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 

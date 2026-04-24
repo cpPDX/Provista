@@ -9,6 +9,9 @@ const { mapCategory } = require('../utils/categoryMap');
 
 const OFF_TIMEOUT_MS = 5000;
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 // GET /api/barcode/:upc
 router.get('/:upc', requireAuth, async (req, res) => {
   const upc = normalizeUpc(req.params.upc);
@@ -71,7 +74,7 @@ router.get('/:upc', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Barcode lookup error:', err);
-    res.status(500).json({ error: 'Lookup failed' });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -120,14 +123,21 @@ function parseUnit(quantity) {
   return null;
 }
 
+function parseSize(quantity) {
+  if (!quantity) return null;
+  const match = quantity.match(/([\d.]+)/);
+  return match ? parseFloat(match[1]) : null;
+}
+
 function normalizeOffProduct(product, upc) {
   const name = (product.product_name_en || product.product_name || '').trim() || null;
   const brand = product.brands ? product.brands.split(',')[0].trim() : '';
   const isOrganic = Array.isArray(product.labels_tags) && product.labels_tags.includes('en:organic');
   const category = mapCategory(product.categories_tags);
   const unit = parseUnit(product.quantity);
+  const size = parseSize(product.quantity);
 
-  return { upc, name, brand, category, unit, isOrganic };
+  return { upc, name, brand, size, category, unit, isOrganic };
 }
 
 async function resolveAutoAccept(user) {
