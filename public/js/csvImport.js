@@ -219,7 +219,7 @@ async function importCsvPrices(rows) {
     // --- Build payload ---
     // regular_price and sale_price are the total price for the stated quantity
     // (matching the manual UI). The API calculates pricePerUnit = finalPrice / qty.
-    const quantity = row.quantity ? parseInt(row.quantity, 10) : 1;
+    const quantity = row.quantity ? parseFloat(row.quantity) : 1;
     const safeQty = isNaN(quantity) || quantity < 1 ? 1 : quantity;
     const salePrice = row.sale_price ? parseFloat(row.sale_price) : undefined;
     const couponAmount = row.coupon_amount ? parseFloat(row.coupon_amount) : undefined;
