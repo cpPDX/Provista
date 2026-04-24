@@ -38,14 +38,20 @@ router.put('/:id/approve', requireAuth, requireAdmin, async (req, res) => {
       reviewedAt: new Date()
     };
 
-    const editable = ['regularPrice', 'salePrice', 'couponAmount', 'couponCode', 'date', 'notes', 'storeId'];
+    const editable = ['regularPrice', 'salePrice', 'couponAmount', 'couponCode', 'date', 'notes', 'storeId', 'quantity'];
     editable.forEach(f => { if (req.body[f] !== undefined) update[f] = req.body[f]; });
+
+    if (update.quantity !== undefined) {
+      update.quantity = parseFloat(update.quantity);
+      if (isNaN(update.quantity) || update.quantity <= 0)
+        return res.status(400).json({ error: 'quantity must be a positive number' });
+    }
 
     // Recalculate derived fields
     const regularPrice = update.regularPrice ?? existing.regularPrice;
     const salePrice = update.salePrice !== undefined ? update.salePrice : existing.salePrice;
     const couponAmount = update.couponAmount !== undefined ? update.couponAmount : existing.couponAmount;
-    const quantity = existing.quantity;
+    const quantity = update.quantity ?? existing.quantity;
     update.finalPrice = calcFinalPrice(regularPrice, salePrice, couponAmount);
     update.pricePerUnit = update.finalPrice / quantity;
 
