@@ -11,6 +11,9 @@ const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { requireAuth, requireAdmin, requireOwner } = require('../middleware/auth');
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 // GET /api/household - household info + member list
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -18,7 +21,7 @@ router.get('/', requireAuth, async (req, res) => {
     const members = await User.find({ householdId: req.user.householdId }).select('-passwordHash').sort({ createdAt: 1 });
     res.json({ household, members });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -32,7 +35,7 @@ router.put('/', requireAuth, requireOwner, async (req, res) => {
     ).select('-inviteCode -inviteCodeExpiresAt');
     res.json(household);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -52,7 +55,7 @@ router.patch('/settings', requireAuth, requireAdmin, async (req, res) => {
     ).select('settings');
     res.json({ settings: household.settings });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -71,7 +74,7 @@ router.get('/invite', requireAuth, requireAdmin, async (req, res) => {
       expiresAt: household.inviteCodeExpiresAt
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -91,7 +94,7 @@ router.get('/invite/qr', requireAuth, requireAdmin, async (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.send(pngBuffer);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -107,7 +110,7 @@ router.post('/invite', requireAuth, requireAdmin, async (req, res) => {
       expiresAt: household.inviteCodeExpiresAt
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -132,7 +135,7 @@ router.delete('/members/:id', requireAuth, requireAdmin, async (req, res) => {
     await User.findByIdAndUpdate(req.params.id, { householdId: null, role: 'member' });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -153,7 +156,7 @@ router.put('/members/:id', requireAuth, requireOwner, async (req, res) => {
     const updated = await User.findByIdAndUpdate(req.params.id, { role }, { new: true }).select('-passwordHash');
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -188,7 +191,7 @@ router.delete('/', requireAuth, requireOwner, async (req, res) => {
     });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 

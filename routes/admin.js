@@ -6,6 +6,9 @@ const ShoppingListItem = require('../models/ShoppingListItem');
 const InventoryItem = require('../models/InventoryItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 // ===== Name normalization + Levenshtein for duplicate detection =====
 
 function _normName(name) {
@@ -110,7 +113,7 @@ router.post('/migrate-categories', requireAuth, requireAdmin, async (req, res) =
         : 'No items required category normalization.'
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -120,7 +123,7 @@ router.get('/duplicate-groups', requireAuth, requireAdmin, async (req, res) => {
     const clusters = await findDuplicateClusters(req.user.householdId);
     res.json(clusters);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -163,7 +166,7 @@ router.post('/consolidate-items', requireAuth, requireAdmin, async (req, res) =>
     const totalRemoved = merged.reduce((sum, m) => sum + m.absorbed.length, 0);
     res.json({ merged, totalRemoved });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 

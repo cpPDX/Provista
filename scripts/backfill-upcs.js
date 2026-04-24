@@ -18,6 +18,7 @@ const mongoose = require('mongoose');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocerytracker';
 const Item = require('../models/Item');
+const { normalizeUpc } = require('../utils/upc');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const AUTO_ACCEPT = process.argv.includes('--auto-accept');
@@ -43,57 +44,65 @@ async function main() {
     output: process.stdout
   });
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    process.stdout.write(`[${i + 1}/${items.length}] ${item.name}... `);
+  try {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      process.stdout.write(`[${i + 1}/${items.length}] ${item.name}... `);
 
-    let offResults = null;
-    try {
-      offResults = await searchOffByName(item.name);
-    } catch (err) {
-      process.stdout.write(`(OFF error: ${err.message})\n`);
-    }
-
-    const match = offResults ? findBestMatch(item.name, offResults) : null;
-
-    if (!match) {
-      process.stdout.write('no confident match\n');
-      if (!DRY_RUN) {
-        await Item.updateOne({ _id: item._id }, { $set: { upcPendingLookup: true } });
+      let offResults = null;
+      try {
+        offResults = await searchOffByName(item.name);
+      } catch (err) {
+        process.stdout.write(`(OFF error: ${err.message})\n`);
       }
-      pending++;
-      await sleep(DELAY_MS);
-      continue;
-    }
 
-    const upc = match.code;
-    process.stdout.write(`→ ${upc} (${match.product_name || 'unknown'})\n`);
+      const match = offResults ? findBestMatch(item.name, offResults) : null;
 
-    if (DRY_RUN) {
-      skipped++;
-      await sleep(DELAY_MS);
-      continue;
-    }
+      if (!match) {
+        process.stdout.write('no confident match\n');
+        if (!DRY_RUN) {
+          await Item.updateOne({ _id: item._id }, { $set: { upcPendingLookup: true } });
+        }
+        pending++;
+        await sleep(DELAY_MS);
+        continue;
+      }
 
-    if (AUTO_ACCEPT) {
-      await Item.updateOne({ _id: item._id }, { $set: { upc, upcSource: 'backfill', upcPendingLookup: false } });
-      matched++;
-    } else {
-      const accept = await prompt(rl, `  Accept this UPC? [Y/n] `);
-      if (accept.toLowerCase() !== 'n') {
+      const upc = normalizeUpc(match.code);
+      if (!upc) {
+        process.stdout.write('could not normalize UPC\n');
+        pending++;
+        await sleep(DELAY_MS);
+        continue;
+      }
+      process.stdout.write(`→ ${upc} (${match.product_name || 'unknown'})\n`);
+
+      if (DRY_RUN) {
+        skipped++;
+        await sleep(DELAY_MS);
+        continue;
+      }
+
+      if (AUTO_ACCEPT) {
         await Item.updateOne({ _id: item._id }, { $set: { upc, upcSource: 'backfill', upcPendingLookup: false } });
         matched++;
       } else {
-        await Item.updateOne({ _id: item._id }, { $set: { upcPendingLookup: true } });
-        skipped++;
+        const accept = await prompt(rl, `  Accept this UPC? [Y/n] `);
+        if (accept.toLowerCase() !== 'n') {
+          await Item.updateOne({ _id: item._id }, { $set: { upc, upcSource: 'backfill', upcPendingLookup: false } });
+          matched++;
+        } else {
+          await Item.updateOne({ _id: item._id }, { $set: { upcPendingLookup: true } });
+          skipped++;
+        }
       }
+
+      await sleep(DELAY_MS);
     }
-
-    await sleep(DELAY_MS);
+  } finally {
+    if (rl) rl.close();
+    await mongoose.disconnect();
   }
-
-  if (rl) rl.close();
-  await mongoose.disconnect();
 
   console.log('\n========= Summary =========');
   console.log(`Matched:  ${matched}`);
@@ -165,5 +174,5 @@ function prompt(rl, question) {
 
 main().catch(err => {
   console.error('Fatal error:', err);
-  process.exit(1);
+  mongoose.disconnect().finally(() => process.exit(1));
 });

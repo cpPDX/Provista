@@ -371,11 +371,10 @@ async function saveScannedItems() {
       return;
     }
 
-    // For receipts we treat the price paid as regularPrice = finalPrice
     const regularPrice = parseFloat(document.getElementById(`scan-line-price-${i}`).value);
     const quantity = parseFloat(document.getElementById(`scan-line-qty-${i}`).value);
 
-    toSave.push({ itemId, storeId, regularPrice, finalPrice: regularPrice, quantity, date, source: 'receipt' });
+    toSave.push({ itemId, storeId, regularPrice, quantity, date });
   }
 
   if (!toSave.length) { showToast('No items to save'); return; }

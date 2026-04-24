@@ -5,6 +5,9 @@ const Household = require('../models/Household');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
 
 function buildScaffold(weekStart, members) {
@@ -54,7 +57,7 @@ router.get('/', requireAuth, async (req, res) => {
 
     res.json(plan);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -81,7 +84,7 @@ router.put('/', requireAuth, requireAdmin, async (req, res) => {
 
     res.json(plan);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -92,7 +95,7 @@ router.get('/settings', requireAuth, async (req, res) => {
     if (!household) return res.status(404).json({ error: 'Household not found' });
     res.json({ weekStartDay: household.weekStartDay });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -110,7 +113,7 @@ router.put('/settings', requireAuth, requireAdmin, async (req, res) => {
     ).select('weekStartDay');
     res.json({ weekStartDay: household.weekStartDay });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 

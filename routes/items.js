@@ -5,6 +5,10 @@ const PriceEntry = require('../models/PriceEntry');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const InventoryItem = require('../models/InventoryItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { normalizeUpc } = require('../utils/upc');
+
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
 
 // GET /api/items - list or search items scoped to household
 router.get('/', requireAuth, async (req, res) => {
@@ -15,17 +19,24 @@ router.get('/', requireAuth, async (req, res) => {
       const re = { $regex: search, $options: 'i' };
       query.$or = [{ name: re }, { brand: re }];
     }
-    const items = await Item.find(query).sort({ name: 1 }).limit(search ? 8 : 0);
+    const items = await Item.find(query).sort({ name: 1 }).limit(search ? 8 : 0).lean();
     res.json(items);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
 // POST /api/items - create item (admin+)
 router.post('/', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const item = new Item({ ...req.body, householdId: req.user.householdId, isSeeded: false });
+    const { name, category, unit } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+    if (!category || !category.trim()) return res.status(400).json({ error: 'category is required' });
+    if (!unit || !unit.trim()) return res.status(400).json({ error: 'unit is required' });
+
+    const itemData = { ...req.body, householdId: req.user.householdId, isSeeded: false };
+    if (itemData.upc) itemData.upc = normalizeUpc(String(itemData.upc)) ?? null;
+    const item = new Item(itemData);
     await item.save();
     res.status(201).json(item);
   } catch (err) {
@@ -36,9 +47,13 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
 // PUT /api/items/:id - update item (admin+)
 router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
+    const updates = { ...req.body };
+    if (updates.upc !== undefined) {
+      updates.upc = updates.upc ? (normalizeUpc(String(updates.upc)) ?? null) : null;
+    }
     const item = await Item.findOneAndUpdate(
       { _id: req.params.id, householdId: req.user.householdId },
-      req.body,
+      updates,
       { new: true, runValidators: true }
     );
     if (!item) return res.status(404).json({ error: 'Item not found' });
@@ -72,7 +87,7 @@ router.post('/:id/merge', requireAuth, requireAdmin, async (req, res) => {
     await Item.findOneAndDelete({ _id: sourceId, householdId });
     res.json({ success: true, target });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -83,7 +98,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     if (!item) return res.status(404).json({ error: 'Item not found' });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 

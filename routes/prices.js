@@ -4,6 +4,9 @@ const PriceEntry = require('../models/PriceEntry');
 const mongoose = require('mongoose');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 function calcFinalPrice(regularPrice, salePrice, couponAmount) {
   const base = (salePrice != null && salePrice < regularPrice) ? salePrice : regularPrice;
   return base - (couponAmount ?? 0);
@@ -19,7 +22,7 @@ router.get('/pending', requireAuth, requireAdmin, async (req, res) => {
       .sort({ createdAt: -1 });
     res.json(entries);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -53,7 +56,7 @@ router.put('/:id/approve', requireAuth, requireAdmin, async (req, res) => {
     ).populate('itemId', 'name brand unit size category isOrganic').populate('storeId', 'name').populate('submittedBy', 'name');
     res.json(entry);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -68,7 +71,7 @@ router.delete('/:id/reject', requireAuth, requireAdmin, async (req, res) => {
     if (!entry) return res.status(404).json({ error: 'Pending entry not found' });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -87,14 +90,14 @@ router.get('/compare/:itemId', requireAuth, async (req, res) => {
       { $group: { _id: '$storeId', doc: { $first: '$$ROOT' } } },
       { $replaceRoot: { newRoot: '$doc' } },
       { $lookup: { from: 'stores', localField: 'storeId', foreignField: '_id', as: 'store' } },
-      { $unwind: '$store' },
+      { $unwind: { path: '$store', preserveNullAndEmptyArrays: true } },
       { $lookup: { from: 'items', localField: 'itemId', foreignField: '_id', as: 'item' } },
-      { $unwind: '$item' },
+      { $unwind: { path: '$item', preserveNullAndEmptyArrays: true } },
       { $sort: { pricePerUnit: 1 } }
     ]);
     res.json(entries);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -112,7 +115,7 @@ router.get('/history/:itemId', requireAuth, async (req, res) => {
       .sort({ date: -1 });
     res.json(entries);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -138,7 +141,7 @@ router.get('/last-purchased/:itemId', requireAuth, async (req, res) => {
         }
       },
       { $lookup: { from: 'stores', localField: 'storeId', foreignField: '_id', as: 'store' } },
-      { $unwind: '$store' },
+      { $unwind: { path: '$store', preserveNullAndEmptyArrays: true } },
       { $sort: { date: -1 } }
     ]);
     res.json(entries.map(e => ({
@@ -149,7 +152,7 @@ router.get('/last-purchased/:itemId', requireAuth, async (req, res) => {
       date: e.date
     })));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -157,7 +160,10 @@ router.get('/last-purchased/:itemId', requireAuth, async (req, res) => {
 router.get('/', requireAuth, async (req, res) => {
   try {
     const { itemId, storeId, startDate, endDate } = req.query;
-    const query = { householdId: req.user.householdId, status: 'approved' };
+    const query = {
+      householdId: req.user.householdId,
+      $or: [{ status: 'approved' }, { status: 'pending', submittedBy: req.user._id }]
+    };
     if (itemId) query.itemId = itemId;
     if (storeId) query.storeId = storeId;
     if (startDate || endDate) {
@@ -172,7 +178,7 @@ router.get('/', requireAuth, async (req, res) => {
       .limit(100);
     res.json(entries);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -180,12 +186,31 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { regularPrice, salePrice, couponAmount, couponCode, quantity } = req.body;
-    const finalPrice = calcFinalPrice(regularPrice, salePrice ?? null, couponAmount ?? null);
-    const pricePerUnit = finalPrice / (quantity > 0 ? quantity : 1);
+
+    if (!req.body.itemId) return res.status(400).json({ error: 'itemId is required' });
+    if (!req.body.storeId) return res.status(400).json({ error: 'storeId is required' });
+    if (regularPrice === undefined || regularPrice === null) return res.status(400).json({ error: 'regularPrice is required' });
+    const rp = parseFloat(regularPrice);
+    if (isNaN(rp) || rp < 0) return res.status(400).json({ error: 'regularPrice must be a non-negative number' });
+    const qty = quantity !== undefined ? parseFloat(quantity) : 1;
+    if (isNaN(qty) || qty <= 0) return res.status(400).json({ error: 'quantity must be a positive number' });
+    if (salePrice !== undefined && salePrice !== null) {
+      const sp = parseFloat(salePrice);
+      if (isNaN(sp) || sp < 0) return res.status(400).json({ error: 'salePrice must be a non-negative number' });
+    }
+    if (couponAmount !== undefined && couponAmount !== null) {
+      const ca = parseFloat(couponAmount);
+      if (isNaN(ca) || ca < 0) return res.status(400).json({ error: 'couponAmount must be a non-negative number' });
+    }
+
+    const finalPrice = calcFinalPrice(rp, salePrice ?? null, couponAmount ?? null);
+    const pricePerUnit = finalPrice / qty;
     const isAdmin = ['admin', 'owner'].includes(req.user.role);
 
     const entry = new PriceEntry({
       ...req.body,
+      regularPrice: rp,
+      quantity: qty,
       finalPrice,
       pricePerUnit,
       salePrice: salePrice ?? null,
@@ -195,7 +220,8 @@ router.post('/', requireAuth, async (req, res) => {
       submittedBy: req.user._id,
       status: isAdmin ? 'approved' : 'pending',
       reviewedBy: isAdmin ? req.user._id : null,
-      reviewedAt: isAdmin ? new Date() : null
+      reviewedAt: isAdmin ? new Date() : null,
+      source: ['manual', 'csv'].includes(req.body.source) ? req.body.source : 'manual'
     });
     await entry.save();
     const populated = await entry.populate([
@@ -215,7 +241,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
     if (!entry) return res.status(404).json({ error: 'Price entry not found' });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 

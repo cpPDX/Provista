@@ -330,15 +330,6 @@ function renderCsvImportResult(result, statusEl) {
   statusEl.innerHTML = html;
 }
 
-/** Scan-tab CSV import (existing collapsible section) */
-function handleCsvFileSelect(e) {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const statusEl = document.getElementById('csv-import-status');
-  processCsvFile(file, statusEl);
-  e.target.value = '';
-}
-
 /** Modal-based CSV import (from Prices header and More menu) */
 function openCsvImportModal() {
   openModal('Import Prices from CSV', `
