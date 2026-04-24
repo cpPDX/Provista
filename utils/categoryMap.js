@@ -72,6 +72,14 @@ const MAPPINGS = [
       'en:household-supplies', 'en:laundry', 'en:dishwashing'
     ],
     category: 'Cleaning & Household'
+  },
+  {
+    prefixes: ['en:pet-foods', 'en:pet-food', 'en:cat-food', 'en:dog-food'],
+    category: 'Pantry'
+  },
+  {
+    prefixes: ['en:baby-foods', 'en:baby-food', 'en:infant-formula', 'en:baby-meals'],
+    category: 'Pantry'
   }
 ];
 

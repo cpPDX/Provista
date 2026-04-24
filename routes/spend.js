@@ -3,6 +3,9 @@ const router = express.Router();
 const PriceEntry = require('../models/PriceEntry');
 const { requireAuth } = require('../middleware/auth');
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 // GET /api/spend/summary - 6-month totals
 router.get('/summary', requireAuth, async (req, res) => {
   try {
@@ -22,7 +25,7 @@ router.get('/summary', requireAuth, async (req, res) => {
       total: Math.round(r.total * 100) / 100
     })));
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -62,7 +65,7 @@ router.get('/', requireAuth, async (req, res) => {
       byStore: Object.entries(byStore).map(([name, amount]) => ({ name, amount: round(amount) })).sort((a, b) => b.amount - a.amount)
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 

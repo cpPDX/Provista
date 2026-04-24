@@ -9,6 +9,9 @@ const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { seedHousehold } = require('../utils/seed');
 
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
 const SALT_ROUNDS = 12;
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -69,7 +72,7 @@ router.post('/register', async (req, res) => {
       user: { _id: user._id, name: user.name, email: user.email, role: user.role, householdId: user.householdId }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -90,7 +93,7 @@ router.post('/login', async (req, res) => {
       user: { _id: user._id, name: user.name, email: user.email, role: user.role, householdId: user.householdId }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -153,7 +156,7 @@ router.put('/profile', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json({ user });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -177,7 +180,7 @@ router.put('/password', async (req, res) => {
     await user.save();
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
@@ -222,7 +225,7 @@ router.delete('/account', async (req, res) => {
     res.clearCookie('token', COOKIE_OPTS);
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
