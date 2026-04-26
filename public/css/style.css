@@ -395,6 +395,38 @@ a { color: var(--primary); text-decoration: none; }
   white-space: normal;
   word-break: break-word;
 }
+.list-item-store-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  text-align: left;
+  line-height: 1.4;
+  margin-top: 1px;
+  display: block;
+}
+.list-item-store-btn:hover { color: var(--primary); }
+.list-filter-bar {
+  padding: 0.25rem 1rem 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.list-filter-bar button {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  padding: 0;
+  font-family: inherit;
+}
+.list-filter-bar button:hover { text-decoration: underline; }
 
 /* ===== Modal ===== */
 .modal-overlay {

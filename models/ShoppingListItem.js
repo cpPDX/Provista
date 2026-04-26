@@ -4,6 +4,7 @@ const shoppingListItemSchema = new mongoose.Schema({
   householdId: { type: mongoose.Schema.Types.ObjectId, ref: 'Household', required: true },
   itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
   quantity: { type: Number, required: true, default: 1 },
+  storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
   checked: { type: Boolean, default: false },
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   addedAt: { type: Date, default: Date.now },

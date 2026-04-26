@@ -12,6 +12,7 @@ router.get('/', requireAuth, async (req, res) => {
   try {
     const listItems = await ShoppingListItem.find({ householdId: req.user.householdId })
       .populate('itemId', 'name brand category unit size isOrganic')
+      .populate('storeId', 'name')
       .populate('addedBy', 'name')
       .sort({ checked: 1, addedAt: -1 })
       .lean();
