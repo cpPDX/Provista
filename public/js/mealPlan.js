@@ -137,7 +137,7 @@ async function doSave() {
 
 // ===== Per-person row builders =====
 
-function buildPersonRow(mealType, personName, mealName, isAdmin) {
+function buildPersonRow(mealType, personName, mealName) {
   const row = document.createElement('div');
   row.className = 'meal-row';
 
@@ -146,7 +146,6 @@ function buildPersonRow(mealType, personName, mealName, isAdmin) {
   personInput.className = 'meal-person-input';
   personInput.value = personName;
   personInput.placeholder = 'Person';
-  personInput.readOnly = !isAdmin;
   personInput.addEventListener('input', scheduleSave);
   row.appendChild(personInput);
 
@@ -155,30 +154,27 @@ function buildPersonRow(mealType, personName, mealName, isAdmin) {
   nameInput.className = 'meal-name-input';
   nameInput.value = mealName;
   nameInput.placeholder = 'Meal…';
-  nameInput.readOnly = !isAdmin;
   nameInput.addEventListener('input', scheduleSave);
   row.appendChild(nameInput);
 
-  if (isAdmin) {
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'meal-row-remove';
-    removeBtn.textContent = '×';
-    removeBtn.setAttribute('aria-label', 'Remove row');
-    removeBtn.addEventListener('click', () => { row.remove(); scheduleSave(); });
-    row.appendChild(removeBtn);
-  }
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'meal-row-remove';
+  removeBtn.textContent = '×';
+  removeBtn.setAttribute('aria-label', 'Remove row');
+  removeBtn.addEventListener('click', () => { row.remove(); scheduleSave(); });
+  row.appendChild(removeBtn);
 
   return row;
 }
 
-function buildAddPersonButton(contentEl, mealType, isAdmin) {
+function buildAddPersonButton(contentEl, mealType) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'meal-add-row';
   btn.textContent = '+ Add person';
   btn.addEventListener('click', () => {
-    const row = buildPersonRow(mealType, '', '', isAdmin);
+    const row = buildPersonRow(mealType, '', '');
     contentEl.insertBefore(row, btn);
     row.querySelector('.meal-person-input')?.focus();
     scheduleSave();
@@ -186,7 +182,7 @@ function buildAddPersonButton(contentEl, mealType, isAdmin) {
   return btn;
 }
 
-function buildMealTypeSection(mealType, label, typeMeals, isAdmin, isSpecial, specialCollapsed) {
+function buildMealTypeSection(mealType, label, typeMeals, isSpecial, specialCollapsed) {
   const section = document.createElement('div');
   section.className = 'meal-type-section';
   section.dataset.mealType = mealType;
@@ -195,8 +191,8 @@ function buildMealTypeSection(mealType, label, typeMeals, isAdmin, isSpecial, sp
   contentEl.className = 'meal-type-rows';
 
   // Render per-person rows
-  typeMeals.forEach(m => contentEl.appendChild(buildPersonRow(mealType, m.personName || '', m.name || '', isAdmin)));
-  if (isAdmin) contentEl.appendChild(buildAddPersonButton(contentEl, mealType, isAdmin));
+  typeMeals.forEach(m => contentEl.appendChild(buildPersonRow(mealType, m.personName || '', m.name || '')));
+  contentEl.appendChild(buildAddPersonButton(contentEl, mealType));
 
   if (isSpecial) {
     const toggleBtn = document.createElement('button');
@@ -254,7 +250,7 @@ function renderMealPlan(plan) {
       </div>
 
       <div class="meal-plan-actions">
-        ${isAdmin ? '<button class="btn btn-primary" id="mp-save-btn">Save Plan</button>' : ''}
+        <button class="btn btn-primary" id="mp-save-btn">Save Plan</button>
         <button class="btn btn-outline" id="mp-export-btn">Export Week</button>
         ${isAdmin ? `
           <button class="btn btn-outline btn-sm" id="mp-settings-btn" style="margin-left:auto;font-size:0.8125rem">⚙ Week starts</button>
@@ -307,7 +303,6 @@ function renderDayCard(day, di) {
   const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', special: 'Special Occasion' };
   const MEAL_TYPES_ORDER = ['breakfast', 'lunch', 'dinner', 'special'];
   const dateStr = day.date ? (typeof day.date === 'string' ? day.date : new Date(day.date).toISOString()) : null;
-  const isAdmin = window.appAuth?.isAdmin?.() || false;
   const specialCollapsed = day.specialCollapsed !== false;
 
   const dayEl = document.createElement('div');
@@ -325,7 +320,7 @@ function renderDayCard(day, di) {
     const typeMeals = (day.meals || []).filter(m => m.mealType === mealType);
     const rows = typeMeals.length > 0 ? typeMeals : [{ personName: '', name: '' }];
     dayEl.appendChild(buildMealTypeSection(
-      mealType, MEAL_LABELS[mealType], rows, isAdmin,
+      mealType, MEAL_LABELS[mealType], rows,
       mealType === 'special', specialCollapsed
     ));
   });

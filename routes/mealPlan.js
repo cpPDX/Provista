@@ -62,7 +62,7 @@ router.get('/', requireAuth, async (req, res) => {
 });
 
 // PUT /api/meal-plan
-router.put('/', requireAuth, requireAdmin, async (req, res) => {
+router.put('/', requireAuth, async (req, res) => {
   try {
     const { weekStart, days, produceNotes, shoppingNotes } = req.body;
     if (!weekStart) return res.status(400).json({ error: 'weekStart is required' });
