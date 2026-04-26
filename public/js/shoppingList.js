@@ -1,6 +1,6 @@
 // Shopping List tab logic
 
-let listState = { items: [] };
+let listState = { items: [], stores: [], filter: { storeId: null, category: null } };
 
 // Cart state: confirmed prices while shopping. In-memory, cleared when list is cleared.
 const cartState = new Map(); // listItemId → { name, price, quantity }
@@ -14,7 +14,12 @@ const pendingCheckIds = new Set();
 
 async function loadShoppingListTab() {
   try {
-    listState.items = await api.shoppingList.list();
+    const [items, stores] = await Promise.all([
+      api.shoppingList.list(),
+      listState.stores.length ? Promise.resolve(listState.stores) : api.stores.list()
+    ]);
+    listState.items = items;
+    listState.stores = stores;
     renderShoppingList();
     loadLowStockBadge();
   } catch (err) {
@@ -24,7 +29,17 @@ async function loadShoppingListTab() {
 
 function renderShoppingList() {
   const items = listState.items;
+  const filter = listState.filter;
+
+  const visibleItems = items.filter(item => {
+    if (filter.storeId && (item.storeId?._id || item.storeId) !== filter.storeId) return false;
+    if (filter.category && item.itemId?.category !== filter.category) return false;
+    return true;
+  });
+  const hiddenCount = items.length - visibleItems.length;
+
   renderStoreSummary(items);
+  updateListFilterDot();
 
   // Keep cart bar in sync with the current checked state
   items.forEach(item => {
@@ -36,7 +51,7 @@ function renderShoppingList() {
 
   const container = document.getElementById('shopping-list');
 
-  // Show/hide clear buttons based on list state
+  // Show/hide clear buttons based on total list state (not filtered view)
   const hasItems = items.length > 0;
   const hasChecked = items.some(i => i.checked);
   const clearCheckedBtn = document.getElementById('btn-clear-checked');
@@ -51,12 +66,22 @@ function renderShoppingList() {
     return;
   }
 
-  container.innerHTML = items.map(item => {
+  const filterBar = hiddenCount > 0
+    ? `<div class="list-filter-bar">${hiddenCount} item${hiddenCount !== 1 ? 's' : ''} hidden by filter &mdash; <button onclick="clearListFilter()">Clear filter</button></div>`
+    : '';
+
+  if (!visibleItems.length) {
+    container.innerHTML = filterBar + emptyState('🔍', 'No items match the current filter.');
+    return;
+  }
+
+  container.innerHTML = filterBar + visibleItems.map(item => {
     const name = item.itemId?.name || 'Unknown item';
     const unit = item.itemId?.unit || '';
     const cat = item.itemId?.category || '';
     const checked = item.checked;
     const cartEntry = cartState.get(item._id);
+    const assignedStore = item.storeId?.name || null;
 
     let priceInfo = '';
     if (cartEntry) {
@@ -68,6 +93,8 @@ function renderShoppingList() {
       priceInfo = `<span class="badge badge-no-data">No price data</span>`;
     }
 
+    const storeLine = `<button class="list-item-store-btn" onclick="openStorePickerForItem('${item._id}')">${assignedStore ? '🏪 ' + escapeHtml(assignedStore) : '+ Store'}</button>`;
+
     return `
       <div class="card list-item ${checked ? 'checked' : ''}" data-id="${item._id}">
         <div class="list-item-check-wrap" onclick="handleListItemCheck('${item._id}', ${!checked})">
@@ -76,12 +103,24 @@ function renderShoppingList() {
         <div class="card-body">
           <div class="card-title">${name}${item.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.itemId.brand) + ')</span>' : ''}</div>
           <div class="list-item-meta">${item.itemId ? formatItemMeta(item.itemId) : cat} &middot; qty ${item.quantity}</div>
-          <div class="list-item-meta">Added by ${item.addedBy?.name || 'unknown'}</div>
+          ${storeLine}
           ${priceInfo}
         </div>
         <button class="btn btn-icon text-danger" onclick="removeListItem('${item._id}')" style="font-size:1rem;min-height:32px;min-width:32px">✕</button>
       </div>`;
   }).join('');
+}
+
+function updateListFilterDot() {
+  const f = listState.filter;
+  const active = f.storeId || f.category;
+  const dot = document.getElementById('list-filter-dot');
+  if (dot) dot.style.display = active ? '' : 'none';
+}
+
+function clearListFilter() {
+  listState.filter = { storeId: null, category: null };
+  renderShoppingList();
 }
 
 function renderStoreSummary(items) {
@@ -302,6 +341,10 @@ async function removeListItem(id) {
 }
 
 function openAddListItemModal() {
+  const storeOptions = listState.stores.map(s =>
+    `<option value="${escapeAttr(s._id)}">${escapeHtml(s.name)}</option>`
+  ).join('');
+
   const bodyHTML = `
     <form id="add-list-form">
       <div class="form-group">
@@ -316,6 +359,14 @@ function openAddListItemModal() {
         <label>Quantity</label>
         <input class="form-control" type="number" id="list-qty" value="1" min="1" step="1" required />
       </div>
+      ${storeOptions ? `
+      <div class="form-group">
+        <label>Preferred Store <span class="text-muted text-sm">(optional)</span></label>
+        <select class="form-control" id="list-store-select">
+          <option value="">Any store</option>
+          ${storeOptions}
+        </select>
+      </div>` : ''}
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary">Add to List</button>
@@ -343,8 +394,9 @@ function openAddListItemModal() {
     const itemId = document.getElementById('list-item-id').value;
     if (!itemId) { showToast('Please select an item'); return; }
     const qty = parseInt(document.getElementById('list-qty').value);
+    const storeId = document.getElementById('list-store-select')?.value || null;
     try {
-      await api.shoppingList.add({ itemId, quantity: qty });
+      await api.shoppingList.add({ itemId, quantity: qty, ...(storeId ? { storeId } : {}) });
       closeModal();
       showToast('Added to list');
       await loadShoppingListTab();
@@ -352,6 +404,99 @@ function openAddListItemModal() {
       handleError(err, 'Failed to add item');
     }
   });
+}
+
+function openStorePickerForItem(id) {
+  const item = listState.items.find(i => i._id === id);
+  if (!item) return;
+  const currentStoreId = item.storeId?._id || item.storeId || '';
+  const options = listState.stores.map(s =>
+    `<option value="${escapeAttr(s._id)}"${s._id === currentStoreId ? ' selected' : ''}>${escapeHtml(s.name)}</option>`
+  ).join('');
+
+  openModal('Preferred Store', `
+    <form id="store-picker-form">
+      <div class="form-group">
+        <select class="form-control" id="store-picker-select">
+          <option value="">Any store</option>
+          ${options}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>`);
+
+  document.getElementById('store-picker-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const storeId = document.getElementById('store-picker-select').value || null;
+    try {
+      await api.shoppingList.update(id, { storeId: storeId || null });
+      const store = storeId ? listState.stores.find(s => s._id === storeId) : null;
+      item.storeId = store || null;
+      closeModal();
+      renderShoppingList();
+    } catch (err) {
+      handleError(err, 'Failed to update store');
+    }
+  });
+}
+
+function openListFilterSheet() {
+  const f = listState.filter;
+  const stores = listState.stores;
+  const categories = [...new Set(listState.items.map(i => i.itemId?.category).filter(Boolean))].sort();
+
+  const storeChips = stores.map(s =>
+    `<button class="filter-chip${f.storeId === s._id ? ' selected' : ''}" data-store-id="${escapeAttr(s._id)}" onclick="toggleListFilterStore(this)">${escapeHtml(s.name)}</button>`
+  ).join('');
+  const catChips = categories.map(c =>
+    `<button class="filter-chip${f.category === c ? ' selected' : ''}" data-cat="${escapeAttr(c)}" onclick="toggleListFilterCat(this)">${escapeHtml(c)}</button>`
+  ).join('');
+
+  document.getElementById('filter-sheet-title').textContent = 'Filter List';
+  document.getElementById('filter-sheet-body').innerHTML = `
+    ${stores.length ? `<div><div class="filter-section-label">Store</div><div class="filter-chips">${storeChips}</div></div>` : ''}
+    ${categories.length ? `<div><div class="filter-section-label">Category</div><div class="filter-chips">${catChips}</div></div>` : ''}
+    ${!stores.length && !categories.length ? '<p class="text-muted text-sm">No stores or categories to filter by.</p>' : ''}
+  `;
+
+  document.getElementById('filter-sheet-clear').onclick = () => {
+    listState.filter = { storeId: null, category: null };
+    closeListFilterSheet();
+    renderShoppingList();
+  };
+  document.getElementById('filter-sheet-done').onclick = () => {
+    closeListFilterSheet();
+    renderShoppingList();
+  };
+
+  const overlay = document.getElementById('filter-sheet-overlay');
+  overlay.style.display = 'flex';
+  overlay.onclick = (e) => {
+    if (e.target === overlay) { closeListFilterSheet(); renderShoppingList(); }
+  };
+}
+
+function closeListFilterSheet() {
+  document.getElementById('filter-sheet-overlay').style.display = 'none';
+}
+
+function toggleListFilterStore(btn) {
+  const id = btn.dataset.storeId;
+  const wasSelected = btn.classList.contains('selected');
+  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
+  listState.filter.storeId = wasSelected ? null : id;
+  if (!wasSelected) btn.classList.add('selected');
+}
+
+function toggleListFilterCat(btn) {
+  const cat = btn.dataset.cat;
+  const wasSelected = btn.classList.contains('selected');
+  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
+  listState.filter.category = wasSelected ? null : cat;
+  if (!wasSelected) btn.classList.add('selected');
 }
 
 // =============================================================
@@ -463,6 +608,7 @@ function initShoppingListTab() {
   document.getElementById('btn-clear-all').style.display = 'none';
 
   document.getElementById('btn-add-list-item').addEventListener('click', openAddListItemModal);
+  document.getElementById('btn-list-filter')?.addEventListener('click', openListFilterSheet);
 
   const scanListBtn = document.getElementById('btn-scan-list-item');
   if (scanListBtn) {
