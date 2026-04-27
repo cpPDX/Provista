@@ -137,6 +137,116 @@ function _findItem(csvName, itemMap) {
 
   return null;
 }
+
+// Returns { exact: item|null, fuzzy: [{item, score}] } — up to 3 candidates sorted by score.
+function _findItemCandidates(csvName, itemMap) {
+  const norm = csvName.toLowerCase().trim();
+  if (itemMap.has(norm)) return { exact: itemMap.get(norm), fuzzy: [] };
+
+  const singular = norm.replace(/s$/, '');
+  const plural = norm + 's';
+  if (itemMap.has(singular)) return { exact: null, fuzzy: [{ item: itemMap.get(singular), score: 1 }] };
+  if (itemMap.has(plural)) return { exact: null, fuzzy: [{ item: itemMap.get(plural), score: 1 }] };
+
+  if (norm.length >= 8) {
+    const candidates = [];
+    for (const [key, item] of itemMap) {
+      if (Math.abs(key.length - norm.length) <= 3) {
+        const score = _levenshtein(key, norm);
+        if (score <= 2) candidates.push({ item, score });
+      }
+    }
+    candidates.sort((a, b) => a.score - b.score);
+    return { exact: null, fuzzy: candidates.slice(0, 3) };
+  }
+
+  return { exact: null, fuzzy: [] };
+}
+
+// Annotate parsed rows with validation results and item/store match info.
+// Returns array of enriched row objects; does NOT write anything to the DB.
+function _annotateCsvRows(rows, itemMap, storeMap, canCreateItem) {
+  return rows.map(row => {
+    const errors = [];
+    const warnings = [];
+    const infos = [];
+
+    const itemName = (row.item_name || '').trim();
+    const storeName = (row.store_name || '').trim();
+    const finalPriceRaw = (row.final_price || '').trim();
+
+    if (!itemName) errors.push('item_name is required');
+    if (!storeName) errors.push('store_name is required');
+
+    let finalPrice = null;
+    if (!finalPriceRaw) {
+      errors.push('final_price is required');
+    } else {
+      finalPrice = parseFloat(finalPriceRaw);
+      if (isNaN(finalPrice) || finalPrice < 0) {
+        errors.push(`Invalid final_price "${finalPriceRaw}"`);
+        finalPrice = null;
+      }
+    }
+
+    let quantity = 1;
+    if (row.quantity) {
+      const q = parseFloat(row.quantity);
+      if (isNaN(q) || q <= 0) warnings.push(`Invalid quantity "${row.quantity}" — defaulting to 1`);
+      else quantity = q;
+    }
+
+    if (!row.category?.trim()) warnings.push('category is blank — will use "Other"');
+    if (!row.unit?.trim()) warnings.push('unit is blank — will use "unit"');
+
+    let itemMatch = null;
+    let fuzzyCandidates = [];
+    let newItem = false;
+
+    if (itemName) {
+      const result = _findItemCandidates(itemName, itemMap);
+      if (result.exact) {
+        itemMatch = result.exact;
+      } else if (result.fuzzy.length > 0) {
+        fuzzyCandidates = result.fuzzy;
+      } else if (!canCreateItem) {
+        errors.push(`"${itemName}" not in catalog — ask an admin to add it`);
+      } else {
+        newItem = true;
+        infos.push(`"${itemName}" will be added to the catalog`);
+      }
+    }
+
+    const storeMatch = storeName ? (storeMap.get(storeName.toLowerCase()) || null) : null;
+    const newStore = !!storeName && !storeMatch;
+    if (newStore) infos.push(`Store "${storeName}" will be created`);
+
+    let status;
+    if (errors.length > 0) status = 'error';
+    else if (fuzzyCandidates.length > 0) status = 'fuzzy';
+    else if (warnings.length > 0) status = 'warning';
+    else status = 'ready';
+
+    return {
+      ...row,
+      _errors: errors,
+      _warnings: warnings,
+      _infos: infos,
+      _status: status,
+      _skip: false,
+      _itemMatch: itemMatch,
+      _fuzzyCandidates: fuzzyCandidates,
+      _fuzzyDecision: null, // null | 'existing' | 'new'
+      _storeMatch: storeMatch,
+      _newStore: newStore,
+      _newItem: newItem,
+      _finalPrice: finalPrice,
+      _quantity: quantity,
+      _isSale: parseBool(row.is_sale),
+    };
+  });
+}
+
 async function importCsvPrices(rows) {
   const auth = window.appAuth;
   const canCreateItem = auth.isAdmin();
