@@ -753,7 +753,7 @@ async function processCsvFile(file, statusEl) {
     statusEl.innerHTML = '<p class="csv-import-error">File is too large (max 10 MB). Please split it into smaller files.</p>';
     return;
   }
-  statusEl.innerHTML = '<p class="text-muted text-sm">Importing…</p>';
+  statusEl.innerHTML = '<p class="text-muted text-sm">Parsing file…</p>';
   try {
     const text = await file.text();
     const rows = parseCsvPrices(text);
@@ -761,10 +761,17 @@ async function processCsvFile(file, statusEl) {
       statusEl.innerHTML = '<p class="csv-import-error">No data rows found. Make sure the file has a header row and at least one data row.</p>';
       return;
     }
-    const result = await importCsvPrices(rows);
-    renderCsvImportResult(result, statusEl);
+    statusEl.innerHTML = '<p class="text-muted text-sm">Loading catalog…</p>';
+    const [itemsData, storesData] = await Promise.all([api.items.list(), api.stores.list()]);
+    const itemMap = new Map(itemsData.map(i => [i.name.toLowerCase(), i]));
+    const storeMap = new Map(storesData.map(s => [s.name.toLowerCase(), s]));
+    const canCreateItem = window.appAuth?.isAdmin() ?? false;
+
+    const annotated = _annotateCsvRows(rows, itemMap, storeMap, canCreateItem);
+    statusEl.innerHTML = '';
+    openCsvReviewSheet(annotated, itemMap, storeMap, canCreateItem, statusEl);
   } catch (e) {
-    statusEl.innerHTML = `<p class="csv-import-error">Import failed: ${e.message}</p>`;
+    statusEl.innerHTML = `<p class="csv-import-error">Could not process file: ${e.message}</p>`;
   }
 }
 
