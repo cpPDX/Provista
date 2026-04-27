@@ -560,6 +560,123 @@ function _closeCsvReview() {
   _csvRR = []; _csvItemMap = null; _csvStoreMap = null; _csvStatusEl = null;
 }
 
+async function _startCsvImport() {
+  const overlay = document.getElementById('csv-review-overlay');
+  if (!overlay) return;
+
+  const toImport = _csvRowsToImport();
+  if (!toImport.length) return;
+
+  // Lock the UI while writing
+  overlay.querySelector('#csv-review-import-btn').disabled = true;
+  overlay.querySelector('#csv-review-close-btn').disabled = true;
+  overlay.querySelector('#csv-review-list').style.pointerEvents = 'none';
+
+  const progressEl = overlay.querySelector('#csv-review-progress');
+  progressEl.style.display = '';
+  progressEl.innerHTML = `
+    <div class="csv-progress-bar-wrap"><div class="csv-progress-bar" id="_csv-pb" style="width:0%"></div></div>
+    <div id="_csv-pb-text" style="font-size:0.8125rem;color:var(--text-muted);text-align:center">Preparing…</div>`;
+
+  // Fetch existing prices once for dedup (fail silently — dedup is best-effort)
+  let dupMap = new Map();
+  try {
+    const existing = await api.request('GET', '/prices');
+    existing.forEach(p => {
+      const key = `${p.itemId._id || p.itemId}|${p.storeId._id || p.storeId}|${new Date(p.date).toDateString()}`;
+      dupMap.set(key, p._id);
+    });
+  } catch (_) {}
+
+  const itemMap = _csvItemMap;
+  const storeMap = _csvStoreMap;
+  const canCreate = _csvCanCreate;
+  let imported = 0;
+  const failedRows = [];
+
+  for (let i = 0; i < toImport.length; i++) {
+    const row = toImport[i];
+    const pct = Math.round((i / toImport.length) * 100);
+    document.getElementById('_csv-pb').style.width = pct + '%';
+    document.getElementById('_csv-pb-text').textContent = `Writing ${i + 1} of ${toImport.length}…`;
+
+    try {
+      // Resolve item
+      let item = row._itemMatch;
+      if (!item && row._fuzzyDecision === 'existing' && row._fuzzyCandidates.length) {
+        item = row._fuzzyCandidates[0].item;
+        itemMap.set((row.item_name || '').toLowerCase(), item);
+      }
+      if (!item) {
+        if (!canCreate) throw new Error(`"${row.item_name}" not in catalog`);
+        const category = normalizeCategory(row.category) || 'Other';
+        const newItemData = {
+          name: (row.item_name || '').trim(),
+          brand: (row.brand || '').trim(),
+          category,
+          unit: (row.unit || '').trim() || 'unit',
+          isOrganic: parseBool(row.is_organic),
+        };
+        const sizeRaw = parseFloat(row.size);
+        if (!isNaN(sizeRaw) && sizeRaw > 0) newItemData.size = sizeRaw;
+        item = await api.items.create(newItemData);
+        itemMap.set(item.name.toLowerCase(), item);
+      }
+
+      // Resolve store
+      let store = row._storeMatch || storeMap.get((row.store_name || '').toLowerCase()) || null;
+      if (!store) {
+        store = await api.stores.create({ name: (row.store_name || '').trim() });
+        storeMap.set(store.name.toLowerCase(), store);
+      }
+
+      // Dedup: replace existing entry for same item+store+date
+      const rowDate = parseRowDate(row.date);
+      const dupKey = `${item._id}|${store._id}|${rowDate.toDateString()}`;
+      const existingId = dupMap.get(dupKey);
+      dupMap.set(dupKey, null); // prevent same row from matching itself
+
+      const payload = {
+        itemId: item._id,
+        storeId: store._id,
+        regularPrice: row._finalPrice,
+        date: rowDate.toISOString(),
+        quantity: row._quantity,
+        source: 'csv',
+      };
+      if (row._isSale) payload.salePrice = row._finalPrice;
+      const notes = (row.notes || '').trim();
+      if (notes) payload.notes = notes;
+
+      if (existingId) await api.prices.delete(existingId);
+      await api.prices.create(payload);
+      imported++;
+    } catch (e) {
+      failedRows.push({ row: row._rowNum, reason: e.message });
+    }
+  }
+
+  document.getElementById('_csv-pb').style.width = '100%';
+
+  // Show result in the originating modal status element
+  if (_csvStatusEl) {
+    renderCsvImportResult({ imported, errors: failedRows, newStores: [], fuzzyMatched: [] }, _csvStatusEl);
+  }
+
+  // Show done state in the sheet footer
+  const failed = failedRows.length;
+  progressEl.innerHTML = `<p style="text-align:center;font-size:0.9375rem;margin:0">
+    ${imported > 0 ? `<span style="color:var(--success)">✓ ${imported} price${imported !== 1 ? 's' : ''} imported</span>` : ''}
+    ${failed > 0 ? `<span style="color:var(--danger)"> · ${failed} failed</span>` : ''}
+  </p>`;
+
+  const closeBtn = overlay.querySelector('#csv-review-close-btn');
+  closeBtn.disabled = false;
+  overlay.querySelector('#csv-review-import-btn').style.display = 'none';
+
+  if (typeof loadPricesTab === 'function') loadPricesTab().catch(() => {});
+}
+
 function openCsvReviewSheet(annotatedRows, itemMap, storeMap, canCreateItem, statusEl) {
   _csvRR = annotatedRows;
   _csvItemMap = itemMap;
