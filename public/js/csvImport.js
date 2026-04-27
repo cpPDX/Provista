@@ -367,6 +367,237 @@ async function importCsvPrices(rows) {
   return { imported: imported.length, errors, newStores, fuzzyMatched };
 }
 
+// ===== Review sheet state (module-level, reset on each open) =====
+let _csvRR = [];          // annotated rows
+let _csvItemMap = null;
+let _csvStoreMap = null;
+let _csvCanCreate = false;
+let _csvStatusEl = null;
+
+function _csvRowsToImport() {
+  return _csvRR.filter(r => !r._skip && r._status !== 'error' && !(r._status === 'fuzzy' && !r._fuzzyDecision));
+}
+
+function _csvBlockers() {
+  return _csvRR.filter(r => !r._skip && (r._status === 'error' || (r._status === 'fuzzy' && !r._fuzzyDecision)));
+}
+
+function _csvBadgeClass(status) {
+  return { ready: 'csv-badge-ready', warning: 'csv-badge-warning', fuzzy: 'csv-badge-fuzzy', error: 'csv-badge-error', skip: 'csv-badge-skip' }[status] || 'csv-badge-skip';
+}
+
+function _csvBadgeLabel(status) {
+  return { ready: 'Ready', warning: 'Warning', fuzzy: 'Fuzzy Match', error: 'Error', skip: 'Skipped' }[status] || status;
+}
+
+function _renderCsvRowCard(row, idx) {
+  const effectiveStatus = row._skip ? 'skip' : row._status;
+  const itemName = (row.item_name || '').trim() || '(no name)';
+  const storeName = (row.store_name || '').trim() || '(no store)';
+  const priceStr = row.final_price ? `$${parseFloat(row.final_price).toFixed(2)}` : '—';
+  const qtyStr = row._quantity > 1 ? ` × ${row._quantity}` : '';
+  const dateStr = (row.date || '').trim();
+
+  // Detail is always shown for error/fuzzy rows; collapsed for warning/info
+  const alwaysOpen = !row._skip && (row._status === 'error' || row._status === 'fuzzy');
+  const hasDetail = row._errors.length || row._warnings.length || row._infos.length || row._fuzzyCandidates.length;
+
+  let detailHtml = '';
+  if (!row._skip) {
+    detailHtml += row._errors.map(e =>
+      `<div class="csv-row-issue"><span style="color:var(--danger);flex-shrink:0">✕</span><span style="color:var(--danger)">${escapeHtml(e)}</span></div>`
+    ).join('');
+    detailHtml += row._warnings.map(w =>
+      `<div class="csv-row-issue"><span style="color:#a16207;flex-shrink:0">!</span><span style="color:#a16207">${escapeHtml(w)}</span></div>`
+    ).join('');
+    detailHtml += row._infos.map(info =>
+      `<div class="csv-row-issue"><span style="color:var(--text-muted);flex-shrink:0">ℹ</span><span style="color:var(--text-muted)">${escapeHtml(info)}</span></div>`
+    ).join('');
+    if (row._fuzzyCandidates.length) {
+      detailHtml += `<div class="csv-fuzzy-label">Similar items found — choose one:</div>`;
+      detailHtml += `<div class="csv-fuzzy-options">`;
+      row._fuzzyCandidates.forEach((c, ci) => {
+        const checked = row._fuzzyDecision === 'existing' && ci === 0 ? 'checked' : '';
+        detailHtml += `<label class="csv-fuzzy-option">
+          <input type="radio" name="csvfuzzy-${idx}" value="existing-${ci}" ${checked}>
+          Use existing: <strong>${escapeHtml(c.item.name)}</strong>
+        </label>`;
+      });
+      const checkedNew = row._fuzzyDecision === 'new' ? 'checked' : '';
+      detailHtml += `<label class="csv-fuzzy-option">
+        <input type="radio" name="csvfuzzy-${idx}" value="new" ${checkedNew}>
+        Create new item: <strong>${escapeHtml(itemName)}</strong>
+      </label>`;
+      detailHtml += `</div>`;
+    }
+  }
+
+  const skipLabel = row._skip ? 'Undo' : 'Skip';
+  const chevron = hasDetail && !alwaysOpen ? `<span style="color:var(--text-muted);font-size:0.75rem;flex-shrink:0;padding:0.125rem" data-chevron="${idx}">▼</span>` : '';
+
+  return `<div class="csv-row-card" data-idx="${idx}" data-status="${effectiveStatus}">
+    <div class="csv-row-card-header" data-expand="${idx}">
+      <div class="csv-row-info">
+        <div class="csv-row-primary">
+          <span class="csv-status-badge ${_csvBadgeClass(effectiveStatus)}">${_csvBadgeLabel(effectiveStatus)}</span>
+          <strong style="font-size:0.9375rem">${escapeHtml(itemName)}</strong>
+          <span class="text-muted" style="font-size:0.875rem">@ ${escapeHtml(storeName)}</span>
+        </div>
+        <div class="csv-row-secondary">${priceStr}${qtyStr}${dateStr ? ' · ' + escapeHtml(dateStr) : ''}</div>
+      </div>
+      <div class="csv-row-actions">
+        <button class="csv-row-skip-btn" data-skip="${idx}">${escapeHtml(skipLabel)}</button>
+        ${chevron}
+      </div>
+    </div>
+    ${hasDetail ? `<div class="csv-row-detail" id="csv-row-detail-${idx}" style="${alwaysOpen ? '' : 'display:none'}">${detailHtml}</div>` : ''}
+  </div>`;
+}
+
+function _updateCsvReviewUI() {
+  const overlay = document.getElementById('csv-review-overlay');
+  if (!overlay) return;
+
+  overlay.querySelector('#csv-review-list').innerHTML = _csvRR.map((r, i) => _renderCsvRowCard(r, i)).join('');
+
+  const counts = {};
+  _csvRR.forEach(r => {
+    const k = r._skip ? 'skip' : r._status;
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  const pills = [
+    counts.ready    && `<span class="csv-summary-pill csv-badge-ready">${counts.ready} ready</span>`,
+    counts.warning  && `<span class="csv-summary-pill csv-badge-warning">${counts.warning} warning${counts.warning !== 1 ? 's' : ''}</span>`,
+    counts.fuzzy    && `<span class="csv-summary-pill csv-badge-fuzzy">${counts.fuzzy} fuzzy</span>`,
+    counts.error    && `<span class="csv-summary-pill csv-badge-error">${counts.error} error${counts.error !== 1 ? 's' : ''}</span>`,
+    counts.skip     && `<span class="csv-summary-pill csv-badge-skip">${counts.skip} skipped</span>`,
+  ].filter(Boolean);
+  overlay.querySelector('#csv-review-summary').innerHTML = pills.join('');
+
+  const toImport = _csvRowsToImport().length;
+  const blocked = _csvBlockers().length;
+  const btn = overlay.querySelector('#csv-review-import-btn');
+  btn.textContent = `Import ${toImport} row${toImport !== 1 ? 's' : ''}`;
+  btn.disabled = blocked > 0 || toImport === 0;
+}
+
+function _handleCsvRowClick(e) {
+  // Skip/undo toggle
+  const skipBtn = e.target.closest('[data-skip]');
+  if (skipBtn) {
+    const idx = parseInt(skipBtn.dataset.skip, 10);
+    _csvRR[idx]._skip = !_csvRR[idx]._skip;
+    _updateCsvReviewUI();
+    return;
+  }
+  // Expand/collapse detail (warning/info rows only)
+  const header = e.target.closest('[data-expand]');
+  if (header) {
+    const idx = parseInt(header.dataset.expand, 10);
+    const row = _csvRR[idx];
+    if (row._status === 'error' || row._status === 'fuzzy') return; // always open
+    const detail = document.getElementById(`csv-row-detail-${idx}`);
+    const chevron = document.querySelector(`[data-chevron="${idx}"]`);
+    if (detail) {
+      const opening = detail.style.display === 'none';
+      detail.style.display = opening ? '' : 'none';
+      if (chevron) chevron.textContent = opening ? '▲' : '▼';
+    }
+  }
+}
+
+function _handleCsvRowChange(e) {
+  const radio = e.target;
+  if (radio.type !== 'radio' || !radio.name.startsWith('csvfuzzy-')) return;
+  const idx = parseInt(radio.name.split('-')[1], 10);
+  const val = radio.value;
+
+  if (val === 'new') {
+    _csvRR[idx]._fuzzyDecision = 'new';
+    _csvRR[idx]._newItem = true;
+    _csvRR[idx]._itemMatch = null;
+  } else {
+    const ci = parseInt(val.split('-')[1], 10);
+    _csvRR[idx]._fuzzyDecision = 'existing';
+    _csvRR[idx]._itemMatch = _csvRR[idx]._fuzzyCandidates[ci].item;
+    _csvRR[idx]._newItem = false;
+  }
+  _csvRR[idx]._status = _csvRR[idx]._warnings.length > 0 ? 'warning' : 'ready';
+
+  // Update only the badge and card status attr to avoid collapsing the detail
+  const card = document.querySelector(`.csv-row-card[data-idx="${idx}"]`);
+  if (card) {
+    card.dataset.status = _csvRR[idx]._status;
+    const badge = card.querySelector('.csv-status-badge');
+    if (badge) {
+      badge.className = `csv-status-badge ${_csvBadgeClass(_csvRR[idx]._status)}`;
+      badge.textContent = _csvBadgeLabel(_csvRR[idx]._status);
+    }
+  }
+
+  // Refresh summary + import button count only
+  const counts = {};
+  _csvRR.forEach(r => { const k = r._skip ? 'skip' : r._status; counts[k] = (counts[k] || 0) + 1; });
+  const pills = [
+    counts.ready    && `<span class="csv-summary-pill csv-badge-ready">${counts.ready} ready</span>`,
+    counts.warning  && `<span class="csv-summary-pill csv-badge-warning">${counts.warning} warning${counts.warning !== 1 ? 's' : ''}</span>`,
+    counts.fuzzy    && `<span class="csv-summary-pill csv-badge-fuzzy">${counts.fuzzy} fuzzy</span>`,
+    counts.error    && `<span class="csv-summary-pill csv-badge-error">${counts.error} error${counts.error !== 1 ? 's' : ''}</span>`,
+    counts.skip     && `<span class="csv-summary-pill csv-badge-skip">${counts.skip} skipped</span>`,
+  ].filter(Boolean);
+  const overlay = document.getElementById('csv-review-overlay');
+  if (!overlay) return;
+  overlay.querySelector('#csv-review-summary').innerHTML = pills.join('');
+  const toImport = _csvRowsToImport().length;
+  const blocked = _csvBlockers().length;
+  const btn = overlay.querySelector('#csv-review-import-btn');
+  btn.textContent = `Import ${toImport} row${toImport !== 1 ? 's' : ''}`;
+  btn.disabled = blocked > 0 || toImport === 0;
+}
+
+function _closeCsvReview() {
+  document.getElementById('csv-review-overlay')?.remove();
+  _csvRR = []; _csvItemMap = null; _csvStoreMap = null; _csvStatusEl = null;
+}
+
+function openCsvReviewSheet(annotatedRows, itemMap, storeMap, canCreateItem, statusEl) {
+  _csvRR = annotatedRows;
+  _csvItemMap = itemMap;
+  _csvStoreMap = storeMap;
+  _csvCanCreate = canCreateItem;
+  _csvStatusEl = statusEl;
+
+  document.getElementById('csv-review-overlay')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'csv-review-overlay';
+  overlay.className = 'csv-review-overlay';
+  overlay.innerHTML = `
+    <div class="csv-review-sheet">
+      <div class="csv-review-header">
+        <div class="csv-review-title-row">
+          <span class="csv-review-title">Review Import (${annotatedRows.length} row${annotatedRows.length !== 1 ? 's' : ''})</span>
+          <button id="csv-review-close-btn" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-muted);padding:0.25rem;line-height:1">&#x2715;</button>
+        </div>
+        <div id="csv-review-summary" class="csv-review-summary"></div>
+      </div>
+      <div id="csv-review-list" class="csv-review-body"></div>
+      <div class="csv-review-footer" id="csv-review-footer">
+        <div id="csv-review-progress" style="display:none;margin-bottom:0.75rem"></div>
+        <button id="csv-review-import-btn" class="btn btn-primary btn-full" disabled>Import</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener('click', e => { if (e.target === overlay) _closeCsvReview(); });
+  overlay.querySelector('#csv-review-close-btn').addEventListener('click', _closeCsvReview);
+  overlay.querySelector('#csv-review-import-btn').addEventListener('click', _startCsvImport);
+  overlay.querySelector('#csv-review-list').addEventListener('click', _handleCsvRowClick);
+  overlay.querySelector('#csv-review-list').addEventListener('change', _handleCsvRowChange);
+
+  _updateCsvReviewUI();
+}
+
 /**
  * Generate and download the CSV template file.
  */
