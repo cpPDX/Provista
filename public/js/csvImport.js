@@ -1,7 +1,9 @@
 // CSV Price Import — parser, importer, template download, and modal UI
 
-const CSV_COLUMNS = ['item_name', 'brand', 'category', 'unit', 'size', 'store_name', 'regular_price',
-  'sale_price', 'coupon_amount', 'coupon_code', 'quantity', 'date', 'notes', 'is_organic'];
+const CSV_COLUMNS = [
+  'item_name', 'brand', 'category', 'unit', 'size', 'store_name',
+  'final_price', 'is_sale', 'quantity', 'date', 'notes', 'is_organic'
+];
 
 // Normalize raw CSV category names to canonical display names
 const CATEGORY_NORMALIZE = {
@@ -20,13 +22,18 @@ function normalizeCategory(raw) {
   return CATEGORY_NORMALIZE[key] || raw.trim();
 }
 
+function parseBool(raw) {
+  if (!raw) return false;
+  return ['true', '1', 'yes'].includes(String(raw).trim().toLowerCase());
+}
+
 function getCsvExampleRows() {
   const today = new Date().toISOString().slice(0, 10);
-  // regular_price and sale_price are the TOTAL price for the stated quantity
+  // final_price is the total you paid for the stated quantity
   return [
-    ['Whole Milk', 'Kirkland', 'Dairy', 'gal', '', 'Costco', '4.99', '', '', '', '1', today, '', 'false'],
-    ['Avocado', '', 'Produce', 'each', '', 'Trader Joes', '2.37', '1.77', '', '', '3', today, '3 for $1.77 sale', 'false'],
-    ['Black Beans', "Bush's Best", 'Pantry', 'oz', '28', 'Fred Meyer', '1.89', '', '', '', '1', today, '', 'false'],
+    ['Whole Milk', 'Kirkland', 'Dairy', 'gal', '', 'Costco', '4.99', 'false', '1', today, '', 'false'],
+    ['Avocado', '', 'Produce', 'each', '', 'Trader Joes', '1.77', 'true', '3', today, '3 for $1.77 sale', 'false'],
+    ['Black Beans', "Bush's Best", 'Pantry', 'oz', '28', 'Fred Meyer', '1.89', 'false', '1', today, '', 'false'],
   ];
 }
 
@@ -160,15 +167,15 @@ async function importCsvPrices(rows) {
 
     const itemName = (row.item_name || '').trim();
     const storeName = (row.store_name || '').trim();
-    const regularPriceRaw = (row.regular_price || '').trim();
+    const finalPriceRaw = (row.final_price || '').trim();
 
     if (!itemName) { errors.push({ row: rowNum, reason: 'item_name is required' }); continue; }
     if (!storeName) { errors.push({ row: rowNum, reason: 'store_name is required' }); continue; }
-    if (!regularPriceRaw) { errors.push({ row: rowNum, reason: 'regular_price is required' }); continue; }
+    if (!finalPriceRaw) { errors.push({ row: rowNum, reason: 'final_price is required' }); continue; }
 
-    const regularPrice = parseFloat(regularPriceRaw);
+    const regularPrice = parseFloat(finalPriceRaw);
     if (isNaN(regularPrice) || regularPrice < 0) {
-      errors.push({ row: rowNum, reason: `Invalid regular_price "${regularPriceRaw}"` }); continue;
+      errors.push({ row: rowNum, reason: `Invalid final_price "${finalPriceRaw}"` }); continue;
     }
 
     // --- Resolve item (exact then fuzzy match, then create) ---
@@ -221,10 +228,8 @@ async function importCsvPrices(rows) {
     // (matching the manual UI). The API calculates pricePerUnit = finalPrice / qty.
     const quantity = row.quantity ? parseFloat(row.quantity) : 1;
     const safeQty = isNaN(quantity) || quantity < 1 ? 1 : quantity;
-    const salePrice = row.sale_price ? parseFloat(row.sale_price) : undefined;
-    const couponAmount = row.coupon_amount ? parseFloat(row.coupon_amount) : undefined;
+    const isSale = parseBool(row.is_sale);
     const notes = (row.notes || '').trim() || undefined;
-    const couponCode = (row.coupon_code || '').trim() || undefined;
 
     const payload = {
       itemId: item._id,
@@ -232,10 +237,9 @@ async function importCsvPrices(rows) {
       regularPrice,
       date: rowDate.toISOString(),
       quantity: safeQty,
+      source: 'csv',
     };
-    if (salePrice !== undefined && !isNaN(salePrice)) payload.salePrice = salePrice;
-    if (couponAmount !== undefined && !isNaN(couponAmount)) payload.couponAmount = couponAmount;
-    if (couponCode) payload.couponCode = couponCode;
+    if (isSale) payload.salePrice = regularPrice;
     if (notes) payload.notes = notes;
 
     try {
@@ -337,16 +341,16 @@ function openCsvImportModal() {
       Import grocery prices from a spreadsheet. Each row becomes a price entry in your household's history.
     </p>
     <p class="text-muted text-sm" style="margin-bottom:0.5rem">
-      <strong style="color:var(--text)">Required columns:</strong> item_name, category, unit, store_name, regular_price.
-      Optional: brand, size, sale_price, coupon_amount, coupon_code, quantity, date, notes, is_organic.
+      <strong style="color:var(--text)">Required columns:</strong> item_name, category, unit, store_name, final_price.
+      Optional: brand, size, is_sale, quantity, date, notes, is_organic.
     </p>
     <p class="text-muted text-sm" style="margin-bottom:0.5rem">
-      Enter the <strong style="color:var(--text)">total price</strong> for regular_price and sale_price — e.g. $2.37 for 3 avocados with quantity 3. The per-unit price is calculated automatically.
-      coupon_amount is a flat dollar discount (not per unit).
+      <strong style="color:var(--text)">final_price</strong> is the total you paid for the stated quantity — e.g. $1.77 for 3 avocados with quantity 3.
+      Set <strong style="color:var(--text)">is_sale</strong> to <code>true</code> if the item was discounted. The per-unit price is calculated automatically.
     </p>
     <p class="text-muted text-sm" style="margin-bottom:0.75rem">
-      Duplicate entries (same item + store + date) are automatically skipped.
-      New stores and items are created automatically.
+      Duplicate entries (same item + store + date) are replaced.
+      New stores and catalog items are created automatically.
       <button onclick="downloadCsvTemplate()" class="btn-link" style="color:var(--primary)">Download template →</button>
     </p>
     <input type="file" id="csv-modal-file-input" accept=".csv,text/csv" style="display:none" />
