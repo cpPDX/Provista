@@ -26,7 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check browser JavaScript syntax
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check JavaScript syntax
         run: |
           node --check public/js/api.js
           node --check public/js/more.js
@@ -34,6 +37,8 @@ jobs:
           node --check public/js/groceryEntry.js
           node --check public/js/csvImportUnified.js
           node --check public/js/mealPlan.js
+          node --check tests/e2e/prices.spec.js
+          node --check tests/e2e/mealPlan.spec.js
 
       - name: Run API test suite
         run: npm run test:api
