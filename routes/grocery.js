@@ -51,6 +51,7 @@ router.post('/log', requireAuth, async (req, res) => {
   const isAdmin = ['admin', 'owner'].includes(req.user.role);
   let createdItem = null;
   let createdStore = null;
+  let createdEntry = null;
 
   try {
     const regularPrice = parseNonNegative(req.body.regularPrice, 'regularPrice', true);
@@ -122,8 +123,13 @@ router.post('/log', requireAuth, async (req, res) => {
       fail(400, 'storeId or store is required');
     }
 
+    if (replacement &&
+        (String(replacement.itemId) !== String(item._id) || String(replacement.storeId) !== String(store._id))) {
+      fail(400, 'Replacement price entry must use the same item and store');
+    }
+
     const finalPrice = calcFinalPrice(regularPrice, salePrice, couponAmount);
-    const entry = await PriceEntry.create({
+    createdEntry = await PriceEntry.create({
       householdId,
       itemId: item._id,
       storeId: store._id,
@@ -143,16 +149,17 @@ router.post('/log', requireAuth, async (req, res) => {
       reviewedAt: isAdmin ? new Date() : null
     });
 
-    // Replace only after the new record is safely written so an import failure
-    // cannot destroy the price history it was trying to correct.
-    if (replacement) {
-      await PriceEntry.deleteOne({ _id: replacement._id, householdId });
-    }
-
-    const populated = await entry.populate([
+    // Populate before touching the prior record. If this step fails, the new
+    // entry is rolled back and the original price remains intact.
+    const populated = await createdEntry.populate([
       { path: 'itemId', select: 'name brand unit size category isOrganic upc' },
       { path: 'storeId', select: 'name location' }
     ]);
+
+    if (replacement) {
+      const deleted = await PriceEntry.deleteOne({ _id: replacement._id, householdId });
+      if (deleted.deletedCount !== 1) fail(409, 'Price entry changed before it could be replaced');
+    }
 
     res.status(201).json({
       entry: populated,
@@ -161,8 +168,11 @@ router.post('/log', requireAuth, async (req, res) => {
       replacedPriceEntryId: replacement ? String(replacement._id) : null
     });
   } catch (err) {
-    // Best-effort rollback for records created solely as part of this unfinished log action.
+    // Compensating rollback keeps a failed multi-record action from leaving
+    // orphan item/store/price records. Replacement deletion happens last, so the
+    // original entry remains available whenever an earlier step fails.
     await Promise.allSettled([
+      createdEntry ? PriceEntry.deleteOne({ _id: createdEntry._id, householdId }) : Promise.resolve(),
       createdItem ? Item.deleteOne({ _id: createdItem._id, householdId }) : Promise.resolve(),
       createdStore ? Store.deleteOne({ _id: createdStore._id, householdId }) : Promise.resolve()
     ]);
