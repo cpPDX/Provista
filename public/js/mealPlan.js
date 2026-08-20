@@ -3,8 +3,8 @@
 const mealPlanState = {
   weekStart: null,       // ISO date string YYYY-MM-DD
   weekStartDay: 6,       // 0=Sun, 1=Mon, 6=Sat
-  members: [],           // household members array
-  plan: null,            // current plan object
+  people: [],            // active household people (accounts + non-account people)
+  plan: null,
   saveTimer: null
 };
 
@@ -12,12 +12,10 @@ const mealPlanState = {
 
 function normalizeToWeekStart(date, weekStartDay) {
   const d = new Date(date);
-  // Work in local date to determine day-of-week
-  const dow = d.getDay(); // 0=Sun ... 6=Sat
+  const dow = d.getDay();
   let diff = dow - weekStartDay;
   if (diff < 0) diff += 7;
   d.setDate(d.getDate() - diff);
-  // Return as YYYY-MM-DD using local year/month/day
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
@@ -25,7 +23,6 @@ function normalizeToWeekStart(date, weekStartDay) {
 }
 
 function isoToLocalDate(isoStr) {
-  // Accept "YYYY-MM-DD" or full ISO; return a Date in local time at midnight
   const s = isoStr.slice(0, 10);
   const [y, mo, d] = s.split('-').map(Number);
   return new Date(y, mo - 1, d);
@@ -82,11 +79,73 @@ async function fetchSettings() {
   return res.json();
 }
 
-async function fetchHouseholdMembers() {
-  const res = await fetch('/api/household', { credentials: 'same-origin' });
-  if (!res.ok) throw new Error('Failed to load household');
-  const data = await res.json();
-  return data.members || [];
+// ===== Audience helpers =====
+
+function findLegacyPersonId(personName) {
+  if (!personName) return null;
+  const normalized = personName.trim().toLowerCase();
+  const first = normalized.split(/\s+/)[0];
+  const match = mealPlanState.people.find(person => {
+    const display = (person.displayName || '').trim().toLowerCase();
+    return display === normalized || display === first;
+  });
+  return match?._id || null;
+}
+
+function normalizeMeal(meal = {}) {
+  let personIds = Array.isArray(meal.personIds) ? meal.personIds.map(String) : [];
+  let forEveryone = meal.forEveryone !== false;
+  let legacyPersonName = meal.personName || '';
+
+  // Migrate old personName rows into household-person references when possible.
+  if (legacyPersonName && personIds.length === 0) {
+    const matchId = findLegacyPersonId(legacyPersonName);
+    if (matchId) {
+      personIds = [String(matchId)];
+      legacyPersonName = '';
+    }
+    forEveryone = false;
+  }
+  if (personIds.length) forEveryone = false;
+
+  return {
+    mealType: meal.mealType,
+    name: meal.name || '',
+    notes: meal.notes || '',
+    forEveryone,
+    personIds,
+    legacyPersonName
+  };
+}
+
+function getAudienceLabel(row) {
+  if (row.dataset.forEveryone === 'true') return 'Everyone';
+  const checked = [...row.querySelectorAll('.meal-person-check:checked')];
+  if (checked.length) {
+    return checked.map(input => {
+      const person = mealPlanState.people.find(p => String(p._id) === input.value);
+      return person?.displayName || 'Person';
+    }).join(', ');
+  }
+  return row.dataset.legacyPersonName || 'Choose people';
+}
+
+function refreshAudienceUI(row) {
+  const button = row.querySelector('.meal-audience-toggle');
+  if (button) button.textContent = getAudienceLabel(row);
+}
+
+function setEveryone(row, everyone) {
+  row.dataset.forEveryone = everyone ? 'true' : 'false';
+  const everyoneCheck = row.querySelector('.meal-everyone-check');
+  const personChecks = [...row.querySelectorAll('.meal-person-check')];
+  if (everyoneCheck) everyoneCheck.checked = everyone;
+  personChecks.forEach(input => {
+    input.disabled = everyone;
+    if (everyone) input.checked = false;
+  });
+  if (everyone) row.dataset.legacyPersonName = '';
+  refreshAudienceUI(row);
 }
 
 // ===== Collect current plan from DOM =====
@@ -97,14 +156,26 @@ function collectPlanFromDOM() {
     const dateVal = dayEl.dataset.date;
     const specialCollapsed = dayEl.dataset.specialCollapsed === 'true';
     const meals = [];
+
     dayEl.querySelectorAll('.meal-type-section[data-meal-type]').forEach(section => {
       const mealType = section.dataset.mealType;
       section.querySelectorAll('.meal-row').forEach(row => {
-        const personInput = row.querySelector('.meal-person-input');
-        const nameInput = row.querySelector('.meal-name-input');
-        const personName = personInput ? personInput.value.trim() : '';
-        const name = nameInput ? nameInput.value.trim() : '';
-        meals.push({ mealType, personName, name });
+        const name = row.querySelector('.meal-name-input')?.value.trim() || '';
+        const notes = row.querySelector('.meal-notes-input')?.value.trim() || '';
+        const forEveryone = row.dataset.forEveryone === 'true';
+        const personIds = forEveryone
+          ? []
+          : [...row.querySelectorAll('.meal-person-check:checked')].map(input => input.value);
+
+        meals.push({
+          mealType,
+          name,
+          notes,
+          forEveryone,
+          personIds,
+          // Preserve an unmatched legacy name until the household people list can resolve it.
+          personName: !forEveryone && personIds.length === 0 ? (row.dataset.legacyPersonName || '') : ''
+        });
       });
     });
     days.push({ date: dateVal, meals, specialCollapsed });
@@ -135,48 +206,128 @@ async function doSave() {
   }
 }
 
-// ===== Per-person row builders =====
+// ===== Meal row builders =====
 
-function buildPersonRow(mealType, personName, mealName) {
+function buildMealRow(mealType, rawMeal = {}, removable = false) {
+  const meal = normalizeMeal(rawMeal);
   const row = document.createElement('div');
   row.className = 'meal-row';
+  row.dataset.forEveryone = meal.forEveryone ? 'true' : 'false';
+  row.dataset.legacyPersonName = meal.legacyPersonName || '';
 
-  const personInput = document.createElement('input');
-  personInput.type = 'text';
-  personInput.className = 'meal-person-input';
-  personInput.value = personName;
-  personInput.placeholder = 'Person';
-  personInput.addEventListener('input', scheduleSave);
-  row.appendChild(personInput);
+  const top = document.createElement('div');
+  top.style.display = 'grid';
+  top.style.gridTemplateColumns = 'minmax(0,1fr) auto';
+  top.style.gap = '0.5rem';
+  top.style.alignItems = 'center';
 
   const nameInput = document.createElement('input');
   nameInput.type = 'text';
   nameInput.className = 'meal-name-input';
-  nameInput.value = mealName;
+  nameInput.value = meal.name;
   nameInput.placeholder = 'Meal…';
   nameInput.addEventListener('input', scheduleSave);
-  row.appendChild(nameInput);
+  top.appendChild(nameInput);
 
-  const removeBtn = document.createElement('button');
-  removeBtn.type = 'button';
-  removeBtn.className = 'meal-row-remove';
-  removeBtn.textContent = '×';
-  removeBtn.setAttribute('aria-label', 'Remove row');
-  removeBtn.addEventListener('click', () => { row.remove(); scheduleSave(); });
-  row.appendChild(removeBtn);
+  const audienceBtn = document.createElement('button');
+  audienceBtn.type = 'button';
+  audienceBtn.className = 'meal-audience-toggle btn btn-outline btn-sm';
+  audienceBtn.setAttribute('aria-label', 'Choose who this meal is for');
+  top.appendChild(audienceBtn);
+  row.appendChild(top);
 
+  const picker = document.createElement('div');
+  picker.className = 'meal-person-picker';
+  picker.style.display = 'none';
+  picker.style.marginTop = '0.5rem';
+  picker.style.padding = '0.5rem 0.625rem';
+  picker.style.border = '1px solid var(--border)';
+  picker.style.borderRadius = 'var(--radius-sm)';
+
+  const everyoneLabel = document.createElement('label');
+  everyoneLabel.style.display = 'flex';
+  everyoneLabel.style.alignItems = 'center';
+  everyoneLabel.style.gap = '0.5rem';
+  everyoneLabel.style.marginBottom = mealPlanState.people.length ? '0.5rem' : '0';
+  const everyoneCheck = document.createElement('input');
+  everyoneCheck.type = 'checkbox';
+  everyoneCheck.className = 'meal-everyone-check';
+  everyoneCheck.checked = meal.forEveryone;
+  everyoneLabel.appendChild(everyoneCheck);
+  everyoneLabel.appendChild(document.createTextNode('Everyone'));
+  picker.appendChild(everyoneLabel);
+
+  mealPlanState.people.forEach(person => {
+    const label = document.createElement('label');
+    label.style.display = 'flex';
+    label.style.alignItems = 'center';
+    label.style.gap = '0.5rem';
+    label.style.padding = '0.2rem 0';
+
+    const check = document.createElement('input');
+    check.type = 'checkbox';
+    check.className = 'meal-person-check';
+    check.value = String(person._id);
+    check.checked = meal.personIds.includes(String(person._id));
+    check.disabled = meal.forEveryone;
+    check.addEventListener('change', () => {
+      row.dataset.forEveryone = 'false';
+      everyoneCheck.checked = false;
+      if (check.checked) row.dataset.legacyPersonName = '';
+      refreshAudienceUI(row);
+      scheduleSave();
+    });
+
+    label.appendChild(check);
+    label.appendChild(document.createTextNode(person.displayName || 'Person'));
+    picker.appendChild(label);
+  });
+
+  everyoneCheck.addEventListener('change', () => {
+    setEveryone(row, everyoneCheck.checked);
+    scheduleSave();
+  });
+
+  audienceBtn.addEventListener('click', () => {
+    picker.style.display = picker.style.display === 'none' ? '' : 'none';
+  });
+  row.appendChild(picker);
+
+  const notesInput = document.createElement('textarea');
+  notesInput.className = 'meal-notes-input meal-notes-area';
+  notesInput.value = meal.notes;
+  notesInput.placeholder = 'Items needed or notes (optional)…';
+  notesInput.rows = 1;
+  notesInput.style.marginTop = '0.5rem';
+  notesInput.addEventListener('input', scheduleSave);
+  row.appendChild(notesInput);
+
+  if (removable) {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'meal-row-remove';
+    removeBtn.textContent = 'Remove separate meal';
+    removeBtn.style.width = 'auto';
+    removeBtn.style.fontSize = '0.75rem';
+    removeBtn.style.marginTop = '0.375rem';
+    removeBtn.setAttribute('aria-label', 'Remove separate meal');
+    removeBtn.addEventListener('click', () => { row.remove(); scheduleSave(); });
+    row.appendChild(removeBtn);
+  }
+
+  refreshAudienceUI(row);
   return row;
 }
 
-function buildAddPersonButton(contentEl, mealType) {
+function buildAddMealButton(contentEl, mealType) {
   const btn = document.createElement('button');
   btn.type = 'button';
   btn.className = 'meal-add-row';
-  btn.textContent = '+ Add person';
+  btn.textContent = '+ Add separate meal';
   btn.addEventListener('click', () => {
-    const row = buildPersonRow(mealType, '', '');
+    const row = buildMealRow(mealType, { mealType, forEveryone: false, personIds: [], name: '', notes: '' }, true);
     contentEl.insertBefore(row, btn);
-    row.querySelector('.meal-person-input')?.focus();
+    row.querySelector('.meal-name-input')?.focus();
     scheduleSave();
   });
   return btn;
@@ -190,9 +341,9 @@ function buildMealTypeSection(mealType, label, typeMeals, isSpecial, specialColl
   const contentEl = document.createElement('div');
   contentEl.className = 'meal-type-rows';
 
-  // Render per-person rows
-  typeMeals.forEach(m => contentEl.appendChild(buildPersonRow(mealType, m.personName || '', m.name || '')));
-  contentEl.appendChild(buildAddPersonButton(contentEl, mealType));
+  const meals = typeMeals.length ? typeMeals : [{ mealType, forEveryone: true, personIds: [], name: '', notes: '' }];
+  meals.forEach((meal, index) => contentEl.appendChild(buildMealRow(mealType, meal, index > 0)));
+  contentEl.appendChild(buildAddMealButton(contentEl, mealType));
 
   if (isSpecial) {
     const toggleBtn = document.createElement('button');
@@ -260,20 +411,14 @@ function renderMealPlan(plan) {
 
   container.innerHTML = html;
 
-  // Render day cards
   const daysContainer = document.getElementById('mp-days-container');
-  (plan.days || []).forEach((day, di) => {
-    const dayEl = renderDayCard(day, di);
-    daysContainer.appendChild(dayEl);
-  });
+  (plan.days || []).forEach((day, di) => daysContainer.appendChild(renderDayCard(day, di)));
 
-  // Wire up textarea auto-save
   ['mp-produce-notes', 'mp-shopping-notes'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', scheduleSave);
   });
 
-  // Wire up nav buttons
   document.getElementById('mp-prev-week')?.addEventListener('click', () => {
     mealPlanState.weekStart = addWeeks(mealPlanState.weekStart, -1);
     loadMealPlan();
@@ -283,7 +428,6 @@ function renderMealPlan(plan) {
     loadMealPlan();
   });
 
-  // Save button
   document.getElementById('mp-save-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('mp-save-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
@@ -292,10 +436,7 @@ function renderMealPlan(plan) {
     if (typeof showToast === 'function') showToast('Meal plan saved');
   });
 
-  // Export button
   document.getElementById('mp-export-btn')?.addEventListener('click', exportWeekICS);
-
-  // Settings button
   document.getElementById('mp-settings-btn')?.addEventListener('click', openWeekStartSettings);
 }
 
@@ -318,9 +459,8 @@ function renderDayCard(day, di) {
 
   MEAL_TYPES_ORDER.forEach(mealType => {
     const typeMeals = (day.meals || []).filter(m => m.mealType === mealType);
-    const rows = typeMeals.length > 0 ? typeMeals : [{ personName: '', name: '' }];
     dayEl.appendChild(buildMealTypeSection(
-      mealType, MEAL_LABELS[mealType], rows,
+      mealType, MEAL_LABELS[mealType], typeMeals,
       mealType === 'special', specialCollapsed
     ));
   });
@@ -330,6 +470,10 @@ function renderDayCard(day, di) {
 
 function escHtml(str) {
   return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function escapeIcsText(str) {
+  return String(str || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 }
 
 // ===== ICS Export =====
@@ -347,22 +491,22 @@ function exportWeekICS() {
     dayEl.querySelectorAll('.meal-type-section[data-meal-type]').forEach(section => {
       const mealType = section.dataset.mealType;
       section.querySelectorAll('.meal-row').forEach(row => {
-        const nameInput = row.querySelector('.meal-name-input');
-        const name = (nameInput ? nameInput.value : '').trim();
+        const name = row.querySelector('.meal-name-input')?.value.trim() || '';
         if (!name) return;
-        const personInput = row.querySelector('.meal-person-input');
-        const person = (personInput ? personInput.value.trim() : '');
-        const summary = person ? `${person}: ${name}` : name;
+        const notes = row.querySelector('.meal-notes-input')?.value.trim() || '';
+        const audience = getAudienceLabel(row);
+        const summary = audience === 'Everyone' ? name : `${audience}: ${name}`;
         const uid = `${Date.now()}-${Math.random().toString(36).slice(2)}-${mealType}@grocerytracker`;
-        events.push([
+        const event = [
           'BEGIN:VEVENT',
           `UID:${uid}`,
           `DTSTART:${datePart}T${MEAL_HOURS[mealType]}`,
           `DTEND:${datePart}T${MEAL_HOURS_END[mealType]}`,
-          `SUMMARY:${summary}`,
-          'DESCRIPTION:Meal plan export from GroceryTracker',
-          'END:VEVENT'
-        ].join('\r\n'));
+          `SUMMARY:${escapeIcsText(summary)}`
+        ];
+        if (notes) event.push(`DESCRIPTION:${escapeIcsText(notes)}`);
+        event.push('END:VEVENT');
+        events.push(event.join('\r\n'));
       });
     });
   });
@@ -370,7 +514,7 @@ function exportWeekICS() {
   const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//GroceryTracker//MealPlan//EN',
+    'PRODID:-//Provista//MealPlan//EN',
     ...events,
     'END:VCALENDAR'
   ].join('\r\n');
@@ -422,7 +566,6 @@ function openWeekStartSettings() {
       });
       if (!res.ok) throw new Error('Failed to save settings');
       mealPlanState.weekStartDay = weekStartDay;
-      // Re-normalize current week to new start day
       mealPlanState.weekStart = normalizeToWeekStart(new Date(), weekStartDay);
       if (typeof closeModal === 'function') closeModal();
       if (typeof showToast === 'function') showToast('Week start day updated');
@@ -441,11 +584,9 @@ async function loadMealPlan() {
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
 
   try {
-    // Load settings + members in parallel if not yet loaded
     if (!mealPlanState._initialized) {
-      const [settings, members] = await Promise.all([fetchSettings(), fetchHouseholdMembers()]);
+      const settings = await fetchSettings();
       mealPlanState.weekStartDay = settings.weekStartDay;
-      mealPlanState.members = members;
       mealPlanState._initialized = true;
     }
 
@@ -454,6 +595,7 @@ async function loadMealPlan() {
     }
 
     const plan = await fetchMealPlan(mealPlanState.weekStart);
+    mealPlanState.people = plan.people || [];
     mealPlanState.plan = plan;
     renderMealPlan(plan);
   } catch (err) {
@@ -462,7 +604,7 @@ async function loadMealPlan() {
 }
 
 function initMealPlanSection() {
-  // Reset so it re-fetches settings and current week on first open
   mealPlanState._initialized = false;
   mealPlanState.weekStart = null;
+  mealPlanState.people = [];
 }
