@@ -10,6 +10,75 @@ permissions:
   contents: read
 
 jobs:
+  apply-review-fixes:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feature/household-people-foundation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: feature/household-people-foundation
+
+      - name: Detect completed patch
+        id: patched
+        run: |
+          if grep -q "replaceSameDay" routes/grocery.js && grep -q "validateHouseholdReferences" routes/prices.js && test -f tests/api/security.test.js; then
+            echo "done=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "done=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Apply final review fixes
+        if: steps.patched.outputs.done != 'true'
+        run: python3 scripts/apply_review_fixes.py
+
+      - name: Set up Node.js
+        if: steps.patched.outputs.done != 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20.19.0'
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.patched.outputs.done != 'true'
+        run: npm ci
+
+      - name: Syntax checks
+        if: steps.patched.outputs.done != 'true'
+        run: |
+          node --check public/js/ui.js
+          node --check public/js/groceryEntry.js
+          node --check public/js/csvImportUnified.js
+          node --check public/js/mealPlan.js
+          node --check routes/prices.js
+          node --check routes/grocery.js
+          node --check routes/mealPlan.js
+          node --check tests/api/security.test.js
+          node --check tests/api/prices.test.js
+          node --check tests/api/grocery.test.js
+          node --check tests/api/mealPlan.test.js
+          node --check tests/e2e/prices.spec.js
+          node --check tests/e2e/mealPlan.spec.js
+
+      - name: Run API regression suite
+        if: steps.patched.outputs.done != 'true'
+        run: npm run test:api
+
+      - name: Commit fixes
+        if: steps.patched.outputs.done != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/js/ui.js public/js/groceryEntry.js public/js/csvImportUnified.js public/js/mealPlan.js \
+            routes/prices.js routes/grocery.js routes/mealPlan.js middleware/security.js \
+            tests/api/security.test.js tests/api/prices.test.js tests/api/grocery.test.js tests/api/mealPlan.test.js \
+            tests/e2e/prices.spec.js tests/e2e/mealPlan.spec.js
+          git commit -m "Address final review findings"
+          git push origin HEAD:feature/household-people-foundation
+
   api-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 15
