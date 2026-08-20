@@ -260,4 +260,15 @@
     script.onerror = () => console.error('Failed to load unified grocery entry UI');
     document.head.appendChild(script);
   }
+
+  // csvImport.js has already loaded by the time this enhancement runs. Replace
+  // only its final write loop so reviewed imports use the same atomic grocery API.
+  if (!document.querySelector('script[data-csv-unified]')) {
+    const script = document.createElement('script');
+    script.src = '/js/csvImportUnified.js';
+    script.dataset.csvUnified = 'true';
+    script.async = false;
+    script.onerror = () => console.error('Failed to load unified CSV import writer');
+    document.head.appendChild(script);
+  }
 })();
