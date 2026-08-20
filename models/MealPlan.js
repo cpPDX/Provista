@@ -2,8 +2,12 @@ const mongoose = require('mongoose');
 
 const mealSchema = new mongoose.Schema({
   mealType: { type: String, enum: ['breakfast', 'lunch', 'dinner', 'special'], required: true },
+  // personName remains for backward compatibility with existing plans while personIds is rolled out.
   personName: { type: String, trim: true, default: '' },
-  name: { type: String, trim: true, default: '' }
+  personIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'HouseholdPerson' }],
+  forEveryone: { type: Boolean, default: true },
+  name: { type: String, trim: true, default: '' },
+  notes: { type: String, trim: true, default: '' }
 }, { _id: false });
 
 const daySchema = new mongoose.Schema({
