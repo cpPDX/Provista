@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const Household = require('../models/Household');
+const HouseholdPerson = require('../models/HouseholdPerson');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
@@ -10,23 +11,39 @@ function serverErr(err) { return isProd ? 'Internal server error' : err.message;
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
 
-function buildScaffold(weekStart, members) {
+async function ensureHouseholdPeople(householdId) {
+  const existing = await HouseholdPerson.find({ householdId, active: true }).sort({ sortOrder: 1, createdAt: 1 }).lean();
+  if (existing.length) return existing;
+
+  const users = await User.find({ householdId }).select('_id name displayName').sort({ createdAt: 1 }).lean();
+  if (!users.length) return [];
+
+  await HouseholdPerson.insertMany(users.map((user, index) => ({
+    householdId,
+    userId: user._id,
+    displayName: user.displayName || user.name.trim().split(/\s+/)[0],
+    sortOrder: index
+  })), { ordered: false }).catch(err => {
+    if (err?.code !== 11000 && !err?.writeErrors?.every(e => e.code === 11000)) throw err;
+  });
+
+  return HouseholdPerson.find({ householdId, active: true }).sort({ sortOrder: 1, createdAt: 1 }).lean();
+}
+
+function buildScaffold(weekStart) {
   const days = [];
   const start = new Date(weekStart);
-  const memberNames = (members || []).map(m => m.name);
   for (let i = 0; i < 7; i++) {
     const date = new Date(start);
     date.setUTCDate(start.getUTCDate() + i);
-    const meals = [];
-    MEAL_TYPES.forEach(mealType => {
-      if (memberNames.length === 0) {
-        meals.push({ mealType, personName: '', name: '' });
-      } else {
-        memberNames.forEach(name => {
-          meals.push({ mealType, personName: name, name: '' });
-        });
-      }
-    });
+    const meals = MEAL_TYPES.map(mealType => ({
+      mealType,
+      personName: '',
+      personIds: [],
+      forEveryone: true,
+      name: '',
+      notes: ''
+    }));
     days.push({ date, meals, specialCollapsed: true });
   }
   return days;
@@ -41,21 +58,26 @@ router.get('/', requireAuth, async (req, res) => {
     const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
     if (isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
 
-    let plan = await MealPlan.findOne({ householdId: req.user.householdId, weekStart: weekStartDate });
+    const [plan, people] = await Promise.all([
+      MealPlan.findOne({ householdId: req.user.householdId, weekStart: weekStartDate }),
+      ensureHouseholdPeople(req.user.householdId)
+    ]);
 
     if (!plan) {
-      const members = await User.find({ householdId: req.user.householdId }).select('name').lean();
       return res.json({
         householdId: req.user.householdId,
         weekStart: weekStartDate,
-        days: buildScaffold(weekStartDate, members),
+        days: buildScaffold(weekStartDate),
+        people,
         produceNotes: '',
         shoppingNotes: '',
         _scaffold: true
       });
     }
 
-    res.json(plan);
+    const result = plan.toObject();
+    result.people = people;
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -74,12 +96,12 @@ router.put('/', requireAuth, async (req, res) => {
       { householdId: req.user.householdId, weekStart: weekStartDate },
       {
         $set: {
-          days: days || buildScaffold(weekStartDate, []),
+          days: days || buildScaffold(weekStartDate),
           produceNotes: produceNotes || '',
           shoppingNotes: shoppingNotes || ''
         }
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
     );
 
     res.json(plan);
