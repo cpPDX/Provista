@@ -4,10 +4,12 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Household = require('../models/Household');
+const HouseholdPerson = require('../models/HouseholdPerson');
 const PriceEntry = require('../models/PriceEntry');
 const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { seedHousehold } = require('../utils/seed');
+const { fallbackDisplayName, syncUserHouseholdPerson } = require('../utils/householdPeople');
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
@@ -23,6 +25,18 @@ const COOKIE_OPTS = {
 function issueToken(res, userId) {
   const token = jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '30d' });
   res.cookie('token', token, COOKIE_OPTS);
+}
+
+function publicUser(user) {
+  return {
+    _id: user._id,
+    name: user.name,
+    displayName: fallbackDisplayName(user),
+    email: user.email,
+    role: user.role,
+    householdId: user.householdId,
+    preferences: user.preferences
+  };
 }
 
 // POST /api/auth/register
@@ -41,7 +55,13 @@ router.post('/register', async (req, res) => {
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const user = new User({ name, email, passwordHash });
+    const trimmedName = name.trim();
+    const user = new User({
+      name: trimmedName,
+      displayName: trimmedName.split(/\s+/)[0],
+      email,
+      passwordHash
+    });
 
     if (action === 'create') {
       if (!householdName) return res.status(400).json({ error: 'Household name is required' });
@@ -51,8 +71,7 @@ router.post('/register', async (req, res) => {
       user.householdId = household._id;
       user.role = 'owner';
       await user.save();
-      // Seed items for the new household
-      await seedHousehold(household._id);
+      await Promise.all([seedHousehold(household._id), syncUserHouseholdPerson(user)]);
     } else if (action === 'join') {
       if (!inviteCode) return res.status(400).json({ error: 'Invite code is required' });
       const code = inviteCode.toUpperCase().trim();
@@ -63,14 +82,13 @@ router.post('/register', async (req, res) => {
       user.householdId = household._id;
       user.role = 'member';
       await user.save();
+      await syncUserHouseholdPerson(user);
     } else {
       return res.status(400).json({ error: 'Action must be "create" or "join"' });
     }
 
     issueToken(res, user._id);
-    res.status(201).json({
-      user: { _id: user._id, name: user.name, email: user.email, role: user.role, householdId: user.householdId }
-    });
+    res.status(201).json({ user: publicUser(user) });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -88,10 +106,9 @@ router.post('/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) return res.status(401).json({ error: 'Invalid email or password' });
 
+    if (user.householdId) await syncUserHouseholdPerson(user);
     issueToken(res, user._id);
-    res.json({
-      user: { _id: user._id, name: user.name, email: user.email, role: user.role, householdId: user.householdId }
-    });
+    res.json({ user: publicUser(user) });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -114,53 +131,67 @@ router.get('/me', async (req, res) => {
 
     let household = null;
     if (user.householdId) {
-      household = await Household.findById(user.householdId).select('name ownerId');
+      [household] = await Promise.all([
+        Household.findById(user.householdId).select('name ownerId'),
+        syncUserHouseholdPerson(user)
+      ]);
     }
-    // Feature flags — offlineAccess is on for all households for now
+
     const features = {
       offlineAccess: true,
       advancedAnalytics: false,
       barcodeScanning: true
     };
 
-    res.json({ user, household, features });
+    res.json({ user: publicUser(user), household, features });
   } catch (err) {
     res.status(401).json({ error: 'Invalid or expired session' });
   }
 });
 
-// PUT /api/auth/profile - update name and/or email (requires auth cookie)
+// PUT /api/auth/profile - update account/profile fields
 router.put('/profile', async (req, res) => {
   const token = req.cookies?.token;
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const { name, email, barcodeAutoAccept } = req.body;
-    if (name === undefined && email === undefined && barcodeAutoAccept === undefined) {
+    const { name, displayName, email, barcodeAutoAccept } = req.body;
+    if (name === undefined && displayName === undefined && email === undefined && barcodeAutoAccept === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
 
     const update = {};
-    if (name) update.name = name.trim();
-    if (email) {
-      const existing = await User.findOne({ email: email.toLowerCase(), _id: { $ne: payload.userId } });
+    if (name !== undefined) {
+      const trimmedName = String(name || '').trim();
+      if (!trimmedName) return res.status(400).json({ error: 'Name is required' });
+      update.name = trimmedName;
+    }
+    if (displayName !== undefined) {
+      const trimmedDisplayName = String(displayName || '').trim();
+      if (trimmedDisplayName.length > 60) return res.status(400).json({ error: 'Display name is too long' });
+      update.displayName = trimmedDisplayName;
+    }
+    if (email !== undefined) {
+      const normalizedEmail = String(email || '').toLowerCase().trim();
+      if (!normalizedEmail) return res.status(400).json({ error: 'Email is required' });
+      const existing = await User.findOne({ email: normalizedEmail, _id: { $ne: payload.userId } });
       if (existing) return res.status(409).json({ error: 'Email already in use' });
-      update.email = email.toLowerCase().trim();
+      update.email = normalizedEmail;
     }
     if (barcodeAutoAccept !== undefined) {
-      // null = inherit household, true/false = explicit override
       update['preferences.barcodeAutoAccept'] = barcodeAutoAccept === null ? null : Boolean(barcodeAutoAccept);
     }
 
-    const user = await User.findByIdAndUpdate(payload.userId, update, { new: true }).select('-passwordHash');
+    const user = await User.findByIdAndUpdate(payload.userId, update, { new: true, runValidators: true }).select('-passwordHash');
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ user });
+    if (user.householdId) await syncUserHouseholdPerson(user);
+    res.json({ user: publicUser(user) });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
 });
 
-// PUT /api/auth/password - change password (requires auth cookie)
+// PUT /api/auth/password - change password
 router.put('/password', async (req, res) => {
   const token = req.cookies?.token;
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
@@ -199,7 +230,6 @@ router.delete('/account', async (req, res) => {
     const match = await bcrypt.compare(password, user.passwordHash);
     if (!match) return res.status(401).json({ error: 'Incorrect password' });
 
-    // Owners must delete or transfer their household before deleting their account
     if (user.role === 'owner' && user.householdId) {
       return res.status(400).json({
         error: 'You are a household owner. Please delete your household or transfer ownership before deleting your account.'
@@ -207,8 +237,8 @@ router.delete('/account', async (req, res) => {
     }
 
     const userId = user._id;
+    const householdId = user.householdId;
 
-    // Null out user references in shared data (preserve history for the household)
     await Promise.all([
       PriceEntry.updateMany(
         { $or: [{ submittedBy: userId }, { reviewedBy: userId }] },
@@ -219,6 +249,9 @@ router.delete('/account', async (req, res) => {
         { $or: [{ addedBy: userId }, { removedBy: userId }] },
         { $unset: { addedBy: '', removedBy: '' } }
       ),
+      householdId
+        ? HouseholdPerson.findOneAndUpdate({ householdId, userId }, { $set: { userId: null } })
+        : Promise.resolve()
     ]);
 
     await User.findByIdAndDelete(userId);
