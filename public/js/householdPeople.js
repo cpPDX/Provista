@@ -224,4 +224,15 @@
       handleError(err, 'Failed to remove person');
     }
   };
+
+  // Load the unified grocery-entry override without forcing another large index.html edit.
+  // The click handlers resolve openAddPriceModal at click time, so once this script is loaded
+  // all existing "Log Price" entry points use the new combined item + price flow.
+  if (!document.querySelector('script[data-grocery-entry]')) {
+    const script = document.createElement('script');
+    script.src = '/js/groceryEntry.js';
+    script.dataset.groceryEntry = 'true';
+    script.async = false;
+    document.head.appendChild(script);
+  }
 })();
