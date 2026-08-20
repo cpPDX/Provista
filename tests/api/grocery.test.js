@@ -202,6 +202,36 @@ describe('POST /api/grocery/log', () => {
     expect(prices.body[0]._id).toBe(replacement.body.entry._id);
   });
 
+  it('rejects replacement when item or store does not match and preserves the original', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const [itemA, itemB, store] = await Promise.all([
+      request(app).post('/api/items').set('Cookie', cookie)
+        .send({ name: 'Coffee A', category: 'Pantry', unit: 'bag' }),
+      request(app).post('/api/items').set('Cookie', cookie)
+        .send({ name: 'Coffee B', category: 'Pantry', unit: 'bag' }),
+      request(app).post('/api/stores').set('Cookie', cookie)
+        .send({ name: 'Costco' })
+    ]);
+
+    const original = await request(app).post('/api/grocery/log').set('Cookie', cookie)
+      .send({ itemId: itemA.body._id, storeId: store.body._id, regularPrice: 12.99 });
+
+    const res = await request(app).post('/api/grocery/log').set('Cookie', cookie)
+      .send({
+        itemId: itemB.body._id,
+        storeId: store.body._id,
+        regularPrice: 10.99,
+        replacePriceEntryId: original.body.entry._id
+      });
+
+    expect(res.status).toBe(400);
+
+    const prices = await request(app).get('/api/prices').set('Cookie', cookie);
+    expect(prices.body).toHaveLength(1);
+    expect(prices.body[0]._id).toBe(original.body.entry._id);
+    expect(prices.body[0].finalPrice).toBe(12.99);
+  });
+
   it('does not allow a member to replace an existing price entry', async () => {
     const { cookie: ownerCookie } = await createOwnerSession(app);
     const [item, store] = await Promise.all([
