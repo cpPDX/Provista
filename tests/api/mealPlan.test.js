@@ -115,6 +115,30 @@ describe('PUT /api/meal-plan', () => {
     expect(save.body.days[0].meals[0].personIds.map(String)).toContain(String(personId));
   });
 
+  it('rejects audience people from another household', async () => {
+    const first = await createOwnerSession(app, { email: 'meal-first@test.com', householdName: 'First' });
+    const second = await createOwnerSession(app, { email: 'meal-second@test.com', householdName: 'Second' });
+
+    const foreignHousehold = await request(app).get('/api/household').set('Cookie', second.cookie);
+    const foreignPersonId = foreignHousehold.body.people[0]._id;
+
+    const days = [{
+      date: `${WEEK_START}T00:00:00.000Z`,
+      specialCollapsed: true,
+      meals: [{
+        mealType: 'dinner',
+        name: 'Private dinner',
+        forEveryone: false,
+        personIds: [foreignPersonId]
+      }]
+    }];
+
+    const res = await request(app).put('/api/meal-plan').set('Cookie', first.cookie)
+      .send({ weekStart: WEEK_START, days });
+
+    expect(res.status).toBe(400);
+  });
+
   it('returns 400 when weekStart is missing', async () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app).put('/api/meal-plan').set('Cookie', cookie).send({ days: [] });
