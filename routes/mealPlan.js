@@ -1,7 +1,9 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const Household = require('../models/Household');
+const HouseholdPerson = require('../models/HouseholdPerson');
 const { ensureHouseholdPeople } = require('../utils/householdPeople');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
@@ -27,6 +29,25 @@ function buildScaffold(weekStart) {
     days.push({ date, meals, specialCollapsed: true });
   }
   return days;
+}
+
+async function validateAudienceScope(days, householdId) {
+  if (!Array.isArray(days)) return true;
+
+  const ids = [...new Set(days.flatMap(day =>
+    (Array.isArray(day?.meals) ? day.meals : []).flatMap(meal =>
+      Array.isArray(meal?.personIds) ? meal.personIds.map(String) : []
+    )
+  ))];
+
+  if (!ids.length) return true;
+  if (ids.some(id => !mongoose.isValidObjectId(id))) return false;
+
+  const count = await HouseholdPerson.countDocuments({
+    _id: { $in: ids },
+    householdId
+  });
+  return count === ids.length;
 }
 
 // GET /api/meal-plan?weekStart=YYYY-MM-DD
@@ -72,6 +93,10 @@ router.put('/', requireAuth, async (req, res) => {
     const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
     if (isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
 
+    if (!(await validateAudienceScope(days, req.user.householdId))) {
+      return res.status(400).json({ error: 'Meal audience contains a person outside this household' });
+    }
+
     const plan = await MealPlan.findOneAndUpdate(
       { householdId: req.user.householdId, weekStart: weekStartDate },
       {
@@ -86,6 +111,9 @@ router.put('/', requireAuth, async (req, res) => {
 
     res.json(plan);
   } catch (err) {
+    if (err?.name === 'ValidationError' || err?.name === 'CastError') {
+      return res.status(400).json({ error: serverErr(err) });
+    }
     res.status(500).json({ error: serverErr(err) });
   }
 });
