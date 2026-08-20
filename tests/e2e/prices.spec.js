@@ -43,7 +43,7 @@ test.describe('Prices Tab', () => {
 
   test('catalog Add Item starts the same flow in new-item mode', async ({ page }) => {
     await page.click('[data-tab="more"]');
-    await page.click('[data-section="items"]');
+    await page.click('.more-item[data-section="items"]');
     await page.click('#btn-add-item-catalog');
 
     await expect(page.locator('#modal-title')).toContainText('Add Grocery');
