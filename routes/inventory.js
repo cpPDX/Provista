@@ -50,9 +50,11 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
     if (notes !== undefined) setFields.notes = notes;
     if (lowStockThreshold !== undefined) setFields.lowStockThreshold = lowStockThreshold;
 
+    // Keep fields out of $setOnInsert when they may also be present in $set;
+    // MongoDB rejects an upsert that updates the same path through both operators.
     const inv = await InventoryItem.findOneAndUpdate(
       { householdId: req.user.householdId, itemId },
-      { $set: setFields, $setOnInsert: { householdId: req.user.householdId, itemId, quantity: parseFloat(quantity) || 0 } },
+      { $set: setFields, $setOnInsert: { householdId: req.user.householdId, itemId } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).populate('itemId', 'name brand category unit size isOrganic');
     res.status(201).json(inv);
