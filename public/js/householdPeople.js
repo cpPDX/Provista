@@ -226,13 +226,38 @@
   };
 
   // Load the unified grocery-entry override without forcing another large index.html edit.
-  // The click handlers resolve openAddPriceModal at click time, so once this script is loaded
-  // all existing "Log Price" entry points use the new combined item + price flow.
   if (!document.querySelector('script[data-grocery-entry]')) {
     const script = document.createElement('script');
     script.src = '/js/groceryEntry.js';
     script.dataset.groceryEntry = 'true';
     script.async = false;
+    script.onload = () => {
+      // Catalog "Add Item" should ask for a first price rather than creating an
+      // orphan catalog record. Capture phase prevents the legacy item-only modal.
+      document.addEventListener('click', (event) => {
+        const button = event.target.closest('#btn-add-item-catalog');
+        if (!button || !window.appAuth?.isAdmin() || typeof window.openAddPriceModal !== 'function') return;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.openAddPriceModal(null, async () => {
+          showToast('Item and first price saved');
+          if (typeof loadCatalog === 'function') await loadCatalog();
+        });
+
+        // Start the unified form directly in new-item mode.
+        const mode = document.getElementById('price-new-item-mode');
+        const panel = document.getElementById('price-new-item');
+        const itemId = document.getElementById('price-item-id');
+        const context = document.getElementById('price-item-context');
+        if (mode) mode.value = 'true';
+        if (panel) panel.style.display = '';
+        if (itemId) itemId.value = '';
+        if (context) context.style.display = 'none';
+        document.getElementById('price-item-input')?.focus();
+      }, true);
+    };
+    script.onerror = () => console.error('Failed to load unified grocery entry UI');
     document.head.appendChild(script);
   }
 })();
