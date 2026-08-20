@@ -8,14 +8,15 @@ beforeEach(db.clearDB);
 afterAll(db.disconnect);
 
 describe('POST /api/auth/register', () => {
-  it('returns 201 and sets cookie when creating household', async () => {
+  it('returns 201, sets cookie, and defaults display name to first name', async () => {
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Alice', email: 'alice@test.com', password: 'password123', action: 'create', householdName: 'Alices House' });
+      .send({ name: 'Alice Example', email: 'alice@test.com', password: 'password123', action: 'create', householdName: 'Alices House' });
     expect(res.status).toBe(201);
     expect(res.headers['set-cookie']).toBeDefined();
     expect(res.body.user.role).toBe('owner');
     expect(res.body.user.householdId).toBeTruthy();
+    expect(res.body.user.displayName).toBe('Alice');
   });
 
   it('returns 400 when name is missing', async () => {
@@ -70,9 +71,10 @@ describe('POST /api/auth/register', () => {
 
     const res = await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Bob', email: 'bob@test.com', password: 'password123', action: 'join', inviteCode });
+      .send({ name: 'Bob Example', email: 'bob@test.com', password: 'password123', action: 'join', inviteCode });
     expect(res.status).toBe(201);
     expect(res.body.user.role).toBe('member');
+    expect(res.body.user.displayName).toBe('Bob');
   });
 
   it('returns 400 when joining with invalid invite code', async () => {
@@ -94,7 +96,7 @@ describe('POST /api/auth/login', () => {
   beforeEach(async () => {
     await request(app)
       .post('/api/auth/register')
-      .send({ name: 'Alice', email: 'alice@test.com', password: 'password123', action: 'create', householdName: 'H' });
+      .send({ name: 'Alice Example', email: 'alice@test.com', password: 'password123', action: 'create', householdName: 'H' });
   });
 
   it('returns 200 and sets cookie with valid credentials', async () => {
@@ -104,6 +106,7 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(200);
     expect(res.headers['set-cookie']).toBeDefined();
     expect(res.body.user.email).toBe('alice@test.com');
+    expect(res.body.user.displayName).toBe('Alice');
   });
 
   it('returns 400 when email is missing', async () => {
@@ -136,11 +139,12 @@ describe('POST /api/auth/logout', () => {
 });
 
 describe('GET /api/auth/me', () => {
-  it('returns user and household with valid cookie', async () => {
-    const { cookie } = await createOwnerSession(app);
+  it('returns user, display name, and household with valid cookie', async () => {
+    const { cookie } = await createOwnerSession(app, { name: 'Test Owner' });
     const res = await request(app).get('/api/auth/me').set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(res.body.user).toBeDefined();
+    expect(res.body.user.displayName).toBe('Test');
     expect(res.body.household).toBeDefined();
   });
 
@@ -166,7 +170,31 @@ describe('PUT /api/auth/profile', () => {
     expect(res.body.user.name).toBe('New Name');
   });
 
-  it('returns 400 when neither name nor email provided', async () => {
+  it('updates preferred display name and syncs the linked household person', async () => {
+    const { cookie } = await createOwnerSession(app, { name: 'Christopher Example' });
+    const update = await request(app)
+      .put('/api/auth/profile')
+      .set('Cookie', cookie)
+      .send({ displayName: 'Hus' });
+
+    expect(update.status).toBe(200);
+    expect(update.body.user.displayName).toBe('Hus');
+
+    const household = await request(app).get('/api/household').set('Cookie', cookie);
+    const linked = household.body.people.find(p => String(p.userId) === String(update.body.user._id));
+    expect(linked).toBeDefined();
+    expect(linked.displayName).toBe('Hus');
+  });
+
+  it('allows clearing explicit display name and falls back to first name', async () => {
+    const { cookie } = await createOwnerSession(app, { name: 'Christopher Example' });
+    await request(app).put('/api/auth/profile').set('Cookie', cookie).send({ displayName: 'Hus' });
+    const res = await request(app).put('/api/auth/profile').set('Cookie', cookie).send({ displayName: '' });
+    expect(res.status).toBe(200);
+    expect(res.body.user.displayName).toBe('Christopher');
+  });
+
+  it('returns 400 when no profile field is provided', async () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app).put('/api/auth/profile').set('Cookie', cookie).send({});
     expect(res.status).toBe(400);
