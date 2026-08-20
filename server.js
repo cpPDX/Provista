@@ -27,6 +27,7 @@ app.use('/api/household', require('./routes/household'));
 app.use('/api/items', require('./routes/items'));
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/prices', require('./routes/prices'));
+app.use('/api/grocery', require('./routes/grocery'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/shopping-list', require('./routes/shoppingList'));
 app.use('/api/spend', require('./routes/spend'));
@@ -49,7 +50,8 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocer
 
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  // Listen immediately so Railway's health check succeeds while DB connects
+  // Listen immediately so Railway's liveness check succeeds while DB connects.
+  // Deployment readiness should use /api/health/ready.
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });
