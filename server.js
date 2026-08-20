@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { securityHeaders, createRateLimiter } = require('./middleware/security');
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required');
@@ -10,14 +11,26 @@ if (!process.env.JWT_SECRET) {
 }
 
 const app = express();
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+app.use(securityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// Keep brute-force / account abuse bounded. These stores are process-local,
+// which matches the current single-replica deployment.
+const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'login' });
+const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'register' });
+const passwordLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'password' });
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/register', registerLimiter);
+app.use('/api/auth/password', passwordLimiter);
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check (no auth required)
 app.use('/api/health', require('./routes/health'));
 
-// Auth routes (no auth middleware - these set/clear the cookie)
+// Auth routes
 app.use('/api/auth', require('./routes/auth'));
 
 // Household management
