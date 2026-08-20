@@ -1,7 +1,7 @@
 // CSV import write-path enhancement.
 // csvImport.js still owns parsing, validation, fuzzy review, and presentation.
 // This file replaces only the final write loop so each reviewed row uses the
-// same atomic item + store + price endpoint as manual grocery entry.
+// same combined item + store + price endpoint as manual grocery entry.
 (function initUnifiedCsvImportWriter() {
   if (typeof _startCsvImport !== 'function' || typeof _csvRowsToImport !== 'function') {
     console.error('CSV import enhancement loaded before csvImport.js');
@@ -58,12 +58,18 @@
       document.getElementById('_csv-pb-text').textContent = `Saving ${i + 1} of ${toImport.length}…`;
 
       try {
-        let item = row._itemMatch || null;
+        const itemKey = (row.item_name || '').trim().toLowerCase();
+        const storeKey = (row.store_name || '').trim().toLowerCase();
+
+        // Re-check the evolving maps at write time. Earlier rows may have created
+        // this item/store already, so repeated CSV rows should reuse them rather
+        // than create duplicate catalog records.
+        let item = row._itemMatch || itemMap.get(itemKey) || null;
         if (!item && row._fuzzyDecision === 'existing' && row._fuzzyCandidates.length) {
           item = row._fuzzyCandidates[0].item;
         }
 
-        let store = row._storeMatch || storeMap.get((row.store_name || '').toLowerCase()) || null;
+        let store = row._storeMatch || storeMap.get(storeKey) || null;
         const rowDate = parseRowDate(row.date);
 
         const payload = {
@@ -109,12 +115,14 @@
         const savedStore = result.createdStore || result.entry?.storeId;
 
         if (savedItem?._id) {
-          itemMap.set(savedItem.name.toLowerCase(), savedItem);
+          itemMap.set(savedItem.name.trim().toLowerCase(), savedItem);
+          if (itemKey) itemMap.set(itemKey, savedItem);
           row._itemMatch = savedItem;
           if (result.createdItem) newItems.push(savedItem.name);
         }
         if (savedStore?._id) {
-          storeMap.set(savedStore.name.toLowerCase(), savedStore);
+          storeMap.set(savedStore.name.trim().toLowerCase(), savedStore);
+          if (storeKey) storeMap.set(storeKey, savedStore);
           row._storeMatch = savedStore;
           if (result.createdStore) newStores.push(savedStore.name);
         }
@@ -141,10 +149,11 @@
         fuzzyMatched: []
       }, _csvStatusEl);
       if (newItems.length) {
+        const uniqueItems = [...new Set(newItems)];
         const note = document.createElement('div');
         note.className = 'text-muted text-sm';
         note.style.marginTop = '0.5rem';
-        note.textContent = `Added ${[...new Set(newItems)].length} new catalog item${[...new Set(newItems)].length === 1 ? '' : 's'}.`;
+        note.textContent = `Added ${uniqueItems.length} new catalog item${uniqueItems.length === 1 ? '' : 's'}.`;
         _csvStatusEl.appendChild(note);
       }
     }
