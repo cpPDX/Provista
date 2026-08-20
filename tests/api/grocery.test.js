@@ -1,0 +1,159 @@
+const request = require('supertest');
+const app = require('../../server');
+const db = require('../helpers/db');
+const { createOwnerSession, createMemberSession, getInviteCode } = require('../helpers/auth');
+
+beforeAll(db.connect);
+beforeEach(db.clearDB);
+afterAll(db.disconnect);
+
+describe('POST /api/grocery/log', () => {
+  it('creates a new item and its first price in one request', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const store = await request(app)
+      .post('/api/stores')
+      .set('Cookie', cookie)
+      .send({ name: 'Costco' });
+
+    const res = await request(app)
+      .post('/api/grocery/log')
+      .set('Cookie', cookie)
+      .send({
+        item: {
+          name: 'Whole Milk',
+          category: 'Dairy',
+          unit: 'gal',
+          brand: 'Kirkland'
+        },
+        storeId: store.body._id,
+        regularPrice: 4.79,
+        quantity: 1,
+        notes: 'First entry'
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.createdItem).toBeTruthy();
+    expect(res.body.createdItem.name).toBe('Whole Milk');
+    expect(res.body.entry.itemId.name).toBe('Whole Milk');
+    expect(res.body.entry.storeId.name).toBe('Costco');
+    expect(res.body.entry.finalPrice).toBe(4.79);
+    expect(res.body.entry.status).toBe('approved');
+
+    const items = await request(app).get('/api/items?search=Whole').set('Cookie', cookie);
+    expect(items.body.some(item => item.name === 'Whole Milk')).toBe(true);
+  });
+
+  it('logs a price for an existing item', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const [item, store] = await Promise.all([
+      request(app).post('/api/items').set('Cookie', cookie)
+        .send({ name: 'Eggs', category: 'Dairy', unit: 'dozen' }),
+      request(app).post('/api/stores').set('Cookie', cookie)
+        .send({ name: 'Fred Meyer' })
+    ]);
+
+    const res = await request(app)
+      .post('/api/grocery/log')
+      .set('Cookie', cookie)
+      .send({ itemId: item.body._id, storeId: store.body._id, regularPrice: 3.99, quantity: 1 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.createdItem).toBeNull();
+    expect(res.body.entry.itemId.name).toBe('Eggs');
+    expect(res.body.entry.finalPrice).toBe(3.99);
+  });
+
+  it('can create a store as part of the same log action', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const item = await request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name: 'Bananas', category: 'Produce', unit: 'lb' });
+
+    const res = await request(app)
+      .post('/api/grocery/log')
+      .set('Cookie', cookie)
+      .send({
+        itemId: item.body._id,
+        store: { name: 'Neighborhood Market', location: 'Main St' },
+        regularPrice: 0.69,
+        quantity: 1
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.createdStore).toBeTruthy();
+    expect(res.body.entry.storeId.name).toBe('Neighborhood Market');
+  });
+
+  it('allows a member to submit a price for existing household data as pending', async () => {
+    const { cookie: ownerCookie } = await createOwnerSession(app);
+    const [item, store] = await Promise.all([
+      request(app).post('/api/items').set('Cookie', ownerCookie)
+        .send({ name: 'Bread', category: 'Bakery', unit: 'loaf' }),
+      request(app).post('/api/stores').set('Cookie', ownerCookie)
+        .send({ name: 'Safeway' })
+    ]);
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+
+    const res = await request(app)
+      .post('/api/grocery/log')
+      .set('Cookie', memberCookie)
+      .send({ itemId: item.body._id, storeId: store.body._id, regularPrice: 4.25, quantity: 1 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.entry.status).toBe('pending');
+  });
+
+  it('does not allow a member to create a catalog item through logging', async () => {
+    const { cookie: ownerCookie } = await createOwnerSession(app);
+    const store = await request(app).post('/api/stores').set('Cookie', ownerCookie)
+      .send({ name: 'Safeway' });
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+
+    const res = await request(app)
+      .post('/api/grocery/log')
+      .set('Cookie', memberCookie)
+      .send({
+        item: { name: 'New Thing', category: 'Pantry', unit: 'each' },
+        storeId: store.body._id,
+        regularPrice: 2.5
+      });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects item and store IDs from another household', async () => {
+    const first = await createOwnerSession(app, { email: 'first@test.com', householdName: 'First' });
+    const second = await createOwnerSession(app, { email: 'second@test.com', householdName: 'Second' });
+
+    const foreignItem = await request(app).post('/api/items').set('Cookie', second.cookie)
+      .send({ name: 'Foreign Item', category: 'Pantry', unit: 'each' });
+    const localStore = await request(app).post('/api/stores').set('Cookie', first.cookie)
+      .send({ name: 'Local Store' });
+
+    const res = await request(app)
+      .post('/api/grocery/log')
+      .set('Cookie', first.cookie)
+      .send({ itemId: foreignItem.body._id, storeId: localStore.body._id, regularPrice: 1.99 });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('validates price and quantity', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const [item, store] = await Promise.all([
+      request(app).post('/api/items').set('Cookie', cookie)
+        .send({ name: 'Rice', category: 'Pantry', unit: 'lb' }),
+      request(app).post('/api/stores').set('Cookie', cookie)
+        .send({ name: 'Store' })
+    ]);
+
+    const badPrice = await request(app).post('/api/grocery/log').set('Cookie', cookie)
+      .send({ itemId: item.body._id, storeId: store.body._id, regularPrice: -1 });
+    expect(badPrice.status).toBe(400);
+
+    const badQty = await request(app).post('/api/grocery/log').set('Cookie', cookie)
+      .send({ itemId: item.body._id, storeId: store.body._id, regularPrice: 1, quantity: 0 });
+    expect(badQty.status).toBe(400);
+  });
+});
