@@ -2,33 +2,13 @@ const express = require('express');
 const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const Household = require('../models/Household');
-const HouseholdPerson = require('../models/HouseholdPerson');
-const User = require('../models/User');
+const { ensureHouseholdPeople } = require('../utils/householdPeople');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
-
-async function ensureHouseholdPeople(householdId) {
-  const existing = await HouseholdPerson.find({ householdId, active: true }).sort({ sortOrder: 1, createdAt: 1 }).lean();
-  if (existing.length) return existing;
-
-  const users = await User.find({ householdId }).select('_id name displayName').sort({ createdAt: 1 }).lean();
-  if (!users.length) return [];
-
-  await HouseholdPerson.insertMany(users.map((user, index) => ({
-    householdId,
-    userId: user._id,
-    displayName: user.displayName || user.name.trim().split(/\s+/)[0],
-    sortOrder: index
-  })), { ordered: false }).catch(err => {
-    if (err?.code !== 11000 && !err?.writeErrors?.every(e => e.code === 11000)) throw err;
-  });
-
-  return HouseholdPerson.find({ householdId, active: true }).sort({ sortOrder: 1, createdAt: 1 }).lean();
-}
 
 function buildScaffold(weekStart) {
   const days = [];
