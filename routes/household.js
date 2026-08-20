@@ -3,23 +3,29 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const QRCode = require('qrcode');
 const Household = require('../models/Household');
+const HouseholdPerson = require('../models/HouseholdPerson');
 const User = require('../models/User');
 const PriceEntry = require('../models/PriceEntry');
 const Item = require('../models/Item');
 const Store = require('../models/Store');
 const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
+const MealPlan = require('../models/MealPlan');
+const { ensureHouseholdPeople } = require('../utils/householdPeople');
 const { requireAuth, requireAdmin, requireOwner } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
 
-// GET /api/household - household info + member list
+// GET /api/household - household info + login members + all active household people
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const household = await Household.findById(req.user.householdId).select('-inviteCode -inviteCodeExpiresAt');
-    const members = await User.find({ householdId: req.user.householdId }).select('-passwordHash').sort({ createdAt: 1 });
-    res.json({ household, members });
+    const [household, members, people] = await Promise.all([
+      Household.findById(req.user.householdId).select('-inviteCode -inviteCodeExpiresAt'),
+      User.find({ householdId: req.user.householdId }).select('-passwordHash').sort({ createdAt: 1 }),
+      ensureHouseholdPeople(req.user.householdId)
+    ]);
+    res.json({ household, members, people });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -59,20 +65,88 @@ router.patch('/settings', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/household/people - add a household person without requiring an account (admin+)
+router.post('/people', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const displayName = String(req.body.displayName || '').trim();
+    if (!displayName) return res.status(400).json({ error: 'Display name is required' });
+    if (displayName.length > 60) return res.status(400).json({ error: 'Display name is too long' });
+
+    const last = await HouseholdPerson.findOne({ householdId: req.user.householdId })
+      .sort({ sortOrder: -1 })
+      .select('sortOrder')
+      .lean();
+
+    const person = await HouseholdPerson.create({
+      householdId: req.user.householdId,
+      displayName,
+      active: true,
+      sortOrder: (last?.sortOrder ?? -1) + 1
+    });
+    res.status(201).json(person);
+  } catch (err) {
+    res.status(400).json({ error: serverErr(err) });
+  }
+});
+
+// PUT /api/household/people/:id - edit display name/order/active state (admin+)
+router.put('/people/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const person = await HouseholdPerson.findOne({ _id: req.params.id, householdId: req.user.householdId });
+    if (!person) return res.status(404).json({ error: 'Household person not found' });
+
+    if (req.body.displayName !== undefined) {
+      const displayName = String(req.body.displayName || '').trim();
+      if (!displayName) return res.status(400).json({ error: 'Display name is required' });
+      if (displayName.length > 60) return res.status(400).json({ error: 'Display name is too long' });
+      person.displayName = displayName;
+      if (person.userId) {
+        await User.findOneAndUpdate(
+          { _id: person.userId, householdId: req.user.householdId },
+          { displayName }
+        );
+      }
+    }
+    if (req.body.active !== undefined) person.active = Boolean(req.body.active);
+    if (req.body.sortOrder !== undefined) {
+      const sortOrder = Number(req.body.sortOrder);
+      if (!Number.isFinite(sortOrder)) return res.status(400).json({ error: 'sortOrder must be a number' });
+      person.sortOrder = sortOrder;
+    }
+
+    await person.save();
+    res.json(person);
+  } catch (err) {
+    res.status(400).json({ error: serverErr(err) });
+  }
+});
+
+// DELETE /api/household/people/:id - remove a non-account person from planning (admin+)
+router.delete('/people/:id', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const person = await HouseholdPerson.findOne({ _id: req.params.id, householdId: req.user.householdId });
+    if (!person) return res.status(404).json({ error: 'Household person not found' });
+    if (person.userId) {
+      return res.status(400).json({ error: 'Account-linked people cannot be removed here' });
+    }
+    person.active = false;
+    await person.save();
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
 // GET /api/household/invite - get invite code and QR data (admin+)
 router.get('/invite', requireAuth, requireAdmin, async (req, res) => {
   try {
     const household = await Household.findById(req.user.householdId);
     if (!household) return res.status(404).json({ error: 'Household not found' });
     if (!household.isInviteCodeValid()) {
-      // Auto-generate if none/expired
       household.refreshInviteCode();
       await household.save();
     }
-    res.json({
-      inviteCode: household.inviteCode,
-      expiresAt: household.inviteCodeExpiresAt
-    });
+    res.json({ inviteCode: household.inviteCode, expiresAt: household.inviteCodeExpiresAt });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -105,16 +179,13 @@ router.post('/invite', requireAuth, requireAdmin, async (req, res) => {
     if (!household) return res.status(404).json({ error: 'Household not found' });
     household.refreshInviteCode();
     await household.save();
-    res.json({
-      inviteCode: household.inviteCode,
-      expiresAt: household.inviteCodeExpiresAt
-    });
+    res.json({ inviteCode: household.inviteCode, expiresAt: household.inviteCodeExpiresAt });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
 });
 
-// DELETE /api/household/members/:id - remove a member
+// DELETE /api/household/members/:id - remove a login member
 router.delete('/members/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     if (req.params.id === req.user._id.toString()) {
@@ -123,16 +194,18 @@ router.delete('/members/:id', requireAuth, requireAdmin, async (req, res) => {
     const target = await User.findOne({ _id: req.params.id, householdId: req.user.householdId });
     if (!target) return res.status(404).json({ error: 'Member not found' });
 
-    // Admins can only remove members, not other admins/owner
     if (req.user.role === 'admin' && target.role !== 'member') {
       return res.status(403).json({ error: 'Admins can only remove members, not other admins' });
     }
-    // Nobody can remove the owner
-    if (target.role === 'owner') {
-      return res.status(403).json({ error: 'Cannot remove the household owner' });
-    }
+    if (target.role === 'owner') return res.status(403).json({ error: 'Cannot remove the household owner' });
 
-    await User.findByIdAndUpdate(req.params.id, { householdId: null, role: 'member' });
+    await Promise.all([
+      User.findByIdAndUpdate(req.params.id, { householdId: null, role: 'member' }),
+      HouseholdPerson.findOneAndUpdate(
+        { householdId: req.user.householdId, userId: target._id },
+        { $set: { userId: null } }
+      )
+    ]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
@@ -172,18 +245,18 @@ router.delete('/', requireAuth, requireOwner, async (req, res) => {
 
     const householdId = req.user.householdId;
 
-    // Cascade delete all household data
     await Promise.all([
       PriceEntry.deleteMany({ householdId }),
       Item.deleteMany({ householdId }),
       Store.deleteMany({ householdId }),
       InventoryItem.deleteMany({ householdId }),
       ShoppingListItem.deleteMany({ householdId }),
-      User.updateMany({ householdId }, { $set: { householdId: null, role: 'member' } }),
+      MealPlan.deleteMany({ householdId }),
+      HouseholdPerson.deleteMany({ householdId }),
+      User.updateMany({ householdId }, { $set: { householdId: null, role: 'member' } })
     ]);
     await Household.findByIdAndDelete(householdId);
 
-    // Clear the owner's auth cookie
     res.clearCookie('token', {
       httpOnly: true,
       sameSite: 'strict',
