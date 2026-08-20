@@ -8,6 +8,7 @@ const HouseholdPerson = require('../models/HouseholdPerson');
 const PriceEntry = require('../models/PriceEntry');
 const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
+const { requireSession } = require('../middleware/auth');
 const { seedHousehold } = require('../utils/seed');
 const { fallbackDisplayName, syncUserHouseholdPerson } = require('../utils/householdPeople');
 
@@ -15,10 +16,13 @@ const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
 
 const SALT_ROUNDS = 12;
-const COOKIE_OPTS = {
+const CLEAR_COOKIE_OPTS = {
   httpOnly: true,
   sameSite: 'strict',
-  secure: process.env.NODE_ENV === 'production',
+  secure: process.env.NODE_ENV === 'production'
+};
+const COOKIE_OPTS = {
+  ...CLEAR_COOKIE_OPTS,
   maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
 };
 
@@ -116,19 +120,14 @@ router.post('/login', async (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('token', COOKIE_OPTS);
+  res.clearCookie('token', CLEAR_COOKIE_OPTS);
   res.json({ success: true });
 });
 
 // GET /api/auth/me
-router.get('/me', async (req, res) => {
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+router.get('/me', requireSession, async (req, res) => {
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(payload.userId).select('-passwordHash');
-    if (!user) return res.status(401).json({ error: 'User not found' });
-
+    const user = req.user;
     let household = null;
     if (user.householdId) {
       [household] = await Promise.all([
@@ -145,16 +144,13 @@ router.get('/me', async (req, res) => {
 
     res.json({ user: publicUser(user), household, features });
   } catch (err) {
-    res.status(401).json({ error: 'Invalid or expired session' });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
 // PUT /api/auth/profile - update account/profile fields
-router.put('/profile', async (req, res) => {
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+router.put('/profile', requireSession, async (req, res) => {
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
     const { name, displayName, email, barcodeAutoAccept } = req.body;
     if (name === undefined && displayName === undefined && email === undefined && barcodeAutoAccept === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
@@ -174,7 +170,7 @@ router.put('/profile', async (req, res) => {
     if (email !== undefined) {
       const normalizedEmail = String(email || '').toLowerCase().trim();
       if (!normalizedEmail) return res.status(400).json({ error: 'Email is required' });
-      const existing = await User.findOne({ email: normalizedEmail, _id: { $ne: payload.userId } });
+      const existing = await User.findOne({ email: normalizedEmail, _id: { $ne: req.user._id } });
       if (existing) return res.status(409).json({ error: 'Email already in use' });
       update.email = normalizedEmail;
     }
@@ -182,7 +178,7 @@ router.put('/profile', async (req, res) => {
       update['preferences.barcodeAutoAccept'] = barcodeAutoAccept === null ? null : Boolean(barcodeAutoAccept);
     }
 
-    const user = await User.findByIdAndUpdate(payload.userId, update, { new: true, runValidators: true }).select('-passwordHash');
+    const user = await User.findByIdAndUpdate(req.user._id, update, { new: true, runValidators: true }).select('-passwordHash');
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (user.householdId) await syncUserHouseholdPerson(user);
     res.json({ user: publicUser(user) });
@@ -192,16 +188,13 @@ router.put('/profile', async (req, res) => {
 });
 
 // PUT /api/auth/password - change password
-router.put('/password', async (req, res) => {
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+router.put('/password', requireSession, async (req, res) => {
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) return res.status(400).json({ error: 'currentPassword and newPassword are required' });
     if (newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
 
-    const user = await User.findById(payload.userId);
+    const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const match = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -216,12 +209,9 @@ router.put('/password', async (req, res) => {
 });
 
 // DELETE /api/auth/account - permanently delete own account
-router.delete('/account', async (req, res) => {
-  const token = req.cookies?.token;
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+router.delete('/account', requireSession, async (req, res) => {
   try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(payload.userId);
+    const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const { password } = req.body;
@@ -255,7 +245,7 @@ router.delete('/account', async (req, res) => {
     ]);
 
     await User.findByIdAndDelete(userId);
-    res.clearCookie('token', COOKIE_OPTS);
+    res.clearCookie('token', CLEAR_COOKIE_OPTS);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
