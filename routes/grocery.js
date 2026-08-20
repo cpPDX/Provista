@@ -9,20 +9,31 @@ const { normalizeUpc } = require('../utils/upc');
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
 
+class RequestError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function fail(status, message) {
+  throw new RequestError(status, message);
+}
+
 function parseNonNegative(value, field, required = false) {
   if (value === undefined || value === null || value === '') {
-    if (required) throw new Error(`${field} is required`);
+    if (required) fail(400, `${field} is required`);
     return null;
   }
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${field} must be a non-negative number`);
+  if (!Number.isFinite(parsed) || parsed < 0) fail(400, `${field} must be a non-negative number`);
   return parsed;
 }
 
 function parsePositive(value, field, fallback = null) {
   if (value === undefined || value === null || value === '') return fallback;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${field} must be a positive number`);
+  if (!Number.isFinite(parsed) || parsed <= 0) fail(400, `${field} must be a positive number`);
   return parsed;
 }
 
@@ -50,16 +61,16 @@ router.post('/log', requireAuth, async (req, res) => {
     let item;
     if (req.body.itemId) {
       item = await Item.findOne({ _id: req.body.itemId, householdId });
-      if (!item) return res.status(404).json({ error: 'Item not found in this household' });
+      if (!item) fail(404, 'Item not found in this household');
     } else if (req.body.item) {
-      if (!isAdmin) return res.status(403).json({ error: 'Admin or owner role required to create a new item' });
+      if (!isAdmin) fail(403, 'Admin or owner role required to create a new item');
       const data = req.body.item;
       const name = String(data.name || '').trim();
       const category = String(data.category || '').trim();
       const unit = String(data.unit || '').trim();
-      if (!name) return res.status(400).json({ error: 'item.name is required' });
-      if (!category) return res.status(400).json({ error: 'item.category is required' });
-      if (!unit) return res.status(400).json({ error: 'item.unit is required' });
+      if (!name) fail(400, 'item.name is required');
+      if (!category) fail(400, 'item.category is required');
+      if (!unit) fail(400, 'item.unit is required');
 
       const size = data.size === undefined || data.size === null || data.size === ''
         ? null
@@ -80,17 +91,17 @@ router.post('/log', requireAuth, async (req, res) => {
       });
       createdItem = item;
     } else {
-      return res.status(400).json({ error: 'itemId or item is required' });
+      fail(400, 'itemId or item is required');
     }
 
     let store;
     if (req.body.storeId) {
       store = await Store.findOne({ _id: req.body.storeId, householdId });
-      if (!store) return res.status(404).json({ error: 'Store not found in this household' });
+      if (!store) fail(404, 'Store not found in this household');
     } else if (req.body.store) {
-      if (!isAdmin) return res.status(403).json({ error: 'Admin or owner role required to create a new store' });
+      if (!isAdmin) fail(403, 'Admin or owner role required to create a new store');
       const name = String(req.body.store.name || '').trim();
-      if (!name) return res.status(400).json({ error: 'store.name is required' });
+      if (!name) fail(400, 'store.name is required');
       store = await Store.create({
         householdId,
         name,
@@ -98,7 +109,7 @@ router.post('/log', requireAuth, async (req, res) => {
       });
       createdStore = store;
     } else {
-      return res.status(400).json({ error: 'storeId or store is required' });
+      fail(400, 'storeId or store is required');
     }
 
     const finalPrice = calcFinalPrice(regularPrice, salePrice, couponAmount);
@@ -138,7 +149,10 @@ router.post('/log', requireAuth, async (req, res) => {
       createdItem ? Item.deleteOne({ _id: createdItem._id, householdId }) : Promise.resolve(),
       createdStore ? Store.deleteOne({ _id: createdStore._id, householdId }) : Promise.resolve()
     ]);
-    res.status(400).json({ error: serverErr(err) });
+
+    const status = err instanceof RequestError ? err.status : 400;
+    const message = err instanceof RequestError ? err.message : serverErr(err);
+    res.status(status).json({ error: message });
   }
 });
 
