@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const PriceEntry = require('../models/PriceEntry');
+const Item = require('../models/Item');
+const Store = require('../models/Store');
 const mongoose = require('mongoose');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
@@ -10,6 +12,17 @@ function serverErr(err) { return isProd ? 'Internal server error' : err.message;
 function calcFinalPrice(regularPrice, salePrice, couponAmount) {
   const base = (salePrice != null && salePrice < regularPrice) ? salePrice : regularPrice;
   return base - (couponAmount ?? 0);
+}
+
+async function validateHouseholdReferences(itemId, storeId, householdId) {
+  if (!mongoose.isValidObjectId(itemId) || !mongoose.isValidObjectId(storeId)) {
+    return { item: null, store: null };
+  }
+  const [item, store] = await Promise.all([
+    Item.findOne({ _id: itemId, householdId }).select('_id').lean(),
+    Store.findOne({ _id: storeId, householdId }).select('_id').lean()
+  ]);
+  return { item, store };
 }
 
 // GET /api/prices/pending - list pending entries (admin+)
@@ -31,6 +44,11 @@ router.put('/:id/approve', requireAuth, requireAdmin, async (req, res) => {
   try {
     const existing = await PriceEntry.findOne({ _id: req.params.id, householdId: req.user.householdId });
     if (!existing) return res.status(404).json({ error: 'Entry not found' });
+
+    const effectiveStoreId = req.body.storeId ?? existing.storeId;
+    const refs = await validateHouseholdReferences(existing.itemId, effectiveStoreId, req.user.householdId);
+    if (!refs.item) return res.status(404).json({ error: 'Item not found in this household' });
+    if (!refs.store) return res.status(404).json({ error: 'Store not found in this household' });
 
     const update = {
       status: 'approved',
@@ -196,6 +214,11 @@ router.post('/', requireAuth, async (req, res) => {
     if (!req.body.itemId) return res.status(400).json({ error: 'itemId is required' });
     if (!req.body.storeId) return res.status(400).json({ error: 'storeId is required' });
     if (regularPrice === undefined || regularPrice === null) return res.status(400).json({ error: 'regularPrice is required' });
+
+    const refs = await validateHouseholdReferences(req.body.itemId, req.body.storeId, req.user.householdId);
+    if (!refs.item) return res.status(404).json({ error: 'Item not found in this household' });
+    if (!refs.store) return res.status(404).json({ error: 'Store not found in this household' });
+
     const rp = parseFloat(regularPrice);
     if (isNaN(rp) || rp < 0) return res.status(400).json({ error: 'regularPrice must be a non-negative number' });
     const qty = quantity !== undefined ? parseFloat(quantity) : 1;

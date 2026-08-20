@@ -57,6 +57,32 @@ describe('GET /api/meal-plan', () => {
     expect(Array.isArray(res.body.people)).toBe(true);
   });
 
+  it('returns inactive people that are still referenced by historical meal audiences', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const person = await request(app).post('/api/household/people').set('Cookie', cookie)
+      .send({ displayName: 'Former Guest' });
+    expect(person.status).toBe(201);
+
+    const days = [{
+      date: `${WEEK_START}T00:00:00.000Z`,
+      specialCollapsed: true,
+      meals: [{ mealType: 'dinner', name: 'Old dinner', forEveryone: false, personIds: [person.body._id] }]
+    }];
+    const save = await request(app).put('/api/meal-plan').set('Cookie', cookie)
+      .send({ weekStart: WEEK_START, days });
+    expect(save.status).toBe(200);
+
+    const removed = await request(app).delete(`/api/household/people/${person.body._id}`).set('Cookie', cookie);
+    expect(removed.status).toBe(200);
+
+    const loaded = await request(app).get(`/api/meal-plan?weekStart=${WEEK_START}`).set('Cookie', cookie);
+    expect(loaded.status).toBe(200);
+    const historical = loaded.body.people.find(p => p._id === person.body._id);
+    expect(historical).toBeTruthy();
+    expect(historical.active).toBe(false);
+    expect(loaded.body.days[0].meals[0].personIds.map(String)).toContain(String(person.body._id));
+  });
+
   it('returns 400 when weekStart is missing', async () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app).get('/api/meal-plan').set('Cookie', cookie);
@@ -137,6 +163,32 @@ describe('PUT /api/meal-plan', () => {
       .send({ weekStart: WEEK_START, days });
 
     expect(res.status).toBe(400);
+  });
+
+  it('rejects a selected-people meal with nobody selected', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const days = [{
+      date: `${WEEK_START}T00:00:00.000Z`,
+      specialCollapsed: true,
+      meals: [{ mealType: 'dinner', name: 'Nobody dinner', forEveryone: false, personIds: [], personName: '' }]
+    }];
+    const res = await request(app).put('/api/meal-plan').set('Cookie', cookie)
+      .send({ weekStart: WEEK_START, days });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/at least one person/i);
+  });
+
+  it('preserves unmatched legacy personName while migration is in progress', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const days = [{
+      date: `${WEEK_START}T00:00:00.000Z`,
+      specialCollapsed: true,
+      meals: [{ mealType: 'dinner', name: 'Legacy dinner', forEveryone: false, personIds: [], personName: 'Legacy Person' }]
+    }];
+    const res = await request(app).put('/api/meal-plan').set('Cookie', cookie)
+      .send({ weekStart: WEEK_START, days });
+    expect(res.status).toBe(200);
+    expect(res.body.days[0].meals[0].personName).toBe('Legacy Person');
   });
 
   it('returns 400 when weekStart is missing', async () => {

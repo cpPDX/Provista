@@ -59,6 +59,8 @@ router.post('/log', requireAuth, async (req, res) => {
     const couponAmount = parseNonNegative(req.body.couponAmount, 'couponAmount');
     const quantity = parsePositive(req.body.quantity, 'quantity', 1);
     const source = ['manual', 'csv'].includes(req.body.source) ? req.body.source : 'manual';
+    const entryDate = req.body.date ? new Date(req.body.date) : new Date();
+    if (Number.isNaN(entryDate.getTime())) fail(400, 'date must be a valid date');
 
     let replacement = null;
     if (req.body.replacePriceEntryId) {
@@ -123,6 +125,24 @@ router.post('/log', requireAuth, async (req, res) => {
       fail(400, 'storeId or store is required');
     }
 
+    if (!replacement && req.body.replaceSameDay) {
+      if (!isAdmin) fail(403, 'Admin or owner role required to replace an existing price entry');
+      if (source !== 'csv') fail(400, 'replaceSameDay is only supported for CSV imports');
+
+      const dayStart = new Date(Date.UTC(
+        entryDate.getUTCFullYear(), entryDate.getUTCMonth(), entryDate.getUTCDate()
+      ));
+      const dayEnd = new Date(dayStart);
+      dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+      replacement = await PriceEntry.findOne({
+        householdId,
+        itemId: item._id,
+        storeId: store._id,
+        status: 'approved',
+        date: { $gte: dayStart, $lt: dayEnd }
+      }).sort({ createdAt: -1 });
+    }
+
     if (replacement &&
         (String(replacement.itemId) !== String(item._id) || String(replacement.storeId) !== String(store._id))) {
       fail(400, 'Replacement price entry must use the same item and store');
@@ -141,7 +161,7 @@ router.post('/log', requireAuth, async (req, res) => {
       finalPrice,
       quantity,
       pricePerUnit: finalPrice / quantity,
-      date: req.body.date || new Date(),
+      date: entryDate,
       notes: req.body.notes ? String(req.body.notes).trim() : '',
       source,
       status: isAdmin ? 'approved' : 'pending',

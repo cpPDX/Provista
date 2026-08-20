@@ -2,6 +2,13 @@
 // Replaces the older price modal so an item/store and its price can be captured
 // without leaving the form or losing partially entered data.
 (function initGroceryEntry() {
+  function localDateValue(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   function categoryOptions() {
     return `
       <option value="Produce"/><option value="Dairy"/><option value="Meat & Seafood"/>
@@ -148,7 +155,7 @@
         </div>
         <div class="form-group">
           <label>Date</label>
-          <input class="form-control" type="date" id="price-date" value="${new Date().toISOString().slice(0, 10)}" required />
+          <input class="form-control" type="date" id="price-date" value="${localDateValue()}" required />
         </div>
 
         <details style="margin-bottom:0.75rem">

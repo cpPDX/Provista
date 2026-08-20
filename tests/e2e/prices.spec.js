@@ -1,6 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const { loginAsNewUser } = require('./helpers/login');
 
+test.use({ timezoneId: 'America/Los_Angeles' });
+
 test.describe('Prices Tab', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await loginAsNewUser(page, baseURL);
@@ -39,6 +41,21 @@ test.describe('Prices Tab', () => {
     await page.fill('#price-regular', '3.99');
     await expect(page.locator('#price-calc-preview')).toBeVisible();
     await expect(page.locator('#price-calc-preview')).toContainText('3.99');
+  });
+
+  test('new grocery date defaults to the browser local calendar date', async ({ page }) => {
+    await page.clock.install({ time: new Date('2026-08-20T02:30:00.000Z') });
+    await page.click('#btn-add-price');
+    await expect(page.locator('#price-date')).toHaveValue('2026-08-19');
+  });
+
+  test('best-value callout escapes untrusted store names', async ({ page }) => {
+    const html = await page.evaluate(() => buildCallout([
+      { quantity: 1, price: 2, pricePerUnit: 2, item: { unit: 'each' }, store: { name: '<img src=x onerror=alert(1)>' } },
+      { quantity: 1, price: 3, pricePerUnit: 3, item: { unit: 'each' }, store: { name: 'Safe Store' } }
+    ]));
+    expect(html).not.toContain('<img');
+    expect(html).toContain('&lt;img');
   });
 
   test('catalog Add Item starts the same flow in new-item mode', async ({ page }) => {

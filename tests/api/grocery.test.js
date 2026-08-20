@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../../server');
 const db = require('../helpers/db');
 const { createOwnerSession, createMemberSession, getInviteCode } = require('../helpers/auth');
+const PriceEntry = require('../../models/PriceEntry');
 
 beforeAll(db.connect);
 beforeEach(db.clearDB);
@@ -200,6 +201,61 @@ describe('POST /api/grocery/log', () => {
     const prices = await request(app).get('/api/prices').set('Cookie', cookie);
     expect(prices.body).toHaveLength(1);
     expect(prices.body[0]._id).toBe(replacement.body.entry._id);
+  });
+
+  it('replaces a same-day CSV price even when the old entry is outside the newest 100 prices', async () => {
+    const { cookie, user } = await createOwnerSession(app);
+    const [item, store] = await Promise.all([
+      request(app).post('/api/items').set('Cookie', cookie)
+        .send({ name: 'Deep History Coffee', category: 'Pantry', unit: 'bag' }),
+      request(app).post('/api/stores').set('Cookie', cookie)
+        .send({ name: 'History Store' })
+    ]);
+
+    const common = {
+      householdId: user.householdId,
+      itemId: item.body._id,
+      storeId: store.body._id,
+      submittedBy: user._id,
+      regularPrice: 5,
+      finalPrice: 5,
+      quantity: 1,
+      pricePerUnit: 5,
+      source: 'csv',
+      status: 'approved',
+      reviewedBy: user._id,
+      reviewedAt: new Date()
+    };
+    const docs = [{ ...common, date: new Date('2025-01-01T12:00:00.000Z') }];
+    for (let i = 0; i < 100; i++) {
+      docs.push({ ...common, date: new Date(Date.UTC(2025, 0, 2 + i)) });
+    }
+    await PriceEntry.insertMany(docs);
+
+    const listed = await request(app).get('/api/prices').set('Cookie', cookie);
+    expect(listed.body).toHaveLength(100);
+    expect(listed.body.some(entry => String(entry.date).startsWith('2025-01-01'))).toBe(false);
+
+    const replacement = await request(app).post('/api/grocery/log').set('Cookie', cookie)
+      .send({
+        itemId: item.body._id,
+        storeId: store.body._id,
+        regularPrice: 4.25,
+        date: '2025-01-01T12:00:00.000Z',
+        source: 'csv',
+        replaceSameDay: true
+      });
+    expect(replacement.status).toBe(201);
+    expect(replacement.body.replacedPriceEntryId).toBeTruthy();
+
+    const sameDay = await PriceEntry.find({
+      householdId: user.householdId,
+      itemId: item.body._id,
+      storeId: store.body._id,
+      date: { $gte: new Date('2025-01-01T00:00:00.000Z'), $lt: new Date('2025-01-02T00:00:00.000Z') }
+    });
+    expect(sameDay).toHaveLength(1);
+    expect(sameDay[0].finalPrice).toBe(4.25);
   });
 
   it('rejects replacement when item or store does not match and preserves the original', async () => {

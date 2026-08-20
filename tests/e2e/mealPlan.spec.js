@@ -39,6 +39,15 @@ test.describe('Meal Plan Tab', () => {
     await expect(firstRow.locator('.meal-notes-input')).toBeVisible();
   });
 
+  test('a separate meal starts with a real household audience', async ({ page }) => {
+    const firstSection = page.locator('.meal-day').first().locator('.meal-type-section').first();
+    await firstSection.locator('.meal-add-row').click();
+    await expect(firstSection.locator('.meal-row')).toHaveCount(2);
+    const audience = firstSection.locator('.meal-row').nth(1).locator('.meal-audience-toggle');
+    await expect(audience).not.toHaveText('Choose people');
+    await expect(audience).not.toHaveText('Everyone');
+  });
+
   test('prev/next week nav changes the week label', async ({ page }) => {
     const label = page.locator('.meal-plan-week-label');
     const beforeText = await label.textContent();

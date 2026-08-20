@@ -325,7 +325,18 @@ function buildAddMealButton(contentEl, mealType) {
   btn.className = 'meal-add-row';
   btn.textContent = '+ Add separate meal';
   btn.addEventListener('click', () => {
-    const row = buildMealRow(mealType, { mealType, forEveryone: false, personIds: [], name: '', notes: '' }, true);
+    if (!mealPlanState.people.length) {
+      if (typeof showToast === 'function') showToast('Add a household person before creating a separate meal');
+      return;
+    }
+    const firstPersonId = String(mealPlanState.people[0]._id);
+    const row = buildMealRow(mealType, {
+      mealType,
+      forEveryone: false,
+      personIds: [firstPersonId],
+      name: '',
+      notes: ''
+    }, true);
     contentEl.insertBefore(row, btn);
     row.querySelector('.meal-name-input')?.focus();
     scheduleSave();

@@ -21,7 +21,8 @@ function createRateLimiter({ windowMs = 15 * 60 * 1000, max = 20, keyPrefix = 'r
 
   return function rateLimit(req, res, next) {
     // Jest/Supertest intentionally sends many requests from one synthetic IP.
-    // Rate limiting is integration-tested separately from the deterministic API suite.
+    // The deterministic API routes bypass limiting in test mode; security.test.js
+    // invokes this middleware under production mode to verify the limiter itself.
     if (process.env.NODE_ENV === 'test') return next();
 
     const now = Date.now();

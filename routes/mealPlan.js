@@ -31,23 +31,39 @@ function buildScaffold(weekStart) {
   return days;
 }
 
-async function validateAudienceScope(days, householdId) {
-  if (!Array.isArray(days)) return true;
-
-  const ids = [...new Set(days.flatMap(day =>
+function collectAudienceIds(days) {
+  if (!Array.isArray(days)) return [];
+  return [...new Set(days.flatMap(day =>
     (Array.isArray(day?.meals) ? day.meals : []).flatMap(meal =>
       Array.isArray(meal?.personIds) ? meal.personIds.map(String) : []
     )
   ))];
+}
 
-  if (!ids.length) return true;
-  if (ids.some(id => !mongoose.isValidObjectId(id))) return false;
+async function validateAudience(days, householdId) {
+  if (!Array.isArray(days)) return null;
+
+  for (const day of days) {
+    for (const meal of (Array.isArray(day?.meals) ? day.meals : [])) {
+      const ids = Array.isArray(meal?.personIds) ? meal.personIds.filter(Boolean).map(String) : [];
+      const legacyName = String(meal?.personName || '').trim();
+      if (meal?.forEveryone === false && ids.length === 0 && !legacyName) {
+        return 'A meal for selected people must include at least one person';
+      }
+    }
+  }
+
+  const ids = collectAudienceIds(days);
+  if (!ids.length) return null;
+  if (ids.some(id => !mongoose.isValidObjectId(id))) {
+    return 'Meal audience contains an invalid household person';
+  }
 
   const count = await HouseholdPerson.countDocuments({
     _id: { $in: ids },
     householdId
   });
-  return count === ids.length;
+  return count === ids.length ? null : 'Meal audience contains a person outside this household';
 }
 
 // GET /api/meal-plan?weekStart=YYYY-MM-DD
@@ -77,7 +93,16 @@ router.get('/', requireAuth, async (req, res) => {
     }
 
     const result = plan.toObject();
-    result.people = people;
+    const activeIds = new Set(people.map(person => String(person._id)));
+    const referencedIds = collectAudienceIds(result.days)
+      .filter(id => mongoose.isValidObjectId(id) && !activeIds.has(id));
+    const historicalPeople = referencedIds.length
+      ? await HouseholdPerson.find({ _id: { $in: referencedIds }, householdId: req.user.householdId }).lean()
+      : [];
+    result.people = [
+      ...people,
+      ...historicalPeople.map(person => ({ ...person, historical: person.active === false }))
+    ];
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
@@ -93,9 +118,8 @@ router.put('/', requireAuth, async (req, res) => {
     const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
     if (isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
 
-    if (!(await validateAudienceScope(days, req.user.householdId))) {
-      return res.status(400).json({ error: 'Meal audience contains a person outside this household' });
-    }
+    const audienceError = await validateAudience(days, req.user.householdId);
+    if (audienceError) return res.status(400).json({ error: audienceError });
 
     const plan = await MealPlan.findOneAndUpdate(
       { householdId: req.user.householdId, weekStart: weekStartDate },

@@ -28,18 +28,8 @@
       <div class="csv-progress-bar-wrap"><div class="csv-progress-bar" id="_csv-pb" style="width:0%"></div></div>
       <div id="_csv-pb-text" style="font-size:0.8125rem;color:var(--text-muted);text-align:center">Preparing…</div>`;
 
-    // Existing-price detection remains best-effort. Admin imports replace a same
-    // item/store/day entry only after the new row is safely written server-side.
-    const dupMap = new Map();
-    try {
-      const existing = await api.prices.list();
-      existing.forEach(price => {
-        const itemId = price.itemId?._id || price.itemId;
-        const storeId = price.storeId?._id || price.storeId;
-        const key = `${itemId}|${storeId}|${new Date(price.date).toDateString()}`;
-        dupMap.set(key, price._id);
-      });
-    } catch (_) {}
+    // Same-item/store/day replacement is resolved server-side so imports do not
+    // depend on the 100-row /api/prices listing.
 
     const itemMap = _csvItemMap;
     const storeMap = _csvStoreMap;
@@ -76,7 +66,8 @@
           regularPrice: row._finalPrice,
           quantity: row._quantity,
           date: rowDate.toISOString(),
-          source: 'csv'
+          source: 'csv',
+          replaceSameDay: canReplace
         };
         if (row._isSale) payload.salePrice = row._finalPrice;
         const notes = (row.notes || '').trim();
@@ -104,12 +95,6 @@
           payload.store = { name: (row.store_name || '').trim() };
         }
 
-        if (item && store && canReplace) {
-          const dupKey = `${item._id}|${store._id}|${rowDate.toDateString()}`;
-          const existingId = dupMap.get(dupKey);
-          if (existingId) payload.replacePriceEntryId = existingId;
-        }
-
         const result = await api.grocery.log(payload);
         const savedItem = result.createdItem || result.entry?.itemId;
         const savedStore = result.createdStore || result.entry?.storeId;
@@ -125,11 +110,6 @@
           if (storeKey) storeMap.set(storeKey, savedStore);
           row._storeMatch = savedStore;
           if (result.createdStore) newStores.push(savedStore.name);
-        }
-
-        if (result.entry?._id && savedItem?._id && savedStore?._id) {
-          const savedKey = `${savedItem._id}|${savedStore._id}|${new Date(result.entry.date).toDateString()}`;
-          dupMap.set(savedKey, result.entry._id);
         }
 
         imported += 1;
