@@ -5,6 +5,7 @@ test.describe('Meal Plan Tab', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await loginAsNewUser(page, baseURL);
     await page.click('[data-tab="meal-plan"]');
+    await page.waitForSelector('.meal-day', { timeout: 10000 });
   });
 
   test('Meal Plan tab panel becomes active', async ({ page }) => {
@@ -12,29 +13,40 @@ test.describe('Meal Plan Tab', () => {
   });
 
   test('week navigation buttons are visible', async ({ page }) => {
-    await expect(page.locator('#btn-prev-week')).toBeVisible();
-    await expect(page.locator('#btn-next-week')).toBeVisible();
+    await expect(page.locator('#mp-prev-week')).toBeVisible();
+    await expect(page.locator('#mp-next-week')).toBeVisible();
   });
 
-  test('meal plan content loads with day cards', async ({ page }) => {
-    // Wait for the meal plan to load
+  test('meal plan content loads with seven day cards', async ({ page }) => {
     await expect(page.locator('#meal-plan-content')).toBeVisible();
-    await expect(page.locator('.day-card').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.meal-day')).toHaveCount(7);
   });
 
-  test('each day card has at least 4 meal type sections', async ({ page }) => {
-    await page.waitForSelector('.day-card', { timeout: 10000 });
-    const dayCard = page.locator('.day-card').first();
-    const sections = dayCard.locator('.meal-type-section');
-    await expect(sections).toHaveCount(4);
+  test('each day starts with four meal type sections and Everyone audiences', async ({ page }) => {
+    const dayCard = page.locator('.meal-day').first();
+    await expect(dayCard.locator('.meal-type-section')).toHaveCount(4);
+
+    const audienceButtons = dayCard.locator('.meal-audience-toggle');
+    await expect(audienceButtons).toHaveCount(4);
+    for (let i = 0; i < 4; i++) {
+      await expect(audienceButtons.nth(i)).toHaveText('Everyone');
+    }
+  });
+
+  test('meal rows include an optional notes field', async ({ page }) => {
+    const firstRow = page.locator('.meal-row').first();
+    await expect(firstRow.locator('.meal-name-input')).toBeVisible();
+    await expect(firstRow.locator('.meal-notes-input')).toBeVisible();
   });
 
   test('prev/next week nav changes the week label', async ({ page }) => {
-    await page.waitForSelector('#week-label', { timeout: 10000 });
-    const beforeText = await page.locator('#week-label').textContent();
-    await page.click('#btn-next-week');
-    await page.waitForTimeout(500);
-    const afterText = await page.locator('#week-label').textContent();
-    expect(afterText).not.toBe(beforeText);
+    const label = page.locator('.meal-plan-week-label');
+    const beforeText = await label.textContent();
+    await page.click('#mp-next-week');
+    await page.waitForFunction(
+      previous => document.querySelector('.meal-plan-week-label')?.textContent !== previous,
+      beforeText
+    );
+    await expect(label).not.toHaveText(beforeText);
   });
 });
