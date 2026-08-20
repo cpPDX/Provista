@@ -19,22 +19,31 @@ describe('GET /api/meal-plan', () => {
     expect(res.body.days.length).toBe(7);
   });
 
-  it('scaffold includes 4 meal types per day', async () => {
-    const { cookie } = await createOwnerSession(app);
-    const res = await request(app).get(`/api/meal-plan?weekStart=${WEEK_START}`).set('Cookie', cookie);
-    expect(res.status).toBe(200);
-    const mealTypes = [...new Set(res.body.days[0].meals.map(m => m.mealType))];
-    expect(mealTypes).toEqual(expect.arrayContaining(['breakfast', 'lunch', 'dinner', 'special']));
-  });
-
-  it('scaffold includes a row per household member', async () => {
+  it('scaffold includes one Everyone row for each meal type', async () => {
     const { cookie: ownerCookie } = await createOwnerSession(app);
     const code = await getInviteCode(app, ownerCookie);
     await createMemberSession(app, code);
+
     const res = await request(app).get(`/api/meal-plan?weekStart=${WEEK_START}`).set('Cookie', ownerCookie);
     expect(res.status).toBe(200);
-    // 2 household members × 4 meal types = 8 meals per day
-    expect(res.body.days[0].meals.length).toBe(8);
+    expect(res.body.days[0].meals).toHaveLength(4);
+    expect(res.body.days[0].meals.map(m => m.mealType)).toEqual(
+      expect.arrayContaining(['breakfast', 'lunch', 'dinner', 'special'])
+    );
+    expect(res.body.days[0].meals.every(m => m.forEveryone === true)).toBe(true);
+    expect(res.body.days[0].meals.every(m => Array.isArray(m.personIds) && m.personIds.length === 0)).toBe(true);
+  });
+
+  it('returns household people separately from meal rows', async () => {
+    const { cookie: ownerCookie } = await createOwnerSession(app);
+    const code = await getInviteCode(app, ownerCookie);
+    await createMemberSession(app, code);
+
+    const res = await request(app).get(`/api/meal-plan?weekStart=${WEEK_START}`).set('Cookie', ownerCookie);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.people)).toBe(true);
+    expect(res.body.people).toHaveLength(2);
+    expect(res.body.people.every(p => p.displayName)).toBe(true);
   });
 
   it('returns saved plan when one exists', async () => {
@@ -45,6 +54,7 @@ describe('GET /api/meal-plan', () => {
     expect(res.status).toBe(200);
     expect(res.body._scaffold).toBeUndefined();
     expect(res.body.produceNotes).toBe('Kale');
+    expect(Array.isArray(res.body.people)).toBe(true);
   });
 
   it('returns 400 when weekStart is missing', async () => {
@@ -61,7 +71,7 @@ describe('GET /api/meal-plan', () => {
 });
 
 describe('PUT /api/meal-plan', () => {
-  it('admin can save a meal plan', async () => {
+  it('owner can save a meal plan', async () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app).put('/api/meal-plan').set('Cookie', cookie)
       .send({ weekStart: WEEK_START, days: [], produceNotes: 'Carrots', shoppingNotes: 'Restock rice' });
@@ -70,13 +80,39 @@ describe('PUT /api/meal-plan', () => {
     expect(res.body.shoppingNotes).toBe('Restock rice');
   });
 
-  it('returns 403 for member', async () => {
+  it('member can collaborate on the household meal plan', async () => {
     const { cookie: ownerCookie } = await createOwnerSession(app);
     const code = await getInviteCode(app, ownerCookie);
     const { cookie: memberCookie } = await createMemberSession(app, code);
     const res = await request(app).put('/api/meal-plan').set('Cookie', memberCookie)
-      .send({ weekStart: WEEK_START, days: [] });
-    expect(res.status).toBe(403);
+      .send({ weekStart: WEEK_START, days: [], shoppingNotes: 'Need milk' });
+    expect(res.status).toBe(200);
+    expect(res.body.shoppingNotes).toBe('Need milk');
+  });
+
+  it('persists per-meal notes and audience selection', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const household = await request(app).get('/api/household').set('Cookie', cookie);
+    const personId = household.body.people[0]._id;
+
+    const days = [{
+      date: `${WEEK_START}T00:00:00.000Z`,
+      specialCollapsed: true,
+      meals: [{
+        mealType: 'dinner',
+        name: 'Tacos',
+        notes: 'Need tortillas, lettuce, and salsa',
+        forEveryone: false,
+        personIds: [personId]
+      }]
+    }];
+
+    const save = await request(app).put('/api/meal-plan').set('Cookie', cookie)
+      .send({ weekStart: WEEK_START, days });
+    expect(save.status).toBe(200);
+    expect(save.body.days[0].meals[0].notes).toBe('Need tortillas, lettuce, and salsa');
+    expect(save.body.days[0].meals[0].forEveryone).toBe(false);
+    expect(save.body.days[0].meals[0].personIds.map(String)).toContain(String(personId));
   });
 
   it('returns 400 when weekStart is missing', async () => {
