@@ -1,6 +1,6 @@
 // Unified grocery-entry experience.
-// Replaces the older price modal so an admin can create an item/store and log
-// the first price without leaving the form or losing partially entered data.
+// Replaces the older price modal so an item/store and its price can be captured
+// without leaving the form or losing partially entered data.
 (function initGroceryEntry() {
   function categoryOptions() {
     return `
@@ -21,7 +21,8 @@
     document.getElementById('price-item-input').value = item.name;
     document.getElementById('price-item-id').value = item._id;
     document.getElementById('price-item-unit').value = item.unit || '';
-    document.getElementById('price-new-item').style.display = 'none';
+    const newItemPanel = document.getElementById('price-new-item');
+    if (newItemPanel) newItemPanel.style.display = 'none';
     document.getElementById('price-new-item-mode').value = 'false';
     const ctx = document.getElementById('price-item-context');
     ctx.innerHTML = `${formatItemMeta(item)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}`;
@@ -35,7 +36,8 @@
     document.getElementById('price-item-id').value = '';
     document.getElementById('price-item-unit').value = '';
     document.getElementById('price-new-item-mode').value = 'true';
-    document.getElementById('price-new-item').style.display = '';
+    const panel = document.getElementById('price-new-item');
+    if (panel) panel.style.display = '';
     document.getElementById('price-item-context').style.display = 'none';
     document.getElementById('price-new-category')?.focus();
   }
@@ -44,7 +46,8 @@
     document.getElementById('price-store-input').value = store.name;
     document.getElementById('price-store-id').value = store._id;
     document.getElementById('price-new-store-mode').value = 'false';
-    document.getElementById('price-new-store').style.display = 'none';
+    const panel = document.getElementById('price-new-store');
+    if (panel) panel.style.display = 'none';
   }
 
   function startNewStore(name) {
@@ -55,32 +58,16 @@
     document.getElementById('price-new-store-location')?.focus();
   }
 
-  async function logGrocery(payload) {
-    const res = await fetch('/api/grocery/log', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    let data = {};
-    try { data = await res.json(); } catch (_) {}
-    if (res.status === 401) {
-      window.location.href = '/login.html';
-      throw new Error('Not authenticated');
-    }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
-  }
-
   window.openAddPriceModal = function openUnifiedGroceryModal(prefillItem, onSaved) {
     const isAdmin = window.appAuth?.isAdmin();
     const submitLabel = isAdmin ? 'Save Grocery' : 'Submit for Review';
+    const intro = isAdmin
+      ? 'Pick an existing item, or create it here and record its first price in the same step.'
+      : 'Pick an existing item and record what you paid. You can add a new store here if needed; new catalog items require an admin.';
 
     const bodyHTML = `
       <form id="add-price-form">
-        <div class="callout-box" style="margin-bottom:0.75rem">
-          Pick an existing item, or create it here and record its first price in the same step.
-        </div>
+        <div class="callout-box" style="margin-bottom:0.75rem">${intro}</div>
 
         <div class="form-group">
           <label>What did you buy? <span class="required-star">*</span></label>
@@ -134,21 +121,20 @@
         <div class="form-group">
           <label>Where did you buy it? <span class="required-star">*</span></label>
           <div class="autocomplete-wrap">
-            <input class="form-control" id="price-store-input" placeholder="Search stores..." autocomplete="off" required />
+            <input class="form-control" id="price-store-input" placeholder="Search or add a store..." autocomplete="off" required />
             <div class="autocomplete-dropdown" id="price-store-dropdown"></div>
           </div>
           <input type="hidden" id="price-store-id" />
           <input type="hidden" id="price-new-store-mode" value="false" />
         </div>
 
-        ${isAdmin ? `
-          <div id="price-new-store" class="callout-box" style="display:none;margin-bottom:0.75rem">
-            <div style="font-weight:700;margin-bottom:0.5rem">New store</div>
-            <div class="form-group" style="margin-bottom:0">
-              <label>Location <span class="text-muted text-sm">(optional)</span></label>
-              <input class="form-control" id="price-new-store-location" placeholder="e.g. Main St" />
-            </div>
-          </div>` : ''}
+        <div id="price-new-store" class="callout-box" style="display:none;margin-bottom:0.75rem">
+          <div style="font-weight:700;margin-bottom:0.5rem">New store</div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>Location <span class="text-muted text-sm">(optional)</span></label>
+            <input class="form-control" id="price-new-store-location" placeholder="e.g. Main St" />
+          </div>
+        </div>
 
         <div class="form-row">
           <div class="form-group">
@@ -254,10 +240,10 @@
         selectedStoreName = store.name;
         setSelectedStore(store);
       },
-      onCreateNew: isAdmin ? name => {
+      onCreateNew: name => {
         selectedStoreName = '';
         startNewStore(name);
-      } : null
+      }
     });
     storeInput.addEventListener('input', () => {
       if (document.getElementById('price-new-store-mode').value === 'true') return;
@@ -288,13 +274,14 @@
       const newStoreMode = document.getElementById('price-new-store-mode').value === 'true';
 
       if (!itemId && !newItemMode) return showToast(isAdmin ? 'Select an item or choose Create' : 'Please select an item from the list');
-      if (!storeId && !newStoreMode) return showToast(isAdmin ? 'Select a store or choose Add store' : 'Please select a store from the list');
+      if (!storeId && !newStoreMode) return showToast('Select a store or choose Add store');
 
       const payload = {
         regularPrice: Number(document.getElementById('price-regular').value),
         quantity: Number(document.getElementById('price-qty').value),
         date: document.getElementById('price-date').value,
         notes: document.getElementById('price-notes').value.trim(),
+        source: 'manual',
         salePrice: document.getElementById('price-on-sale').checked
           ? (document.getElementById('price-sale').value || null) : null,
         couponAmount: document.getElementById('price-coupon-used').checked
@@ -332,13 +319,14 @@
       submit.disabled = true;
       submit.textContent = 'Saving…';
       try {
-        const result = await logGrocery(payload);
+        const result = await api.grocery.log(payload);
         closeModal();
         window.onWizardActionComplete?.('add-price');
         if (onSaved) {
           onSaved(result.entry);
         } else if (result.entry.status === 'pending') {
-          showToast('Submitted for review');
+          const storeNote = result.createdStore ? ` Added ${result.createdStore.name} to your stores.` : '';
+          showToast(`Submitted for review.${storeNote}`);
         } else {
           const created = result.createdItem ? ` Added ${result.createdItem.name} to the catalog.` : '';
           showToast(`Grocery saved.${created}`);
