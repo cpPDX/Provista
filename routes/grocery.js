@@ -1,0 +1,145 @@
+const express = require('express');
+const router = express.Router();
+const Item = require('../models/Item');
+const Store = require('../models/Store');
+const PriceEntry = require('../models/PriceEntry');
+const { requireAuth } = require('../middleware/auth');
+const { normalizeUpc } = require('../utils/upc');
+
+const isProd = process.env.NODE_ENV === 'production';
+function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
+function parseNonNegative(value, field, required = false) {
+  if (value === undefined || value === null || value === '') {
+    if (required) throw new Error(`${field} is required`);
+    return null;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${field} must be a non-negative number`);
+  return parsed;
+}
+
+function parsePositive(value, field, fallback = null) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) throw new Error(`${field} must be a positive number`);
+  return parsed;
+}
+
+function calcFinalPrice(regularPrice, salePrice, couponAmount) {
+  const base = salePrice != null && salePrice < regularPrice ? salePrice : regularPrice;
+  return Math.max(0, base - (couponAmount || 0));
+}
+
+// POST /api/grocery/log
+// One user action can create/select the catalog item and store, then record its price.
+// Existing item/store IDs remain supported so this endpoint can replace the multi-step UI
+// without changing the underlying Item / Store / PriceEntry models.
+router.post('/log', requireAuth, async (req, res) => {
+  const householdId = req.user.householdId;
+  const isAdmin = ['admin', 'owner'].includes(req.user.role);
+  let createdItem = null;
+  let createdStore = null;
+
+  try {
+    const regularPrice = parseNonNegative(req.body.regularPrice, 'regularPrice', true);
+    const salePrice = parseNonNegative(req.body.salePrice, 'salePrice');
+    const couponAmount = parseNonNegative(req.body.couponAmount, 'couponAmount');
+    const quantity = parsePositive(req.body.quantity, 'quantity', 1);
+
+    let item;
+    if (req.body.itemId) {
+      item = await Item.findOne({ _id: req.body.itemId, householdId });
+      if (!item) return res.status(404).json({ error: 'Item not found in this household' });
+    } else if (req.body.item) {
+      if (!isAdmin) return res.status(403).json({ error: 'Admin or owner role required to create a new item' });
+      const data = req.body.item;
+      const name = String(data.name || '').trim();
+      const category = String(data.category || '').trim();
+      const unit = String(data.unit || '').trim();
+      if (!name) return res.status(400).json({ error: 'item.name is required' });
+      if (!category) return res.status(400).json({ error: 'item.category is required' });
+      if (!unit) return res.status(400).json({ error: 'item.unit is required' });
+
+      const size = data.size === undefined || data.size === null || data.size === ''
+        ? null
+        : parsePositive(data.size, 'item.size');
+      const upc = data.upc ? (normalizeUpc(String(data.upc)) ?? null) : null;
+
+      item = await Item.create({
+        householdId,
+        name,
+        brand: String(data.brand || '').trim(),
+        category,
+        unit,
+        size,
+        isOrganic: Boolean(data.isOrganic),
+        upc,
+        upcSource: upc ? 'manual' : null,
+        isSeeded: false
+      });
+      createdItem = item;
+    } else {
+      return res.status(400).json({ error: 'itemId or item is required' });
+    }
+
+    let store;
+    if (req.body.storeId) {
+      store = await Store.findOne({ _id: req.body.storeId, householdId });
+      if (!store) return res.status(404).json({ error: 'Store not found in this household' });
+    } else if (req.body.store) {
+      if (!isAdmin) return res.status(403).json({ error: 'Admin or owner role required to create a new store' });
+      const name = String(req.body.store.name || '').trim();
+      if (!name) return res.status(400).json({ error: 'store.name is required' });
+      store = await Store.create({
+        householdId,
+        name,
+        location: String(req.body.store.location || '').trim()
+      });
+      createdStore = store;
+    } else {
+      return res.status(400).json({ error: 'storeId or store is required' });
+    }
+
+    const finalPrice = calcFinalPrice(regularPrice, salePrice, couponAmount);
+    const entry = await PriceEntry.create({
+      householdId,
+      itemId: item._id,
+      storeId: store._id,
+      submittedBy: req.user._id,
+      regularPrice,
+      salePrice,
+      couponAmount,
+      couponCode: req.body.couponCode ? String(req.body.couponCode).trim() : null,
+      finalPrice,
+      quantity,
+      pricePerUnit: finalPrice / quantity,
+      date: req.body.date || new Date(),
+      notes: req.body.notes ? String(req.body.notes).trim() : '',
+      source: 'manual',
+      status: isAdmin ? 'approved' : 'pending',
+      reviewedBy: isAdmin ? req.user._id : null,
+      reviewedAt: isAdmin ? new Date() : null
+    });
+
+    const populated = await entry.populate([
+      { path: 'itemId', select: 'name brand unit size category isOrganic upc' },
+      { path: 'storeId', select: 'name location' }
+    ]);
+
+    res.status(201).json({
+      entry: populated,
+      createdItem: createdItem || null,
+      createdStore: createdStore || null
+    });
+  } catch (err) {
+    // Best-effort rollback for records created solely as part of this unfinished log action.
+    await Promise.allSettled([
+      createdItem ? Item.deleteOne({ _id: createdItem._id, householdId }) : Promise.resolve(),
+      createdStore ? Store.deleteOne({ _id: createdStore._id, householdId }) : Promise.resolve()
+    ]);
+    res.status(400).json({ error: serverErr(err) });
+  }
+});
+
+module.exports = router;
