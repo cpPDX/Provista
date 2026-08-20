@@ -93,12 +93,13 @@
     const linked = Boolean(person.userId);
     const canManage = auth.isAdmin();
     const subtitle = linked ? 'Account + meal planning' : 'Meal planning only';
+    const displayNameArg = escapeAttr(JSON.stringify(person.displayName || ''));
     let actions = '';
 
     if (canManage) {
-      actions += `<button class="btn btn-outline btn-sm" onclick="openEditHouseholdPersonModal('${person._id}','${escapeAttr(person.displayName)}')">Edit</button>`;
+      actions += `<button class="btn btn-outline btn-sm" onclick="openEditHouseholdPersonModal('${person._id}',${displayNameArg})">Edit</button>`;
       if (!linked) {
-        actions += `<button class="btn btn-danger btn-sm" onclick="removeHouseholdPerson('${person._id}','${escapeAttr(person.displayName)}')">Remove</button>`;
+        actions += `<button class="btn btn-danger btn-sm" onclick="removeHouseholdPerson('${person._id}',${displayNameArg})">Remove</button>`;
       }
     }
 
