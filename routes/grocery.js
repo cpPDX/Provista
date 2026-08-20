@@ -57,6 +57,17 @@ router.post('/log', requireAuth, async (req, res) => {
     const salePrice = parseNonNegative(req.body.salePrice, 'salePrice');
     const couponAmount = parseNonNegative(req.body.couponAmount, 'couponAmount');
     const quantity = parsePositive(req.body.quantity, 'quantity', 1);
+    const source = ['manual', 'csv'].includes(req.body.source) ? req.body.source : 'manual';
+
+    let replacement = null;
+    if (req.body.replacePriceEntryId) {
+      if (!isAdmin) fail(403, 'Admin or owner role required to replace an existing price entry');
+      replacement = await PriceEntry.findOne({
+        _id: req.body.replacePriceEntryId,
+        householdId
+      });
+      if (!replacement) fail(404, 'Price entry to replace was not found in this household');
+    }
 
     let item;
     if (req.body.itemId) {
@@ -126,11 +137,17 @@ router.post('/log', requireAuth, async (req, res) => {
       pricePerUnit: finalPrice / quantity,
       date: req.body.date || new Date(),
       notes: req.body.notes ? String(req.body.notes).trim() : '',
-      source: 'manual',
+      source,
       status: isAdmin ? 'approved' : 'pending',
       reviewedBy: isAdmin ? req.user._id : null,
       reviewedAt: isAdmin ? new Date() : null
     });
+
+    // Replace only after the new record is safely written so an import failure
+    // cannot destroy the price history it was trying to correct.
+    if (replacement) {
+      await PriceEntry.deleteOne({ _id: replacement._id, householdId });
+    }
 
     const populated = await entry.populate([
       { path: 'itemId', select: 'name brand unit size category isOrganic upc' },
@@ -140,7 +157,8 @@ router.post('/log', requireAuth, async (req, res) => {
     res.status(201).json({
       entry: populated,
       createdItem: createdItem || null,
-      createdStore: createdStore || null
+      createdStore: createdStore || null,
+      replacedPriceEntryId: replacement ? String(replacement._id) : null
     });
   } catch (err) {
     // Best-effort rollback for records created solely as part of this unfinished log action.
