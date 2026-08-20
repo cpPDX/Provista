@@ -30,6 +30,7 @@ jobs:
         run: |
           node --check public/js/more.js
           node --check public/js/householdPeople.js
+          node --check public/js/groceryEntry.js
           node --check public/js/mealPlan.js
 
       - name: Run API test suite
