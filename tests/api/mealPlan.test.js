@@ -1,6 +1,8 @@
+const mongoose = require('mongoose');
 const request = require('supertest');
 const app = require('../../server');
 const db = require('../helpers/db');
+const MealPlan = require('../../models/MealPlan');
 const { createOwnerSession, createMemberSession, getInviteCode } = require('../helpers/auth');
 
 beforeAll(db.connect);
@@ -55,6 +57,32 @@ describe('GET /api/meal-plan', () => {
     expect(res.body._scaffold).toBeUndefined();
     expect(res.body.produceNotes).toBe('Kale');
     expect(Array.isArray(res.body.people)).toBe(true);
+  });
+
+  it('does not default a legacy person-specific meal to Everyone', async () => {
+    const { cookie, user } = await createOwnerSession(app, { name: 'Legacy Person' });
+    const householdId = new mongoose.Types.ObjectId(String(user.householdId));
+    const now = new Date();
+
+    await MealPlan.collection.insertOne({
+      householdId,
+      weekStart: new Date(`${WEEK_START}T00:00:00.000Z`),
+      days: [{
+        date: new Date(`${WEEK_START}T00:00:00.000Z`),
+        specialCollapsed: true,
+        meals: [{ mealType: 'dinner', personName: 'Legacy Person', name: 'Legacy dinner' }]
+      }],
+      produceNotes: '',
+      shoppingNotes: '',
+      createdAt: now,
+      updatedAt: now
+    });
+
+    const res = await request(app).get(`/api/meal-plan?weekStart=${WEEK_START}`).set('Cookie', cookie);
+    expect(res.status).toBe(200);
+    const meal = res.body.days[0].meals[0];
+    expect(meal.personName).toBe('Legacy Person');
+    expect(meal).not.toHaveProperty('forEveryone');
   });
 
   it('returns inactive people that are still referenced by historical meal audiences', async () => {
