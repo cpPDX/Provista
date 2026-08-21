@@ -1,0 +1,57 @@
+.rapid-list-capture {
+  padding: 0.75rem 0.75rem 0;
+}
+
+.rapid-list-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.rapid-list-row textarea.form-control {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 96px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.rapid-list-row .btn {
+  min-width: 64px;
+  min-height: 44px;
+}
+
+.rapid-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  padding: 0.35rem 0.125rem 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+#rapid-list-status[data-state="success"] {
+  color: var(--success);
+}
+
+#rapid-list-status[data-state="warning"] {
+  color: var(--warning);
+}
+
+@media (max-width: 520px) {
+  .rapid-list-capture {
+    padding-top: 0.5rem;
+  }
+
+  .rapid-list-meta {
+    display: block;
+  }
+
+  #rapid-list-status:not(:empty) {
+    display: block;
+    margin-top: 0.25rem;
+  }
+}
