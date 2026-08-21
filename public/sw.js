@@ -1,19 +1,21 @@
 // Provista Service Worker
 // Cache-first for static assets (images, fonts), network-first for JS/CSS and API data
 
-const SHELL_CACHE = 'provista-shell-v5';
+const SHELL_CACHE = 'provista-shell-v6';
 const API_CACHE = 'provista-api-v5';
 
 const SHELL_ASSETS = [
   '/',
   '/index.html',
   '/css/style.css',
+  '/css/rapidShoppingCapture.css',
   '/js/auth.js',
   '/js/api.js',
   '/js/ui.js',
   '/js/autocomplete.js',
   '/js/prices.js',
   '/js/shoppingList.js',
+  '/js/rapidShoppingCapture.js',
   '/js/csvImport.js',
   '/js/spend.js',
   '/js/more.js',
