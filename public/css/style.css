@@ -1264,6 +1264,8 @@ body.role-member .member-only { display: flex; }
 .meal-plan { padding: 1rem; }
 .meal-plan-nav { display: flex; flex-direction: row; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .meal-plan-week-label { font-weight: 600; }
+.meal-plan-tools { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 0.75rem; }
+.meal-plan-mode-summary { color: var(--text-muted); font-size: 0.8125rem; font-weight: 600; }
 .meal-day {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1285,10 +1287,11 @@ body.role-member .member-only { display: flex; }
 .meal-day-header { font-weight: 600; padding: 0.75rem 1rem 0.5rem; border-bottom: 1px solid var(--border); }
 /* Per-person meal rows */
 .meal-type-section { border-bottom: 1px solid var(--border); }
+.meal-type-section[hidden] { display: none; }
 .meal-type-section:last-child { border-bottom: none; }
 .meal-type-header { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); padding: 0.5rem 1rem 0.25rem; }
-.meal-type-header.special-toggle { cursor: pointer; background: none; border: none; font-family: inherit; width: 100%; text-align: left; }
-.meal-type-header.special-toggle:hover { color: var(--text); }
+.meal-type-header.meal-type-toggle { cursor: pointer; background: none; border: none; font-family: inherit; width: 100%; text-align: left; }
+.meal-type-header.meal-type-toggle:hover { color: var(--text); }
 .meal-type-rows { padding: 0 1rem 0.5rem; }
 .meal-row { display: block; padding: 0.35rem 0; }
 .meal-row + .meal-row { border-top: 1px solid var(--border); margin-top: 0.35rem; padding-top: 0.7rem; }
@@ -1319,6 +1322,32 @@ body.role-member .member-only { display: flex; }
   font-weight: 600;
 }
 .meal-list-suggestions-btn[hidden] { display: none; }
+.meal-row-quick-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.875rem; }
+.meal-row-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  text-decoration: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+.meal-row-action:disabled { color: var(--text-muted); cursor: default; opacity: 0.55; }
+.meal-favorites-list { display: grid; gap: 0.625rem; margin-top: 0.75rem; }
+.meal-favorite-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  background: var(--surface);
+}
+.meal-favorite-copy { min-width: 0; }
+.meal-favorite-copy small { display: block; color: var(--text-muted); font-size: 0.75rem; margin-top: 0.2rem; white-space: pre-line; }
+.meal-favorite-actions { display: grid; justify-items: end; gap: 0.35rem; }
+.meal-favorite-remove { font-size: 0.75rem; color: var(--text-muted); }
+.meal-favorites-empty { padding: 1rem 0.5rem; }
 .meal-suggestion-help { margin-bottom: 0.75rem; }
 .meal-suggestion-list { display: grid; gap: 0.625rem; margin-bottom: 0.875rem; }
 .meal-suggestion-row {

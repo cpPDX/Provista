@@ -41,6 +41,7 @@ jobs:
           node --check public/js/home.js
           node --check public/js/onboarding.js
           node --check public/js/shoppingList.js
+          node --check models/FavoriteMeal.js
           node --check models/ShoppingTrip.js
           node --check services/completeShoppingTrip.js
           node --check utils/mealShopping.js

@@ -12,6 +12,7 @@ const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const ShoppingTrip = require('../models/ShoppingTrip');
 const MealPlan = require('../models/MealPlan');
+const FavoriteMeal = require('../models/FavoriteMeal');
 const { ensureHouseholdPeople } = require('../utils/householdPeople');
 const { requireAuth, requireAdmin, requireOwner } = require('../middleware/auth');
 
@@ -254,6 +255,7 @@ router.delete('/', requireAuth, requireOwner, async (req, res) => {
       ShoppingListItem.deleteMany({ householdId }),
       ShoppingTrip.deleteMany({ householdId }),
       MealPlan.deleteMany({ householdId }),
+      FavoriteMeal.deleteMany({ householdId }),
       HouseholdPerson.deleteMany({ householdId }),
       User.updateMany({ householdId }, { $set: { householdId: null, role: 'member' } })
     ]);

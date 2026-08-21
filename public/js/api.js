@@ -4,14 +4,17 @@
 // Sub-resource actions like /items/123/merge and combined-write actions like
 // /grocery/log or /shopping-list/complete are not safe to queue offline.
 function _isSimpleCrudPath(method, path) {
+  const cleanPath = path.split('?')[0];
+  if (cleanPath.startsWith('/meal-plan/favorites')) return false;
   if (method === 'GET') return true;
   if ([
     '/grocery/log',
+    '/meal-plan/copy-previous',
     '/meal-plan/shopping-suggestions',
     '/shopping-list/complete',
     '/shopping-list/from-meal'
-  ].includes(path.split('?')[0])) return false;
-  const segments = path.split('?')[0].split('/').filter(Boolean);
+  ].includes(cleanPath)) return false;
+  const segments = cleanPath.split('/').filter(Boolean);
   return segments.length <= 2;
 }
 
@@ -166,7 +169,12 @@ const api = {
   },
   mealPlan: {
     shoppingSuggestions: (notes) => api.post('/meal-plan/shopping-suggestions', { notes }),
-    addShoppingSuggestions: (items) => api.post('/shopping-list/from-meal', { items })
+    addShoppingSuggestions: (items) => api.post('/shopping-list/from-meal', { items }),
+    copyPrevious: (weekStart) => api.post('/meal-plan/copy-previous', { weekStart }),
+    favorites: () => api.get('/meal-plan/favorites'),
+    saveFavorite: (data) => api.post('/meal-plan/favorites', data),
+    useFavorite: (id) => api.post(`/meal-plan/favorites/${id}/use`, {}),
+    deleteFavorite: (id) => api.delete(`/meal-plan/favorites/${id}`)
   },
   spend: {
     month: (month) => api.get(`/spend?month=${month}`),

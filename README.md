@@ -183,12 +183,15 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 ├── models/
 │   ├── User.js
 │   ├── Household.js
+│   ├── HouseholdPerson.js
 │   ├── Item.js
 │   ├── Store.js
 │   ├── PriceEntry.js      # regularPrice, salePrice, couponAmount, finalPrice, pricePerUnit
 │   ├── InventoryItem.js
 │   ├── ShoppingListItem.js
-│   └── ShoppingTrip.js      # completed trip totals and purchased-item snapshots
+│   ├── ShoppingTrip.js      # completed trip totals and purchased-item snapshots
+│   ├── MealPlan.js          # collaborative weekly household plans
+│   └── FavoriteMeal.js      # reusable meals with usual shopping notes
 ├── routes/
 │   ├── auth.js            # Register, login, logout, profile, password
 │   ├── household.js       # Members, roles, invite codes, settings
@@ -198,6 +201,7 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 │   ├── barcode.js         # UPC lookup via local catalog + Open Food Facts
 │   ├── inventory.js
 │   ├── shoppingList.js
+│   ├── mealPlan.js        # weekly plans, favorites, and copy-last-week
 │   └── spend.js
 ├── middleware/
 │   └── auth.js            # requireAuth, requireAdmin, requireOwner

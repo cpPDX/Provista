@@ -15,7 +15,8 @@
 │   ├── InventoryItem.js
 │   ├── ShoppingListItem.js
 │   ├── ShoppingTrip.js
-│   └── MealPlan.js
+│   ├── MealPlan.js
+│   └── FavoriteMeal.js
 ├── routes/
 │   ├── auth.js
 │   ├── health.js
@@ -148,9 +149,15 @@ express.static('public')
 | GET | `/api/spend` | auth | Monthly spend breakdown |
 | GET | `/api/spend/summary` | auth | 6-month totals |
 | GET | `/api/meal-plan` | auth | Get / scaffold plan for week |
-| PUT | `/api/meal-plan` | auth + admin | Save / upsert meal plan |
-| GET | `/api/meal-plan/settings` | auth | Get weekStartDay |
-| PUT | `/api/meal-plan/settings` | auth + admin | Update weekStartDay |
+| PUT | `/api/meal-plan` | auth | Save / upsert a collaborative meal plan |
+| POST | `/api/meal-plan/shopping-suggestions` | auth | Match a meal's notes to List and Pantry |
+| POST | `/api/meal-plan/copy-previous` | auth | Copy the previous week and remap dates |
+| GET | `/api/meal-plan/favorites` | auth | List reusable household meals |
+| POST | `/api/meal-plan/favorites` | auth | Save or update a favorite meal and notes |
+| POST | `/api/meal-plan/favorites/:id/use` | auth | Record use of a household favorite |
+| DELETE | `/api/meal-plan/favorites/:id` | auth | Remove a household favorite |
+| GET | `/api/meal-plan/settings` | auth | Get week start and default meal view |
+| PUT | `/api/meal-plan/settings` | auth + admin | Update week start and default meal view |
 | POST | `/api/admin/migrate-categories` | auth + admin | Normalize category names |
 | GET | `/api/admin/duplicate-groups` | auth + admin | Preview similar items |
 | POST | `/api/admin/consolidate-items` | auth + admin | Merge duplicates |
@@ -260,6 +267,7 @@ Password hashing: bcrypt, `SALT_ROUNDS = 12`.
 | `inviteCode` | String | 6-char alphanumeric, default null |
 | `inviteCodeExpiresAt` | Date | 48h from generation, default null |
 | `weekStartDay` | Number | 0=Sun, 1=Mon … 6=Sat; default 6 |
+| `mealPlanMode` | `'dinner'`\|`'all'` | default `'dinner'` |
 | `settings.barcodeAutoAccept` | Boolean | default false |
 
 ### Item
@@ -372,11 +380,31 @@ Unique index: `(householdId, idempotencyKey)`.
 | `days` | Array | 7 entries, each `{ date, meals[], specialCollapsed }` |
 | `days[].meals[].mealType` | `'breakfast'`\|`'lunch'`\|`'dinner'`\|`'special'` | required |
 | `days[].meals[].personName` | String | trimmed, default `''` |
+| `days[].meals[].personIds` | ObjectId[] → HouseholdPerson | selected audience |
+| `days[].meals[].forEveryone` | Boolean | default audience for new rows |
 | `days[].meals[].name` | String | trimmed, default `''` |
+| `days[].meals[].notes` | String | ingredients or other meal notes |
 | `produceNotes` | String | trimmed, default `''` |
 | `shoppingNotes` | String | trimmed, default `''` |
 
 Unique index: `(householdId, weekStart)`.
+
+### FavoriteMeal
+
+Reusable household meals retain their usual ingredient notes so choosing a
+favorite can immediately regenerate its List suggestions.
+
+| Field | Type | Notes |
+|---|---|---|
+| `householdId` | ObjectId → Household | required |
+| `normalizedName` | String | case-insensitive household dedupe key |
+| `name` | String | required, max 120 characters |
+| `notes` | String | usual ingredients/notes, max 2,000 characters |
+| `createdBy` | ObjectId → User | unset if the creator deletes their account |
+| `useCount` | Number | default 0; used for ordering |
+| `lastUsedAt` | Date | recency tie-breaker |
+
+Unique index: `(householdId, normalizedName)`.
 
 ---
 

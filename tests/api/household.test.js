@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../../server');
 const db = require('../helpers/db');
 const HouseholdPerson = require('../../models/HouseholdPerson');
+const FavoriteMeal = require('../../models/FavoriteMeal');
 const { createOwnerSession, createMemberSession, getInviteCode } = require('../helpers/auth');
 
 beforeAll(db.connect);
@@ -262,13 +263,20 @@ describe('PUT /api/household/members/:id', () => {
 
 describe('DELETE /api/household', () => {
   it('owner can delete household with correct password', async () => {
-    const { cookie } = await createOwnerSession(app);
+    const { cookie, user } = await createOwnerSession(app);
+    const favorite = await request(app)
+      .post('/api/meal-plan/favorites')
+      .set('Cookie', cookie)
+      .send({ name: 'Household tacos', notes: 'tortillas, salsa' });
+    expect(favorite.status).toBe(200);
+
     const res = await request(app)
       .delete('/api/household')
       .set('Cookie', cookie)
       .send({ password: 'password123' });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expect(await FavoriteMeal.countDocuments({ householdId: user.householdId })).toBe(0);
   });
 
   it('returns 401 with wrong password', async () => {
