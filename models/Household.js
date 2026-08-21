@@ -19,6 +19,7 @@ const householdSchema = new mongoose.Schema({
   inviteCode: { type: String, default: null },
   inviteCodeExpiresAt: { type: Date, default: null },
   weekStartDay: { type: Number, default: 6 },
+  mealPlanMode: { type: String, enum: ['dinner', 'all'], default: 'dinner' },
   settings: {
     barcodeAutoAccept: { type: Boolean, default: false }
   }

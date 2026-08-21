@@ -1,8 +1,11 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
+const Item = require('../models/Item');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const PriceEntry = require('../models/PriceEntry');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { completeShoppingTrip, ShoppingTripError } = require('../services/completeShoppingTrip');
+const { requireAuth } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
@@ -24,7 +27,7 @@ router.get('/', requireAuth, async (req, res) => {
       const priceData = await PriceEntry.aggregate([
         { $match: { householdId: req.user.householdId, itemId: li.itemId._id, status: 'approved' } },
         { $sort: { date: -1 } },
-        { $group: { _id: '$storeId', pricePerUnit: { $first: '$pricePerUnit' }, finalPrice: { $first: '$finalPrice' }, quantity: { $first: '$quantity' }, date: { $first: '$date' }, storeId: { $first: '$storeId' } } },
+        { $group: { _id: '$storeId', priceEntryId: { $first: '$_id' }, pricePerUnit: { $first: '$pricePerUnit' }, finalPrice: { $first: '$finalPrice' }, quantity: { $first: '$quantity' }, date: { $first: '$date' }, storeId: { $first: '$storeId' } } },
         { $sort: { pricePerUnit: 1 } },
         { $limit: 1 },
         { $lookup: { from: 'stores', localField: 'storeId', foreignField: '_id', as: 'store' } },
@@ -32,6 +35,7 @@ router.get('/', requireAuth, async (req, res) => {
       ]);
 
       obj.bestPrice = priceData.length > 0 ? {
+        priceEntryId: priceData[0].priceEntryId,
         pricePerUnit: priceData[0].pricePerUnit,
         finalPrice: priceData[0].finalPrice,
         quantity: priceData[0].quantity,
@@ -44,6 +48,91 @@ router.get('/', requireAuth, async (req, res) => {
     res.json(enriched);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// POST /api/shopping-list/from-meal - add reviewed meal-note matches in one
+// household-scoped batch, skipping anything already on the list.
+router.post('/from-meal', requireAuth, async (req, res) => {
+  try {
+    if (!Array.isArray(req.body.items) || req.body.items.length === 0) {
+      return res.status(400).json({ error: 'items must be a non-empty array' });
+    }
+    if (req.body.items.length > 25) {
+      return res.status(400).json({ error: 'No more than 25 items can be added at once' });
+    }
+
+    const requestedById = new Map();
+    for (const entry of req.body.items) {
+      const itemId = String(entry?.itemId || '');
+      const quantity = Number(entry?.quantity ?? 1);
+      if (!mongoose.isValidObjectId(itemId)) return res.status(400).json({ error: 'Each itemId must be valid' });
+      if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 99) {
+        return res.status(400).json({ error: 'Each quantity must be greater than 0 and no more than 99' });
+      }
+      const existing = requestedById.get(itemId);
+      requestedById.set(itemId, Math.max(existing || 0, quantity));
+    }
+
+    const householdId = req.user.householdId;
+    const itemIds = [...requestedById.keys()];
+    const catalogItems = await Item.find({ _id: { $in: itemIds }, householdId })
+      .select('name brand category unit')
+      .lean();
+    if (catalogItems.length !== itemIds.length) {
+      return res.status(404).json({ error: 'One or more catalog items were not found in this household' });
+    }
+
+    const existingListItems = await ShoppingListItem.find({
+      householdId,
+      itemId: { $in: itemIds }
+    }).select('itemId').lean();
+    const existingIds = new Set(existingListItems.map(entry => String(entry.itemId)));
+    const now = new Date();
+    const documents = itemIds
+      .filter(itemId => !existingIds.has(itemId))
+      .map(itemId => ({
+        householdId,
+        itemId,
+        quantity: requestedById.get(itemId),
+        addedBy: req.user._id,
+        addedAt: now
+      }));
+
+    if (documents.length) await ShoppingListItem.insertMany(documents);
+    const catalogById = new Map(catalogItems.map(item => [String(item._id), item]));
+    res.status(documents.length ? 201 : 200).json({
+      addedCount: documents.length,
+      skippedCount: existingIds.size,
+      addedItems: documents.map(document => ({
+        itemId: String(document.itemId),
+        name: catalogById.get(String(document.itemId))?.name,
+        quantity: document.quantity
+      })),
+      skippedItems: [...existingIds].map(itemId => ({
+        itemId,
+        name: catalogById.get(itemId)?.name
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// POST /api/shopping-list/complete - finish one shopping trip across list,
+// Pantry, price history, Spend, and low-stock state.
+router.post('/complete', requireAuth, async (req, res) => {
+  try {
+    const summary = await completeShoppingTrip({
+      householdId: req.user.householdId,
+      userId: req.user._id,
+      role: req.user.role,
+      body: req.body
+    });
+    res.status(summary.idempotent ? 200 : 201).json(summary);
+  } catch (err) {
+    const status = err instanceof ShoppingTripError ? err.status : 500;
+    res.status(status).json({ error: err instanceof ShoppingTripError ? err.message : serverErr(err) });
   }
 });
 

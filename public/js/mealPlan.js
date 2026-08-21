@@ -3,8 +3,10 @@
 const mealPlanState = {
   weekStart: null,       // ISO date string YYYY-MM-DD
   weekStartDay: 6,       // 0=Sun, 1=Mon, 6=Sat
+  mealPlanMode: 'dinner', // dinner | all
   people: [],            // active household people (accounts + non-account people)
   plan: null,
+  favorites: null,
   saveTimer: null
 };
 
@@ -79,6 +81,415 @@ async function fetchSettings() {
   return res.json();
 }
 
+// ===== Meal notes → Shopping List =====
+
+function countMealShoppingFragments(notes) {
+  const seen = new Set();
+  String(notes || '').slice(0, 2000).split(/[\n,;]+/).forEach(raw => {
+    const cleaned = raw
+      .replace(/^\s*(?:[-*•]+|\d+[.)])\s*/, '')
+      .replace(/^\s*(?:and|&)\s+/i, '')
+      .replace(/^(?:(?:please|we)\s+)?(?:need(?:\s+to\s+(?:buy|get))?|buy|get|grab|pick\s*up|add|restock|check\s+(?:the\s+)?pantry\s+for)\s+/i, '')
+      .trim()
+      .toLowerCase();
+    if (cleaned) seen.add(cleaned);
+  });
+  return Math.min(seen.size, 25);
+}
+
+function refreshMealShoppingAction(row) {
+  const button = row.querySelector('.meal-list-suggestions-btn');
+  const notes = row.querySelector('.meal-notes-input')?.value || '';
+  const count = countMealShoppingFragments(notes);
+  if (!button) return;
+  button.hidden = count === 0;
+  button.textContent = count === 1 ? 'Add 1 item to List' : `Add ${count} items to List`;
+}
+
+function suggestionStatusHtml(item, duplicateInNotes = false) {
+  if (duplicateInNotes) return '<span class="badge badge-no-data">Duplicate note</span>';
+  if (item?.onList) return '<span class="badge badge-no-data">Already on List</span>';
+  if (Number(item?.pantryQuantity) > 0) {
+    return `<span class="badge badge-no-data">In Pantry · ${escapeHtml(item.pantryQuantity)}</span>`;
+  }
+  return '';
+}
+
+function mealSuggestionCandidateLabel(item) {
+  const context = item.onList
+    ? ' — already on List'
+    : Number(item.pantryQuantity) > 0
+      ? ` — ${item.pantryQuantity} in Pantry`
+      : '';
+  return `${item.name}${item.brand ? ` (${item.brand})` : ''}${context}`;
+}
+
+function renderMealSuggestionRow(suggestion, index) {
+  const quantity = Number(suggestion.quantity) || 1;
+  if (suggestion.matchStatus === 'unmatched') {
+    return `<div class="meal-suggestion-row" data-suggestion-index="${index}">
+      <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</div>
+      <div class="meal-suggestion-unmatched">No catalog match. Edit the note or add this item from List.</div>
+    </div>`;
+  }
+
+  if (suggestion.matchStatus === 'ambiguous') {
+    const options = suggestion.candidates.map(item => `
+      <option value="${escapeAttr(item._id)}"
+        data-name="${escapeAttr(item.name)}"
+        data-on-list="${item.onList ? 'true' : 'false'}"
+        data-pantry-quantity="${escapeAttr(item.pantryQuantity || 0)}">
+        ${escapeHtml(mealSuggestionCandidateLabel(item))}
+      </option>`).join('');
+    return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
+      <label class="meal-suggestion-choice">
+        <input type="checkbox" class="meal-suggestion-check" disabled />
+        <span><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</span>
+      </label>
+      <select class="form-control meal-suggestion-select" aria-label="Choose catalog item for ${escapeAttr(suggestion.sourceText)}">
+        <option value="">Choose the household item…</option>
+        ${options}
+      </select>
+      <div class="meal-suggestion-status"></div>
+    </div>`;
+  }
+
+  const item = suggestion.item;
+  const disabled = item.onList || suggestion.duplicateInNotes;
+  const checked = !disabled && Number(item.pantryQuantity) <= 0;
+  return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
+    <label class="meal-suggestion-choice">
+      <input type="checkbox" class="meal-suggestion-check"
+        data-item-id="${escapeAttr(item._id)}" data-item-name="${escapeAttr(item.name)}"
+        ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
+      <span><strong>${escapeHtml(item.name)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}
+        ${suggestion.sourceText.toLowerCase() !== item.name.toLowerCase() ? `<small>From “${escapeHtml(suggestion.sourceText)}”</small>` : ''}
+      </span>
+    </label>
+    <div class="meal-suggestion-status">${suggestionStatusHtml(item, suggestion.duplicateInNotes)}</div>
+  </div>`;
+}
+
+function selectedMealSuggestionItems() {
+  const selectedById = new Map();
+  document.querySelectorAll('.meal-suggestion-row').forEach(row => {
+    const checkbox = row.querySelector('.meal-suggestion-check');
+    if (!checkbox?.checked || checkbox.disabled || !checkbox.dataset.itemId) return;
+    const quantity = Number(row.dataset.quantity) || 1;
+    const current = selectedById.get(checkbox.dataset.itemId);
+    selectedById.set(checkbox.dataset.itemId, Math.max(current?.quantity || 0, quantity));
+  });
+  return [...selectedById].map(([itemId, quantity]) => ({ itemId, quantity }));
+}
+
+function updateMealSuggestionSubmit() {
+  const items = selectedMealSuggestionItems();
+  const button = document.getElementById('btn-add-meal-suggestions');
+  if (!button) return;
+  button.disabled = items.length === 0;
+  button.textContent = items.length === 1 ? 'Add 1 to List' : `Add ${items.length} to List`;
+}
+
+function bindMealSuggestionControls() {
+  document.querySelectorAll('.meal-suggestion-select').forEach(select => {
+    select.addEventListener('change', () => {
+      const row = select.closest('.meal-suggestion-row');
+      const checkbox = row.querySelector('.meal-suggestion-check');
+      const status = row.querySelector('.meal-suggestion-status');
+      const option = select.selectedOptions[0];
+      if (!option?.value) {
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        delete checkbox.dataset.itemId;
+        delete checkbox.dataset.itemName;
+        status.innerHTML = '';
+      } else {
+        const onList = option.dataset.onList === 'true';
+        const pantryQuantity = Number(option.dataset.pantryQuantity) || 0;
+        checkbox.dataset.itemId = option.value;
+        checkbox.dataset.itemName = option.dataset.name || '';
+        checkbox.disabled = onList;
+        checkbox.checked = !onList && pantryQuantity <= 0;
+        status.innerHTML = suggestionStatusHtml({ onList, pantryQuantity });
+      }
+      updateMealSuggestionSubmit();
+    });
+  });
+  document.querySelectorAll('.meal-suggestion-check').forEach(checkbox => {
+    checkbox.addEventListener('change', updateMealSuggestionSubmit);
+  });
+}
+
+async function openMealShoppingSuggestions(row, triggerButton) {
+  const notes = row.querySelector('.meal-notes-input')?.value.trim() || '';
+  const mealName = row.querySelector('.meal-name-input')?.value.trim() || '';
+  if (!notes) return;
+
+  triggerButton.disabled = true;
+  triggerButton.textContent = 'Finding List items…';
+  try {
+    const preview = await api.mealPlan.shoppingSuggestions(notes);
+    if (!preview.parsedCount) {
+      showToast('Separate shopping items with commas or new lines');
+      return;
+    }
+
+    const rows = preview.suggestions.map(renderMealSuggestionRow).join('');
+    openModal(mealName ? `Add items for ${mealName}` : 'Add meal items to List', `
+      <p class="text-muted text-sm meal-suggestion-help">
+        Provista matched these notes to your household catalog. Pantry items stay unchecked; List duplicates cannot be selected.
+      </p>
+      <div class="meal-suggestion-list">${rows}</div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-add-meal-suggestions">Add to List</button>
+      </div>`);
+
+    bindMealSuggestionControls();
+    updateMealSuggestionSubmit();
+    document.getElementById('btn-add-meal-suggestions')?.addEventListener('click', async event => {
+      const items = selectedMealSuggestionItems();
+      if (!items.length) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = 'Adding…';
+      try {
+        const result = await api.mealPlan.addShoppingSuggestions(items);
+        closeModal();
+        triggerButton.dataset.added = 'true';
+        triggerButton.textContent = 'Added to List ✓';
+        const skipped = result.skippedCount ? ` · ${result.skippedCount} already on List` : '';
+        showToast(`Added ${result.addedCount} item${result.addedCount === 1 ? '' : 's'} to List${skipped}`);
+      } catch (err) {
+        handleError(err, 'Failed to add meal items');
+        button.disabled = false;
+        updateMealSuggestionSubmit();
+      }
+    });
+  } catch (err) {
+    handleError(err, 'Failed to match meal items');
+  } finally {
+    triggerButton.disabled = false;
+    if (triggerButton.dataset.added !== 'true') refreshMealShoppingAction(row);
+  }
+}
+
+// ===== Fast repetitive-week planning =====
+
+function mealRowValue(row) {
+  const forEveryone = row.dataset.forEveryone === 'true';
+  return {
+    name: row.querySelector('.meal-name-input')?.value.trim() || '',
+    notes: row.querySelector('.meal-notes-input')?.value.trim() || '',
+    forEveryone,
+    personIds: forEveryone
+      ? []
+      : [...row.querySelectorAll('.meal-person-check:checked')].map(input => input.value),
+    legacyPersonName: row.dataset.legacyPersonName || ''
+  };
+}
+
+function applyMealValue(row, meal) {
+  const nameInput = row.querySelector('.meal-name-input');
+  const notesInput = row.querySelector('.meal-notes-input');
+  if (nameInput) nameInput.value = meal.name || '';
+  if (notesInput) notesInput.value = meal.notes || '';
+
+  const everyone = meal.forEveryone !== false;
+  row.dataset.forEveryone = everyone ? 'true' : 'false';
+  row.dataset.legacyPersonName = everyone ? '' : (meal.legacyPersonName || '');
+  const everyoneCheck = row.querySelector('.meal-everyone-check');
+  if (everyoneCheck) everyoneCheck.checked = everyone;
+  const selectedIds = new Set((meal.personIds || []).map(String));
+  row.querySelectorAll('.meal-person-check').forEach(input => {
+    input.disabled = everyone;
+    input.checked = !everyone && selectedIds.has(input.value);
+  });
+  refreshAudienceUI(row);
+  refreshMealShoppingAction(row);
+  refreshMealRowActions(row);
+}
+
+function refreshMealRowActions(row) {
+  const hasMeal = Boolean(row.querySelector('.meal-name-input')?.value.trim());
+  const repeatButton = row.querySelector('.meal-repeat-btn');
+  if (repeatButton) repeatButton.disabled = !hasMeal;
+}
+
+function expandMealTypeSection(section) {
+  const content = section?.querySelector('.meal-type-rows');
+  const toggle = section?.querySelector('.meal-type-header[data-collapsed]');
+  if (!content || !toggle) return;
+  toggle.dataset.collapsed = 'false';
+  toggle.setAttribute('aria-expanded', 'true');
+  toggle.textContent = `− ${section.dataset.mealLabel || ''}`;
+  content.style.display = '';
+  if (section.dataset.mealType === 'special') {
+    section.closest('.meal-day').dataset.specialCollapsed = 'false';
+  }
+}
+
+function repeatMeal(row) {
+  const meal = mealRowValue(row);
+  if (!meal.name) return;
+  const day = row.closest('.meal-day');
+  const dayIndex = Number(day?.dataset.dayIndex);
+  const mealType = row.closest('.meal-type-section')?.dataset.mealType;
+
+  for (let index = dayIndex + 1; index < 7; index++) {
+    const targetDay = document.querySelector(`.meal-day[data-day-index="${index}"]`);
+    const targetSection = targetDay?.querySelector(`.meal-type-section[data-meal-type="${mealType}"]`);
+    const targetRow = [...(targetSection?.querySelectorAll('.meal-row') || [])].find(candidate => {
+      const target = mealRowValue(candidate);
+      return !target.name && !target.notes;
+    });
+    if (!targetRow) continue;
+
+    applyMealValue(targetRow, meal);
+    expandMealTypeSection(targetSection);
+    scheduleSave();
+    const dayLabel = targetDay.querySelector('.meal-day-header')?.textContent || 'the next open day';
+    showToast(`Repeated ${meal.name} on ${dayLabel}`);
+    targetRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  showToast('No open day remains this week for that meal');
+}
+
+function setMealAsLeftovers(row) {
+  const nameInput = row.querySelector('.meal-name-input');
+  if (!nameInput) return;
+  nameInput.value = 'Leftovers';
+  const notesInput = row.querySelector('.meal-notes-input');
+  if (notesInput) notesInput.value = '';
+  const suggestionButton = row.querySelector('.meal-list-suggestions-btn');
+  if (suggestionButton) delete suggestionButton.dataset.added;
+  refreshMealShoppingAction(row);
+  refreshMealRowActions(row);
+  scheduleSave();
+  showToast('Leftovers planned');
+}
+
+async function loadMealFavorites(force = false) {
+  if (!force && Array.isArray(mealPlanState.favorites)) return mealPlanState.favorites;
+  mealPlanState.favorites = await api.mealPlan.favorites();
+  return mealPlanState.favorites;
+}
+
+function favoriteMealCards(favorites) {
+  if (!favorites.length) {
+    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Save the current meal to reuse its notes next week.</p></div>';
+  }
+  return favorites.map(favorite => `
+    <div class="meal-favorite-card" data-favorite-id="${escapeAttr(favorite._id)}">
+      <div class="meal-favorite-copy">
+        <strong>${escapeHtml(favorite.name)}</strong>
+        ${favorite.notes ? `<small>${escapeHtml(favorite.notes)}</small>` : '<small>No saved shopping notes</small>'}
+      </div>
+      <div class="meal-favorite-actions">
+        <button type="button" class="btn btn-primary btn-sm meal-favorite-use">Use</button>
+        <button type="button" class="btn-link meal-favorite-remove" aria-label="Remove ${escapeAttr(favorite.name)} from favorites">Remove</button>
+      </div>
+    </div>`).join('');
+}
+
+async function openFavoritePicker(row) {
+  try {
+    const favorites = await loadMealFavorites();
+    const current = mealRowValue(row);
+    openModal('Favorite meals', `
+      ${current.name ? `<button type="button" class="btn btn-outline btn-full" id="btn-save-current-favorite">☆ Save ${escapeHtml(current.name)} as favorite</button>` : ''}
+      <div class="meal-favorites-list">${favoriteMealCards(favorites)}</div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Done</button>
+      </div>`);
+
+    document.getElementById('btn-save-current-favorite')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = 'Saving…';
+      try {
+        await api.mealPlan.saveFavorite({ name: current.name, notes: current.notes });
+        mealPlanState.favorites = null;
+        closeModal();
+        showToast(`${current.name} saved as a favorite`);
+      } catch (err) {
+        handleError(err, 'Failed to save favorite meal');
+        button.disabled = false;
+        button.textContent = `☆ Save ${current.name} as favorite`;
+      }
+    });
+
+    document.querySelectorAll('.meal-favorite-use').forEach(button => {
+      button.addEventListener('click', async () => {
+        const id = button.closest('.meal-favorite-card').dataset.favoriteId;
+        const favorite = favorites.find(entry => entry._id === id);
+        if (!favorite) return;
+        button.disabled = true;
+        try {
+          const used = await api.mealPlan.useFavorite(id);
+          applyMealValue(row, {
+            name: favorite.name,
+            notes: favorite.notes || '',
+            forEveryone: row.dataset.forEveryone === 'true',
+            personIds: mealRowValue(row).personIds,
+            legacyPersonName: row.dataset.legacyPersonName || ''
+          });
+          mealPlanState.favorites = favorites.map(entry => entry._id === id ? used : entry);
+          closeModal();
+          scheduleSave();
+          showToast(`${favorite.name} added to the plan`);
+        } catch (err) {
+          handleError(err, 'Failed to use favorite meal');
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll('.meal-favorite-remove').forEach(button => {
+      button.addEventListener('click', async () => {
+        const card = button.closest('.meal-favorite-card');
+        const favorite = favorites.find(entry => entry._id === card.dataset.favoriteId);
+        if (!favorite || !confirm(`Remove ${favorite.name} from favorite meals?`)) return;
+        button.disabled = true;
+        try {
+          await api.mealPlan.deleteFavorite(favorite._id);
+          mealPlanState.favorites = favorites.filter(entry => entry._id !== favorite._id);
+          card.remove();
+          if (!mealPlanState.favorites.length) {
+            document.querySelector('.meal-favorites-list').innerHTML = favoriteMealCards([]);
+          }
+          showToast('Favorite removed');
+        } catch (err) {
+          handleError(err, 'Failed to remove favorite meal');
+          button.disabled = false;
+        }
+      });
+    });
+  } catch (err) {
+    handleError(err, 'Failed to load favorite meals');
+  }
+}
+
+async function copyLastWeek() {
+  if (!confirm('Replace this week with last week’s meal plan?')) return;
+  const button = document.getElementById('mp-copy-last-week');
+  if (button) { button.disabled = true; button.textContent = 'Copying…'; }
+  if (mealPlanState.saveTimer) {
+    clearTimeout(mealPlanState.saveTimer);
+    mealPlanState.saveTimer = null;
+  }
+  try {
+    const copied = await api.mealPlan.copyPrevious(mealPlanState.weekStart);
+    mealPlanState.plan = copied;
+    renderMealPlan({ ...copied, people: mealPlanState.people });
+    showToast('Last week copied');
+  } catch (err) {
+    handleError(err, 'No meal plan found for last week');
+    if (button) { button.disabled = false; button.textContent = 'Copy last week'; }
+  }
+}
+
 // ===== Audience helpers =====
 
 function findLegacyPersonId(personName) {
@@ -132,7 +543,10 @@ function getAudienceLabel(row) {
 
 function refreshAudienceUI(row) {
   const button = row.querySelector('.meal-audience-toggle');
-  if (button) button.textContent = getAudienceLabel(row);
+  if (!button) return;
+  const label = getAudienceLabel(row);
+  button.textContent = label === 'Everyone' ? 'Change who' : label;
+  button.classList.toggle('meal-audience-default', label === 'Everyone');
 }
 
 function setEveryone(row, everyone) {
@@ -193,7 +607,15 @@ function collectPlanFromDOM() {
 
 function scheduleSave() {
   if (mealPlanState.saveTimer) clearTimeout(mealPlanState.saveTimer);
+  setMealPlanSaveStatus('Saving…', 'saving');
   mealPlanState.saveTimer = setTimeout(doSave, 500);
+}
+
+function setMealPlanSaveStatus(message, state = '') {
+  const status = document.getElementById('mp-save-status');
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.state = state;
 }
 
 async function doSave() {
@@ -201,7 +623,9 @@ async function doSave() {
   try {
     const saved = await saveMealPlan(payload);
     mealPlanState.plan = saved;
+    setMealPlanSaveStatus('Saved ✓', 'saved');
   } catch (err) {
+    setMealPlanSaveStatus('Couldn’t save', 'error');
     if (typeof showToast === 'function') showToast('Failed to save meal plan');
   }
 }
@@ -226,7 +650,10 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   nameInput.className = 'meal-name-input';
   nameInput.value = meal.name;
   nameInput.placeholder = 'Meal…';
-  nameInput.addEventListener('input', scheduleSave);
+  nameInput.addEventListener('input', () => {
+    refreshMealRowActions(row);
+    scheduleSave();
+  });
   top.appendChild(nameInput);
 
   const audienceBtn = document.createElement('button');
@@ -299,8 +726,45 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   notesInput.placeholder = 'Items needed or notes (optional)…';
   notesInput.rows = 1;
   notesInput.style.marginTop = '0.5rem';
-  notesInput.addEventListener('input', scheduleSave);
+
+  const suggestionButton = document.createElement('button');
+  suggestionButton.type = 'button';
+  suggestionButton.className = 'meal-list-suggestions-btn btn-link';
+  notesInput.addEventListener('input', () => {
+    delete suggestionButton.dataset.added;
+    scheduleSave();
+    refreshMealShoppingAction(row);
+  });
   row.appendChild(notesInput);
+
+  suggestionButton.addEventListener('click', () => openMealShoppingSuggestions(row, suggestionButton));
+  const quickActions = document.createElement('div');
+  quickActions.className = 'meal-row-quick-actions';
+  quickActions.appendChild(suggestionButton);
+
+  const repeatButton = document.createElement('button');
+  repeatButton.type = 'button';
+  repeatButton.className = 'meal-repeat-btn meal-row-action btn-link';
+  repeatButton.textContent = 'Repeat this meal';
+  repeatButton.addEventListener('click', () => repeatMeal(row));
+  quickActions.appendChild(repeatButton);
+
+  const leftoversButton = document.createElement('button');
+  leftoversButton.type = 'button';
+  leftoversButton.className = 'meal-leftovers-btn meal-row-action btn-link';
+  leftoversButton.textContent = 'Leftovers';
+  leftoversButton.addEventListener('click', () => setMealAsLeftovers(row));
+  quickActions.appendChild(leftoversButton);
+
+  const favoritesButton = document.createElement('button');
+  favoritesButton.type = 'button';
+  favoritesButton.className = 'meal-favorites-btn meal-row-action btn-link';
+  favoritesButton.textContent = 'Favorites';
+  favoritesButton.addEventListener('click', () => openFavoritePicker(row));
+  quickActions.appendChild(favoritesButton);
+  row.appendChild(quickActions);
+  refreshMealShoppingAction(row);
+  refreshMealRowActions(row);
 
   if (removable) {
     const removeBtn = document.createElement('button');
@@ -348,6 +812,8 @@ function buildMealTypeSection(mealType, label, typeMeals, isSpecial, specialColl
   const section = document.createElement('div');
   section.className = 'meal-type-section';
   section.dataset.mealType = mealType;
+  section.dataset.mealLabel = label;
+  section.hidden = mealPlanState.mealPlanMode === 'dinner' && mealType !== 'dinner';
 
   const contentEl = document.createElement('div');
   contentEl.className = 'meal-type-rows';
@@ -356,20 +822,27 @@ function buildMealTypeSection(mealType, label, typeMeals, isSpecial, specialColl
   meals.forEach((meal, index) => contentEl.appendChild(buildMealRow(mealType, meal, index > 0)));
   contentEl.appendChild(buildAddMealButton(contentEl, mealType));
 
-  if (isSpecial) {
+  const hasPlannedMeal = typeMeals.some(meal => String(meal.name || '').trim() || String(meal.notes || '').trim());
+  const isCollapsedUnplannedType = !isSpecial && mealType !== 'dinner' && !hasPlannedMeal;
+  if (isSpecial || isCollapsedUnplannedType) {
+    const collapsed = isSpecial ? specialCollapsed : true;
     const toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
-    toggleBtn.className = 'meal-type-header special-toggle';
-    toggleBtn.dataset.collapsed = specialCollapsed ? 'true' : 'false';
-    toggleBtn.textContent = (specialCollapsed ? '+ ' : '− ') + label;
-    contentEl.style.display = specialCollapsed ? 'none' : '';
+    toggleBtn.className = 'meal-type-header meal-type-toggle';
+    toggleBtn.dataset.collapsed = collapsed ? 'true' : 'false';
+    toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    toggleBtn.textContent = (collapsed ? '+ ' : '− ') + label;
+    contentEl.style.display = collapsed ? 'none' : '';
     toggleBtn.addEventListener('click', () => {
       const col = toggleBtn.dataset.collapsed === 'true';
       toggleBtn.dataset.collapsed = col ? 'false' : 'true';
-      toggleBtn.closest('.meal-day').dataset.specialCollapsed = col ? 'false' : 'true';
+      toggleBtn.setAttribute('aria-expanded', col ? 'true' : 'false');
       toggleBtn.textContent = (col ? '− ' : '+ ') + label;
       contentEl.style.display = col ? '' : 'none';
-      scheduleSave();
+      if (isSpecial) {
+        toggleBtn.closest('.meal-day').dataset.specialCollapsed = col ? 'false' : 'true';
+        scheduleSave();
+      }
     });
     section.appendChild(toggleBtn);
   } else {
@@ -399,6 +872,11 @@ function renderMealPlan(plan) {
         <button class="btn btn-icon" id="mp-next-week">&#8250;</button>
       </div>
 
+      <div class="meal-plan-tools">
+        <button class="btn btn-outline" id="mp-copy-last-week">Copy last week</button>
+        <span class="meal-plan-mode-summary">${mealPlanState.mealPlanMode === 'dinner' ? 'Dinner only' : 'All meals'}</span>
+      </div>
+
       <div class="produce-section">
         <div class="section-label">🥦 Produce to use this week</div>
         <textarea class="meal-notes-area" id="mp-produce-notes" placeholder="e.g. spinach, zucchini, lemons..." rows="2">${escHtml(plan.produceNotes || '')}</textarea>
@@ -412,10 +890,10 @@ function renderMealPlan(plan) {
       </div>
 
       <div class="meal-plan-actions">
-        <button class="btn btn-primary" id="mp-save-btn">Save Plan</button>
+        <span class="meal-save-status" id="mp-save-status" role="status" aria-live="polite" data-state="saved">Saved ✓</span>
         <button class="btn btn-outline" id="mp-export-btn">Export Week</button>
         ${isAdmin ? `
-          <button class="btn btn-outline btn-sm" id="mp-settings-btn" style="margin-left:auto;font-size:0.8125rem">⚙ Week starts</button>
+          <button class="btn btn-outline btn-sm" id="mp-settings-btn" style="margin-left:auto;font-size:0.8125rem">Plan settings</button>
         ` : ''}
       </div>
     </div>`;
@@ -439,15 +917,8 @@ function renderMealPlan(plan) {
     loadMealPlan();
   });
 
-  document.getElementById('mp-save-btn')?.addEventListener('click', async () => {
-    const btn = document.getElementById('mp-save-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-    await doSave();
-    if (btn) { btn.disabled = false; btn.textContent = 'Save Plan'; }
-    if (typeof showToast === 'function') showToast('Meal plan saved');
-  });
-
   document.getElementById('mp-export-btn')?.addEventListener('click', exportWeekICS);
+  document.getElementById('mp-copy-last-week')?.addEventListener('click', copyLastWeek);
   document.getElementById('mp-settings-btn')?.addEventListener('click', openWeekStartSettings);
 }
 
@@ -543,6 +1014,7 @@ function exportWeekICS() {
 
 function openWeekStartSettings() {
   const current = mealPlanState.weekStartDay;
+  const currentMode = mealPlanState.mealPlanMode;
   const options = [
     { value: 6, label: 'Saturday' },
     { value: 0, label: 'Sunday' },
@@ -551,8 +1023,16 @@ function openWeekStartSettings() {
 
   if (typeof openModal !== 'function') return;
 
-  openModal('Week Start Day', `
-    <form id="week-start-form">
+  openModal('Plan settings', `
+    <form id="meal-plan-settings-form">
+      <div class="form-group">
+        <label>Show by default</label>
+        <select class="form-control" name="mealPlanMode">
+          <option value="dinner" ${currentMode === 'dinner' ? 'selected' : ''}>Dinner only</option>
+          <option value="all" ${currentMode === 'all' ? 'selected' : ''}>All meals</option>
+        </select>
+        <small class="text-muted">All meals keeps unplanned meal types collapsed until you open them.</small>
+      </div>
       <div class="form-group">
         <label>Week starts on</label>
         <select class="form-control" name="weekStartDay">
@@ -565,24 +1045,28 @@ function openWeekStartSettings() {
       </div>
     </form>`);
 
-  document.getElementById('week-start-form').addEventListener('submit', async (e) => {
+  document.getElementById('meal-plan-settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const weekStartDay = parseInt(e.target.weekStartDay.value, 10);
+    const mealPlanMode = e.target.mealPlanMode.value;
+    const weekChanged = weekStartDay !== mealPlanState.weekStartDay;
     try {
       const res = await fetch('/api/meal-plan/settings', {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weekStartDay })
+        body: JSON.stringify({ weekStartDay, mealPlanMode })
       });
       if (!res.ok) throw new Error('Failed to save settings');
-      mealPlanState.weekStartDay = weekStartDay;
-      mealPlanState.weekStart = normalizeToWeekStart(new Date(), weekStartDay);
+      const saved = await res.json();
+      mealPlanState.weekStartDay = saved.weekStartDay;
+      mealPlanState.mealPlanMode = saved.mealPlanMode;
+      if (weekChanged) mealPlanState.weekStart = normalizeToWeekStart(new Date(), saved.weekStartDay);
       if (typeof closeModal === 'function') closeModal();
-      if (typeof showToast === 'function') showToast('Week start day updated');
+      if (typeof showToast === 'function') showToast('Plan settings updated');
       await loadMealPlan();
     } catch (err) {
-      if (typeof showToast === 'function') showToast('Failed to save settings');
+      if (typeof showToast === 'function') showToast('Failed to save plan settings');
     }
   });
 }
@@ -598,6 +1082,7 @@ async function loadMealPlan() {
     if (!mealPlanState._initialized) {
       const settings = await fetchSettings();
       mealPlanState.weekStartDay = settings.weekStartDay;
+      mealPlanState.mealPlanMode = settings.mealPlanMode || 'dinner';
       mealPlanState._initialized = true;
     }
 
@@ -618,4 +1103,6 @@ function initMealPlanSection() {
   mealPlanState._initialized = false;
   mealPlanState.weekStart = null;
   mealPlanState.people = [];
+  mealPlanState.favorites = null;
+  mealPlanState.mealPlanMode = 'dinner';
 }

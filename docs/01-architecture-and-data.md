@@ -14,7 +14,9 @@
 │   ├── PriceEntry.js
 │   ├── InventoryItem.js
 │   ├── ShoppingListItem.js
-│   └── MealPlan.js
+│   ├── ShoppingTrip.js
+│   ├── MealPlan.js
+│   └── FavoriteMeal.js
 ├── routes/
 │   ├── auth.js
 │   ├── health.js
@@ -133,22 +135,29 @@ express.static('public')
 | GET | `/api/prices/compare/:itemId` | auth | Latest price per store |
 | GET | `/api/prices/history/:itemId` | auth | Approved history + current user's pending |
 | GET | `/api/prices/last-purchased/:itemId` | auth | Most recent per store |
-| GET | `/api/inventory` | auth + admin | List items with quantity > 0 |
+| GET | `/api/inventory` | auth | List items with quantity > 0 |
 | POST | `/api/inventory` | auth + admin | Create / upsert inventory item |
 | PUT | `/api/inventory/:id` | auth + admin | Update inventory item |
 | DELETE | `/api/inventory/:id` | auth + admin | Delete inventory item |
 | GET | `/api/inventory/low-stock` | auth | Items below threshold |
 | GET | `/api/shopping-list` | auth | List with price context |
 | POST | `/api/shopping-list` | auth | Add item |
+| POST | `/api/shopping-list/complete` | auth | Complete a trip across Pantry, price history, Spend, list, and low stock |
 | PUT | `/api/shopping-list/:id` | auth | Update item |
 | DELETE | `/api/shopping-list/:id` | auth | Remove item |
 | DELETE | `/api/shopping-list` | auth | Clear (all or checked) |
 | GET | `/api/spend` | auth | Monthly spend breakdown |
 | GET | `/api/spend/summary` | auth | 6-month totals |
 | GET | `/api/meal-plan` | auth | Get / scaffold plan for week |
-| PUT | `/api/meal-plan` | auth + admin | Save / upsert meal plan |
-| GET | `/api/meal-plan/settings` | auth | Get weekStartDay |
-| PUT | `/api/meal-plan/settings` | auth + admin | Update weekStartDay |
+| PUT | `/api/meal-plan` | auth | Save / upsert a collaborative meal plan |
+| POST | `/api/meal-plan/shopping-suggestions` | auth | Match a meal's notes to List and Pantry |
+| POST | `/api/meal-plan/copy-previous` | auth | Copy the previous week and remap dates |
+| GET | `/api/meal-plan/favorites` | auth | List reusable household meals |
+| POST | `/api/meal-plan/favorites` | auth | Save or update a favorite meal and notes |
+| POST | `/api/meal-plan/favorites/:id/use` | auth | Record use of a household favorite |
+| DELETE | `/api/meal-plan/favorites/:id` | auth | Remove a household favorite |
+| GET | `/api/meal-plan/settings` | auth | Get week start and default meal view |
+| PUT | `/api/meal-plan/settings` | auth + admin | Update week start and default meal view |
 | POST | `/api/admin/migrate-categories` | auth + admin | Normalize category names |
 | GET | `/api/admin/duplicate-groups` | auth + admin | Preview similar items |
 | POST | `/api/admin/consolidate-items` | auth + admin | Merge duplicates |
@@ -258,6 +267,7 @@ Password hashing: bcrypt, `SALT_ROUNDS = 12`.
 | `inviteCode` | String | 6-char alphanumeric, default null |
 | `inviteCodeExpiresAt` | Date | 48h from generation, default null |
 | `weekStartDay` | Number | 0=Sun, 1=Mon … 6=Sat; default 6 |
+| `mealPlanMode` | `'dinner'`\|`'all'` | default `'dinner'` |
 | `settings.barcodeAutoAccept` | Boolean | default false |
 
 ### Item
@@ -304,7 +314,8 @@ Indexes: `(householdId, name)`, `(householdId, upc)`.
 | `quantity` | Number | required, default 1 |
 | `pricePerUnit` | Number | required — `finalPrice / quantity` |
 | `date` | Date | default now |
-| `source` | `'manual'`\|`'csv'` | default `'manual'` |
+| `source` | `'manual'`\|`'csv'`\|`'shopping-trip'` | default `'manual'` |
+| `shoppingTripId` | ObjectId → ShoppingTrip | set for Done Shopping price records |
 | `status` | `'approved'`\|`'pending'` | admin submit → approved; member submit → pending |
 | `reviewedBy` | ObjectId → User | default null |
 | `reviewedAt` | Date | default null |
@@ -330,11 +341,21 @@ pricePerUnit = finalPrice / quantity;
 | `unit` | String | trimmed |
 | `lowStockThreshold` | Number | default null |
 | `lastUpdatedBy` | ObjectId → User | |
+| `lastPurchaseTripId` | ObjectId → ShoppingTrip | most recent trip that incremented this item |
 | `lastUpdated` | Date | default now |
 | `notes` | String | trimmed |
 | `lastConflict` | Object | see Item |
 
 Unique index: `(householdId, itemId)`.
+
+### ShoppingTrip
+
+Completed trips are the source of truth for new Spend totals. Each trip stores
+item/category/store snapshots, line prices, the trip total, Pantry-update choice,
+price-review counts, and an idempotency key. Related `PriceEntry` records update
+price history but are excluded from Spend aggregation to prevent double counting.
+
+Unique index: `(householdId, idempotencyKey)`.
 
 ### ShoppingListItem
 
@@ -359,11 +380,31 @@ Unique index: `(householdId, itemId)`.
 | `days` | Array | 7 entries, each `{ date, meals[], specialCollapsed }` |
 | `days[].meals[].mealType` | `'breakfast'`\|`'lunch'`\|`'dinner'`\|`'special'` | required |
 | `days[].meals[].personName` | String | trimmed, default `''` |
+| `days[].meals[].personIds` | ObjectId[] → HouseholdPerson | selected audience |
+| `days[].meals[].forEveryone` | Boolean | default audience for new rows |
 | `days[].meals[].name` | String | trimmed, default `''` |
+| `days[].meals[].notes` | String | ingredients or other meal notes |
 | `produceNotes` | String | trimmed, default `''` |
 | `shoppingNotes` | String | trimmed, default `''` |
 
 Unique index: `(householdId, weekStart)`.
+
+### FavoriteMeal
+
+Reusable household meals retain their usual ingredient notes so choosing a
+favorite can immediately regenerate its List suggestions.
+
+| Field | Type | Notes |
+|---|---|---|
+| `householdId` | ObjectId → Household | required |
+| `normalizedName` | String | case-insensitive household dedupe key |
+| `name` | String | required, max 120 characters |
+| `notes` | String | usual ingredients/notes, max 2,000 characters |
+| `createdBy` | ObjectId → User | unset if the creator deletes their account |
+| `useCount` | Number | default 0; used for ordering |
+| `lastUsedAt` | Date | recency tie-breaker |
+
+Unique index: `(householdId, normalizedName)`.
 
 ---
 

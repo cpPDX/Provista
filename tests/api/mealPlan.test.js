@@ -226,12 +226,159 @@ describe('PUT /api/meal-plan', () => {
   });
 });
 
+describe('POST /api/meal-plan/shopping-suggestions', () => {
+  it('matches meal notes while flagging List duplicates and Pantry items', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const createItem = name => request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name, category: 'Other', unit: 'each' });
+    const [tortillas, lettuce, salsa] = await Promise.all([
+      createItem('Meal Tortillas'),
+      createItem('Meal Lettuce'),
+      createItem('Meal Salsa')
+    ]);
+    expect(tortillas.status).toBe(201);
+    expect(lettuce.status).toBe(201);
+    expect(salsa.status).toBe(201);
+    const pantrySetup = await request(app).post('/api/inventory').set('Cookie', cookie)
+      .send({ itemId: tortillas.body._id, quantity: 2 });
+    const listSetup = await request(app).post('/api/shopping-list').set('Cookie', cookie)
+      .send({ itemId: lettuce.body._id, quantity: 1 });
+    expect(pantrySetup.status).toBe(201);
+    expect(listSetup.status).toBe(201);
+
+    const res = await request(app).post('/api/meal-plan/shopping-suggestions').set('Cookie', cookie)
+      .send({ notes: 'Need Meal Tortillas, Meal Lettuce, and Meal Salsa x2' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ parsedCount: 3, matchedCount: 3, ambiguousCount: 0, unmatchedCount: 0 });
+    const bySource = Object.fromEntries(res.body.suggestions.map(suggestion => [suggestion.sourceText, suggestion]));
+    expect(bySource['Meal Tortillas'].item).toMatchObject({ _id: tortillas.body._id, pantryQuantity: 2, onList: false });
+    expect(bySource['Meal Lettuce'].item).toMatchObject({ _id: lettuce.body._id, onList: true });
+    expect(bySource['Meal Salsa']).toMatchObject({ quantity: 2, item: { _id: salsa.body._id } });
+  });
+
+  it('does not expose catalog items from another household', async () => {
+    const first = await createOwnerSession(app, { email: 'meal-suggest-first@test.com', householdName: 'First' });
+    const second = await createOwnerSession(app, { email: 'meal-suggest-second@test.com', householdName: 'Second' });
+    await request(app).post('/api/items').set('Cookie', second.cookie)
+      .send({ name: 'Secret Ingredient ZXQ', category: 'Other', unit: 'each' });
+
+    const res = await request(app).post('/api/meal-plan/shopping-suggestions').set('Cookie', first.cookie)
+      .send({ notes: 'Secret Ingredient ZXQ' });
+    expect(res.status).toBe(200);
+    expect(res.body.suggestions[0]).toMatchObject({ matchStatus: 'unmatched', candidates: [] });
+  });
+
+  it('rejects oversized notes', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const res = await request(app).post('/api/meal-plan/shopping-suggestions').set('Cookie', cookie)
+      .send({ notes: 'x'.repeat(2001) });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/meal-plan/copy-previous', () => {
+  it('copies last week while remapping dates to the requested week', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const previousWeek = '2025-12-29';
+    const previous = await request(app).put('/api/meal-plan').set('Cookie', cookie).send({
+      weekStart: previousWeek,
+      produceNotes: 'Use cilantro',
+      shoppingNotes: 'Check beans',
+      days: [{
+        date: `${previousWeek}T00:00:00.000Z`,
+        specialCollapsed: true,
+        meals: [{
+          mealType: 'dinner',
+          name: 'Tacos',
+          notes: 'tortillas, salsa',
+          forEveryone: true,
+          personIds: []
+        }]
+      }]
+    });
+    expect(previous.status).toBe(200);
+
+    const copied = await request(app).post('/api/meal-plan/copy-previous').set('Cookie', cookie)
+      .send({ weekStart: WEEK_START });
+    expect(copied.status).toBe(200);
+    expect(copied.body.days).toHaveLength(7);
+    expect(copied.body.days[0].date).toBe(`${WEEK_START}T00:00:00.000Z`);
+    expect(copied.body.days[0].meals[0]).toMatchObject({
+      mealType: 'dinner',
+      name: 'Tacos',
+      notes: 'tortillas, salsa'
+    });
+    expect(copied.body).toMatchObject({ produceNotes: 'Use cilantro', shoppingNotes: 'Check beans' });
+  });
+
+  it('returns 404 without exposing another household’s previous week', async () => {
+    const first = await createOwnerSession(app, { email: 'copy-first@test.com', householdName: 'First' });
+    const second = await createOwnerSession(app, { email: 'copy-second@test.com', householdName: 'Second' });
+    await request(app).put('/api/meal-plan').set('Cookie', second.cookie)
+      .send({ weekStart: '2025-12-29', days: [] });
+
+    const copied = await request(app).post('/api/meal-plan/copy-previous').set('Cookie', first.cookie)
+      .send({ weekStart: WEEK_START });
+    expect(copied.status).toBe(404);
+  });
+});
+
+describe('favorite meals', () => {
+  it('saves notes with a favorite and updates duplicate names instead of duplicating them', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const first = await request(app).post('/api/meal-plan/favorites').set('Cookie', cookie)
+      .send({ name: 'Tacos', notes: 'tortillas, salsa' });
+    const updated = await request(app).post('/api/meal-plan/favorites').set('Cookie', cookie)
+      .send({ name: '  TACOS  ', notes: 'tortillas, lettuce, salsa' });
+    expect(first.status).toBe(200);
+    expect(updated.status).toBe(200);
+    expect(updated.body._id).toBe(first.body._id);
+    expect(updated.body.notes).toBe('tortillas, lettuce, salsa');
+
+    const list = await request(app).get('/api/meal-plan/favorites').set('Cookie', cookie);
+    expect(list.status).toBe(200);
+    expect(list.body).toHaveLength(1);
+  });
+
+  it('lets members use and remove household favorites', async () => {
+    const { cookie: ownerCookie } = await createOwnerSession(app);
+    const favorite = await request(app).post('/api/meal-plan/favorites').set('Cookie', ownerCookie)
+      .send({ name: 'Soup', notes: 'broth x2' });
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+
+    const used = await request(app).post(`/api/meal-plan/favorites/${favorite.body._id}/use`)
+      .set('Cookie', memberCookie).send({});
+    expect(used.status).toBe(200);
+    expect(used.body.useCount).toBe(1);
+    const removed = await request(app).delete(`/api/meal-plan/favorites/${favorite.body._id}`)
+      .set('Cookie', memberCookie);
+    expect(removed.status).toBe(200);
+  });
+
+  it('keeps favorites scoped to their household', async () => {
+    const first = await createOwnerSession(app, { email: 'favorite-first@test.com', householdName: 'First' });
+    const second = await createOwnerSession(app, { email: 'favorite-second@test.com', householdName: 'Second' });
+    const favorite = await request(app).post('/api/meal-plan/favorites').set('Cookie', second.cookie)
+      .send({ name: 'Private favorite', notes: '' });
+
+    const use = await request(app).post(`/api/meal-plan/favorites/${favorite.body._id}/use`)
+      .set('Cookie', first.cookie).send({});
+    const remove = await request(app).delete(`/api/meal-plan/favorites/${favorite.body._id}`)
+      .set('Cookie', first.cookie);
+    expect(use.status).toBe(404);
+    expect(remove.status).toBe(404);
+  });
+});
+
 describe('GET /api/meal-plan/settings', () => {
   it('returns weekStartDay from household', async () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app).get('/api/meal-plan/settings').set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('weekStartDay');
+    expect(res.body.mealPlanMode).toBe('dinner');
   });
 
   it('member can access settings', async () => {
@@ -244,6 +391,14 @@ describe('GET /api/meal-plan/settings', () => {
 });
 
 describe('PUT /api/meal-plan/settings', () => {
+  it('admin can switch between Dinner only and All meals', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const res = await request(app).put('/api/meal-plan/settings').set('Cookie', cookie)
+      .send({ mealPlanMode: 'all' });
+    expect(res.status).toBe(200);
+    expect(res.body.mealPlanMode).toBe('all');
+  });
+
   it('admin can set weekStartDay to 0 (Sunday)', async () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app).put('/api/meal-plan/settings').set('Cookie', cookie)
@@ -264,6 +419,13 @@ describe('PUT /api/meal-plan/settings', () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app).put('/api/meal-plan/settings').set('Cookie', cookie)
       .send({ weekStartDay: 3 });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for invalid mealPlanMode', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const res = await request(app).put('/api/meal-plan/settings').set('Cookie', cookie)
+      .send({ mealPlanMode: 'snacks' });
     expect(res.status).toBe(400);
   });
 

@@ -8,6 +8,8 @@ const HouseholdPerson = require('../models/HouseholdPerson');
 const PriceEntry = require('../models/PriceEntry');
 const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
+const ShoppingTrip = require('../models/ShoppingTrip');
+const FavoriteMeal = require('../models/FavoriteMeal');
 const { requireSession } = require('../middleware/auth');
 const { seedHousehold } = require('../utils/seed');
 const { fallbackDisplayName, syncUserHouseholdPerson } = require('../utils/householdPeople');
@@ -239,6 +241,8 @@ router.delete('/account', requireSession, async (req, res) => {
         { $or: [{ addedBy: userId }, { removedBy: userId }] },
         { $unset: { addedBy: '', removedBy: '' } }
       ),
+      ShoppingTrip.updateMany({ completedBy: userId }, { $unset: { completedBy: '' } }),
+      FavoriteMeal.updateMany({ createdBy: userId }, { $unset: { createdBy: '' } }),
       householdId
         ? HouseholdPerson.findOneAndUpdate({ householdId, userId }, { $set: { userId: null } })
         : Promise.resolve()

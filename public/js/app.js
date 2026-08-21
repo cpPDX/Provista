@@ -53,9 +53,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   initShoppingListTab();
   initSpendTab();
   initMoreTab();
+  initHomeTab();
 
   // Load default tab
-  await loadPricesTab();
+  await loadHomeTab();
 
   // Initialize offline support AFTER UI is interactive (non-blocking)
   if (features?.offlineAccess) {
@@ -136,6 +137,7 @@ async function switchTab(tabId) {
   document.querySelector(`.nav-item[data-tab="${tabId}"]`)?.classList.add('active');
 
   switch (tabId) {
+    case 'home': await loadHomeTab(); break;
     case 'prices': await loadPricesTab(); break;
     case 'list': await loadShoppingListTab(); break;
     case 'spend': await loadSpendTab(); break;

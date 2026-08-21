@@ -24,12 +24,13 @@ describe('GET /api/inventory', () => {
     expect(res.body.length).toBe(1);
   });
 
-  it('returns 403 for member', async () => {
+  it('lets a member view pantry items', async () => {
     const { ownerCookie } = await setupFixtures();
     const code = await getInviteCode(app, ownerCookie);
     const { cookie: memberCookie } = await createMemberSession(app, code);
     const res = await request(app).get('/api/inventory').set('Cookie', memberCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
   });
 });
 

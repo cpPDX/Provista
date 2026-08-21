@@ -1,7 +1,8 @@
 const request = require('supertest');
 const app = require('../../server');
 const db = require('../helpers/db');
-const { createOwnerSession } = require('../helpers/auth');
+const FavoriteMeal = require('../../models/FavoriteMeal');
+const { createOwnerSession, createMemberSession, getInviteCode } = require('../helpers/auth');
 
 beforeAll(db.connect);
 beforeEach(db.clearDB);
@@ -256,6 +257,27 @@ describe('PUT /api/auth/password', () => {
 });
 
 describe('DELETE /api/auth/account', () => {
+  it('keeps a household favorite when its creator deletes their member account', async () => {
+    const { cookie: ownerCookie } = await createOwnerSession(app);
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+    const favorite = await request(app)
+      .post('/api/meal-plan/favorites')
+      .set('Cookie', memberCookie)
+      .send({ name: 'Member soup', notes: 'broth, carrots' });
+    expect(favorite.status).toBe(200);
+
+    const deleted = await request(app)
+      .delete('/api/auth/account')
+      .set('Cookie', memberCookie)
+      .send({ password: 'password123' });
+    expect(deleted.status).toBe(200);
+
+    const preserved = await FavoriteMeal.findById(favorite.body._id).lean();
+    expect(preserved).toBeTruthy();
+    expect(preserved.createdBy).toBeUndefined();
+  });
+
   it('returns 400 when owner tries to delete account before deleting household', async () => {
     const { cookie } = await createOwnerSession(app);
     const res = await request(app)

@@ -27,7 +27,9 @@ module.exports = async () => {
     require('../../models/Store').deleteMany({ householdId: { $in: householdIds } }),
     require('../../models/InventoryItem').deleteMany({ householdId: { $in: householdIds } }),
     require('../../models/ShoppingListItem').deleteMany({ householdId: { $in: householdIds } }),
+    require('../../models/ShoppingTrip').deleteMany({ householdId: { $in: householdIds } }),
     require('../../models/MealPlan').deleteMany({ householdId: { $in: householdIds } }),
+    require('../../models/FavoriteMeal').deleteMany({ householdId: { $in: householdIds } }),
     require('../../models/Household').deleteMany({ _id: { $in: householdIds } }),
     User.deleteMany({ _id: { $in: userIds } }),
   ]);

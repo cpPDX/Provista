@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Provista</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.json" />
@@ -18,12 +18,26 @@
 </head>
 <body>
   <div id="app">
+    <!-- Tab: Home / Today -->
+    <section class="tab-panel active" id="tab-home">
+      <header class="home-header">
+        <p class="home-eyebrow" id="home-date">Today</p>
+        <h1 id="home-greeting">Good day</h1>
+        <p class="text-muted">Your household at a glance.</p>
+      </header>
+      <div id="home-content" class="home-content" aria-live="polite"></div>
+      <div class="home-quick-actions" aria-label="Quick actions">
+        <button class="btn btn-primary" id="home-quick-add">+ Quick add</button>
+        <button class="btn btn-outline" id="home-plan-dinner">Plan dinner</button>
+      </div>
+    </section>
+
     <!-- Tab: Prices -->
-    <section class="tab-panel active" id="tab-prices">
+    <section class="tab-panel" id="tab-prices">
       <header class="page-header">
-        <h1>Product Prices</h1>
+        <div><button class="btn-link insights-back" aria-label="Back to Insights">← Insights</button><h1>Product Prices</h1></div>
         <div class="price-add-actions">
-          <button class="btn btn-icon" id="btn-prices-filter" style="position:relative" title="Filter &amp; Sort">⚙<span id="prices-filter-dot" class="filter-active-dot" style="display:none"></span></button>
+          <button class="btn btn-outline btn-sm" id="btn-prices-filter" style="position:relative" aria-label="Filter and sort prices">Filter<span id="prices-filter-dot" class="filter-active-dot" style="display:none"></span></button>
           <button class="btn btn-primary btn-sm" id="btn-add-price">+ Log Price</button>
           <button class="btn btn-outline btn-sm" id="btn-open-csv-import">📂 Import</button>
         </div>
@@ -49,9 +63,9 @@
           <button class="btn btn-sm btn-outline" id="btn-low-stock" style="display:none">
             🔴 Low Stock <span id="low-stock-count" class="badge-num"></span>
           </button>
-          <button class="btn btn-icon" id="btn-list-filter" style="position:relative" title="Filter">&#9881;<span id="list-filter-dot" class="filter-active-dot" style="display:none"></span></button>
+          <button class="btn btn-outline btn-sm" id="btn-list-filter" style="position:relative" aria-label="Filter shopping list">Filter<span id="list-filter-dot" class="filter-active-dot" style="display:none"></span></button>
           <button class="btn btn-primary btn-sm" id="btn-add-list-item">+ Add</button>
-          <button class="btn btn-outline btn-sm" id="btn-scan-list-item" title="Scan barcode to add item">&#9638;</button>
+          <button class="btn btn-outline btn-sm" id="btn-scan-list-item" aria-label="Scan barcode to add item">Scan</button>
         </div>
       </header>
       <div id="list-summary" class="store-summary"></div>
@@ -67,14 +81,14 @@
     <!-- Tab: Spend -->
     <section class="tab-panel" id="tab-spend">
       <header class="page-header">
-        <h1>Spend</h1>
+        <div><button class="btn-link insights-back" aria-label="Back to Insights">← Insights</button><h1>Spend</h1></div>
         <div class="month-nav">
           <button class="btn btn-icon" id="btn-prev-month">&#8249;</button>
           <span id="spend-month-label"></span>
           <button class="btn btn-icon" id="btn-next-month">&#8250;</button>
         </div>
       </header>
-      <p class="text-muted text-sm disclaimer">Only reflects logged approved purchases.</p>
+      <p class="text-muted text-sm disclaimer">Reflects completed shopping trips and approved logged purchases.</p>
       <div id="spend-total-card" class="total-card"></div>
       <canvas id="spend-chart" height="180"></canvas>
       <h2 class="section-title">By Category</h2>
@@ -87,12 +101,12 @@
       </div>
     </section>
 
-    <!-- Tab: Inventory (admin-only nav tab) -->
+    <!-- Tab: Pantry -->
     <section class="tab-panel" id="tab-inventory">
       <header class="page-header">
-        <h1>Inventory</h1>
+        <h1>Pantry</h1>
         <div class="page-header-actions">
-          <button class="btn btn-primary btn-sm" id="btn-add-inventory">+ Add</button>
+          <button class="btn btn-primary btn-sm admin-only" id="btn-add-inventory">+ Add</button>
         </div>
       </header>
       <div id="inventory-list" class="card-list" style="padding:0.75rem"></div>
@@ -101,7 +115,7 @@
     <!-- Tab: Meal Plan -->
     <section class="tab-panel" id="tab-meal-plan">
       <header class="page-header">
-        <h1>Meal Plan</h1>
+        <h1>Plan</h1>
       </header>
       <div id="meal-plan-content" style="padding:0 0 1rem"></div>
     </section>
@@ -124,6 +138,11 @@
       </div>
 
       <div class="more-menu">
+        <button class="more-item" data-section="insights">
+          <span class="more-icon">📊</span>
+          <span>Insights</span>
+          <span class="chevron">›</span>
+        </button>
         <button class="more-item" data-section="account">
           <span class="more-icon">👤</span>
           <span>My Account</span>
@@ -164,6 +183,26 @@
           <span>App Tour</span>
           <span class="chevron">›</span>
         </button>
+      </div>
+
+      <!-- Insights hub (all roles) -->
+      <div id="section-insights" class="sub-section" style="display:none">
+        <div class="sub-header">
+          <button class="btn btn-icon back-btn" aria-label="Back to menu">‹</button>
+          <h2>Insights</h2>
+        </div>
+        <div class="insights-grid">
+          <button class="insight-card" data-insight-tab="prices">
+            <span class="insight-icon">💰</span>
+            <span><strong>Price history</strong><small>Compare stores and past prices</small></span>
+            <span class="chevron">›</span>
+          </button>
+          <button class="insight-card" data-insight-tab="spend">
+            <span class="insight-icon">📈</span>
+            <span><strong>Spending</strong><small>See household totals and trends</small></span>
+            <span class="chevron">›</span>
+          </button>
+        </div>
       </div>
 
       <!-- Product Catalog sub-section (admin+) -->
@@ -230,26 +269,22 @@
 
   <!-- Bottom Navigation -->
   <nav class="bottom-nav">
-    <button class="nav-item active" data-tab="prices">
-      <span class="nav-icon">💰</span>
-      <span>Prices</span>
+    <button class="nav-item active" data-tab="home">
+      <span class="nav-icon">⌂</span>
+      <span>Home</span>
       <span id="nav-pending-dot" class="nav-pending-dot" style="display:none"></span>
+    </button>
+    <button class="nav-item" data-tab="meal-plan">
+      <span class="nav-icon">🥗</span>
+      <span>Plan</span>
     </button>
     <button class="nav-item" data-tab="list">
       <span class="nav-icon">📋</span>
       <span>List</span>
     </button>
-    <button class="nav-item admin-only" data-tab="inventory">
+    <button class="nav-item" data-tab="inventory">
       <span class="nav-icon">🧺</span>
-      <span>Inventory</span>
-    </button>
-    <button class="nav-item" data-tab="meal-plan">
-      <span class="nav-icon">🥗</span>
-      <span>Meal Plan</span>
-    </button>
-    <button class="nav-item" data-tab="spend">
-      <span class="nav-icon">📊</span>
-      <span>Spend</span>
+      <span>Pantry</span>
     </button>
     <button class="nav-item" data-tab="more">
       <span class="nav-icon">☰</span>
@@ -276,10 +311,7 @@
       <span class="cart-bar-chevron">›</span>
     </div>
     <div id="cart-bar-detail" class="cart-bar-detail" style="display:none">
-    <div class="done-shopping-row">
-      <button class="btn btn-primary btn-full" id="btn-done-shopping">Done Shopping ✓</button>
     </div>
-  </div>
   </div>
 
   <!-- Offline status indicator -->
@@ -375,6 +407,7 @@
   <script src="/js/more.js"></script>
   <script src="/js/householdPeople.js"></script>
   <script src="/js/mealPlan.js"></script>
+  <script src="/js/home.js"></script>
   <script src="/js/onboarding.js"></script>
   <script src="/js/install-prompt.js"></script>
   <script src="/js/scanner.js"></script>

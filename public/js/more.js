@@ -1,4 +1,4 @@
-// More tab: Inventory, Product Catalog, Stores, Household, Account
+// More tab: Insights, Product Catalog, Stores, Household, Account
 
 // ===== Navigation =====
 function showMoreSection(sectionId) {
@@ -174,7 +174,7 @@ async function loadAccountSettings() {
   }
 }
 
-// ===== Inventory (admin+) =====
+// ===== Pantry (visible to all roles; editing remains admin-only) =====
 let inventoryState = { items: [] };
 
 async function loadInventory() {
@@ -182,7 +182,7 @@ async function loadInventory() {
     inventoryState.items = await api.inventory.list();
     renderInventory();
   } catch (err) {
-    handleError(err, 'Failed to load inventory');
+    handleError(err, 'Failed to load pantry');
   }
 }
 
@@ -190,7 +190,7 @@ function renderInventory() {
   const container = document.getElementById('inventory-list');
   const items = inventoryState.items;
   if (!items.length) {
-    container.innerHTML = emptyState('🧺', 'No items in inventory yet.');
+    container.innerHTML = emptyState('🧺', 'No pantry items yet.');
     return;
   }
   container.innerHTML = items.map(inv => {
@@ -208,14 +208,14 @@ function renderInventory() {
           ${thresholdText ? `<div class="text-muted text-sm">${thresholdText}</div>` : ''}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.375rem">
-          <div class="qty-controls">
+          <div class="qty-controls admin-only">
             <button class="qty-btn" onclick="adjustInventory('${inv._id}', ${inv.quantity - 1})">−</button>
             <span class="qty-val">${inv.quantity}</span>
             <button class="qty-btn" onclick="adjustInventory('${inv._id}', ${inv.quantity + 1})">+</button>
           </div>
           <span class="text-muted text-sm">${unit}</span>
-          <button class="btn btn-outline btn-sm" onclick="openEditInventoryModal('${inv._id}')">Edit</button>
-          <button class="btn btn-danger btn-sm" onclick="removeInventoryItem('${inv._id}')">Remove</button>
+          <button class="btn btn-outline btn-sm admin-only" onclick="openEditInventoryModal('${inv._id}')">Edit</button>
+          <button class="btn btn-danger btn-sm admin-only" onclick="removeInventoryItem('${inv._id}')">Remove</button>
         </div>
       </div>`;
   }).join('');
@@ -1120,6 +1120,7 @@ function attachSwipeDelete(card) {
 // ===== Init =====
 async function handleMoreSectionNav(section) {
   showMoreSection(section);
+  if (section === 'insights') return;
   if (section === 'items') await loadCatalog();
   else if (section === 'stores') await loadStores();
   else if (section === 'household') await loadHousehold();
@@ -1138,7 +1139,17 @@ function initMoreTab() {
     btn.addEventListener('click', hideMoreSection);
   });
 
-  document.getElementById('btn-add-inventory').addEventListener('click', openAddInventoryModal);
+  document.querySelectorAll('[data-insight-tab]').forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.insightTab));
+  });
+  document.querySelectorAll('.insights-back').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await switchTab('more');
+      showMoreSection('insights');
+    });
+  });
+
+  document.getElementById('btn-add-inventory')?.addEventListener('click', openAddInventoryModal);
   document.getElementById('btn-add-item-catalog').addEventListener('click', openAddCatalogItemModal);
   const scanCatalogBtn = document.getElementById('btn-scan-catalog');
   if (scanCatalogBtn) {

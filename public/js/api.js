@@ -2,11 +2,19 @@
 
 // Returns true only for simple top-level CRUD paths (e.g. /items, /items/123).
 // Sub-resource actions like /items/123/merge and combined-write actions like
-// /grocery/log are not safe to queue offline.
+// /grocery/log or /shopping-list/complete are not safe to queue offline.
 function _isSimpleCrudPath(method, path) {
+  const cleanPath = path.split('?')[0];
+  if (cleanPath.startsWith('/meal-plan/favorites')) return false;
   if (method === 'GET') return true;
-  if (path.split('?')[0] === '/grocery/log') return false;
-  const segments = path.split('?')[0].split('/').filter(Boolean);
+  if ([
+    '/grocery/log',
+    '/meal-plan/copy-previous',
+    '/meal-plan/shopping-suggestions',
+    '/shopping-list/complete',
+    '/shopping-list/from-meal'
+  ].includes(cleanPath)) return false;
+  const segments = cleanPath.split('/').filter(Boolean);
   return segments.length <= 2;
 }
 
@@ -156,7 +164,17 @@ const api = {
     add: (data) => api.post('/shopping-list', data),
     update: (id, data) => api.put(`/shopping-list/${id}`, data),
     delete: (id) => api.delete(`/shopping-list/${id}`),
+    complete: (data) => api.post('/shopping-list/complete', data),
     clear: (checkedOnly = false) => api.delete(`/shopping-list${checkedOnly ? '?checkedOnly=true' : ''}`)
+  },
+  mealPlan: {
+    shoppingSuggestions: (notes) => api.post('/meal-plan/shopping-suggestions', { notes }),
+    addShoppingSuggestions: (items) => api.post('/shopping-list/from-meal', { items }),
+    copyPrevious: (weekStart) => api.post('/meal-plan/copy-previous', { weekStart }),
+    favorites: () => api.get('/meal-plan/favorites'),
+    saveFavorite: (data) => api.post('/meal-plan/favorites', data),
+    useFavorite: (id) => api.post(`/meal-plan/favorites/${id}/use`, {}),
+    deleteFavorite: (id) => api.delete(`/meal-plan/favorites/${id}`)
   },
   spend: {
     month: (month) => api.get(`/spend?month=${month}`),
