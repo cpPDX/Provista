@@ -6,6 +6,7 @@
 function _isSimpleCrudPath(method, path) {
   if (method === 'GET') return true;
   if (path.split('?')[0] === '/grocery/log') return false;
+  if (path.split('?')[0] === '/shopping-list/complete-trip') return false;
   const segments = path.split('?')[0].split('/').filter(Boolean);
   return segments.length <= 2;
 }
@@ -114,6 +115,9 @@ const api = {
   patch: (path, body) => api.request('PATCH', path, body),
   delete: (path) => api.request('DELETE', path),
 
+  home: {
+    today: (date) => api.get(`/home?date=${encodeURIComponent(date)}`)
+  },
   items: {
     search: (q) => api.get(`/items?search=${encodeURIComponent(q)}`),
     list: () => api.get('/items'),
@@ -156,7 +160,8 @@ const api = {
     add: (data) => api.post('/shopping-list', data),
     update: (id, data) => api.put(`/shopping-list/${id}`, data),
     delete: (id) => api.delete(`/shopping-list/${id}`),
-    clear: (checkedOnly = false) => api.delete(`/shopping-list${checkedOnly ? '?checkedOnly=true' : ''}`)
+    clear: (checkedOnly = false) => api.delete(`/shopping-list${checkedOnly ? '?checkedOnly=true' : ''}`),
+    completeTrip: (data) => api.post('/shopping-list/complete-trip', data)
   },
   spend: {
     month: (month) => api.get(`/spend?month=${month}`),
