@@ -1,4 +1,4 @@
-const { defineConfig } = require('@playwright/test');
+const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests/e2e',
@@ -10,9 +10,19 @@ module.exports = defineConfig({
     actionTimeout: 15000,
     baseURL: 'http://127.0.0.1:3000',
     headless: true,
-    viewport: { width: 390, height: 844 },
     screenshot: 'only-on-failure'
   },
+  projects: [
+    {
+      name: 'chromium-mobile',
+      use: { ...devices['iPhone 13'], browserName: 'chromium' }
+    },
+    {
+      name: 'webkit-iphone',
+      testMatch: /accessibility\.spec\.js/,
+      use: { ...devices['iPhone 13'], browserName: 'webkit' }
+    }
+  ],
   webServer: {
     command: 'node server.js',
     url: 'http://127.0.0.1:3000/api/health/ready',

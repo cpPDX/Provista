@@ -5,7 +5,7 @@ body.auth-page {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom, 0));
+  padding: calc(1rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) calc(1rem + env(safe-area-inset-left, 0px));
 }
 
 .auth-container {
@@ -60,6 +60,7 @@ body.auth-page {
   font-weight: 500;
   color: var(--text-muted);
   transition: all 0.15s;
+  min-height: 44px;
 }
 .auth-tab.active {
   background: var(--surface-raised);
@@ -89,7 +90,7 @@ body.auth-page {
   display: flex;
   align-items: center;
   gap: 0.25rem;
-  color: var(--primary);
+  color: var(--color-blue-light);
   font-size: 0.9375rem;
   font-weight: 500;
   margin-bottom: 1rem;
@@ -98,6 +99,28 @@ body.auth-page {
   cursor: pointer;
   padding: 0;
 }
+
+.auth-forgot-link {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -0.5rem 0 0.5rem auto;
+  color: var(--color-blue-light);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.auth-message {
+  background: rgba(105,229,177,0.12);
+  color: var(--color-success);
+  border: 1px solid rgba(105,229,177,0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.875rem;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  margin-bottom: 0.75rem;
+}
+.auth-local-reset-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--color-blue-light); font-weight: 700; }
 
 .household-choice {
   display: flex;

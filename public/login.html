@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Provista — Sign In</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.json" />
@@ -22,7 +22,7 @@
       <div class="auth-logo-icon">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="display:block">
           <rect width="48" height="48" rx="12" fill="#21ABCD"/>
-          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="white" text-anchor="middle" letter-spacing="-0.5">P</text>
+          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="#1A1C20" text-anchor="middle" letter-spacing="-0.5">P</text>
         </svg>
       </div>
       <h1>Provista</h1>
@@ -38,33 +38,66 @@
       <!-- Login form -->
       <form id="login-form" class="auth-form">
         <div class="form-group">
-          <label>Email</label>
-          <input class="form-control" type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
+          <label for="login-email">Email</label>
+          <input class="form-control" id="login-email" type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
         </div>
         <div class="form-group">
-          <label>Password</label>
-          <input class="form-control" type="password" name="password" required placeholder="••••••••" autocomplete="current-password" />
+          <label for="login-password">Password</label>
+          <input class="form-control" id="login-password" type="password" name="password" required placeholder="••••••••" autocomplete="current-password" />
         </div>
+        <button type="button" class="auth-forgot-link" id="forgot-password-link">Forgot password?</button>
         <div id="login-error" class="auth-error" style="display:none"></div>
-        <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+        <div id="login-message" class="auth-message" role="status" style="display:none"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-login">Sign In</button>
       </form>
 
       <!-- Register form -->
       <form id="register-form" class="auth-form" style="display:none">
         <div class="form-group">
           <label>Your Name</label>
-          <input class="form-control" type="text" name="name" required placeholder="Jane Smith" autocomplete="name" />
+          <input class="form-control" id="register-name" type="text" name="name" required placeholder="Jane Smith" autocomplete="name" />
         </div>
         <div class="form-group">
           <label>Email</label>
-          <input class="form-control" type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
+          <input class="form-control" id="register-email" type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
         </div>
         <div class="form-group">
           <label>Password <span class="text-muted text-sm">(min. 8 chars)</span></label>
-          <input class="form-control" type="password" name="password" required minlength="8" placeholder="••••••••" autocomplete="new-password" />
+          <input class="form-control" id="register-password" type="password" name="password" required minlength="8" placeholder="••••••••" autocomplete="new-password" />
         </div>
         <div id="register-error" class="auth-error" style="display:none"></div>
-        <button type="submit" class="btn btn-primary btn-full">Continue</button>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-register-continue">Continue</button>
+      </form>
+    </div>
+
+    <div class="auth-card" id="step-forgot" style="display:none">
+      <button type="button" class="auth-back" id="back-from-forgot">‹ Back to sign in</button>
+      <h2 class="auth-step-title">Reset your password</h2>
+      <p class="text-muted text-sm" style="margin-bottom:1rem">Enter your account email and we’ll send a 30-minute reset link.</p>
+      <form id="forgot-password-form" class="auth-form">
+        <div class="form-group">
+          <label for="forgot-email">Email</label>
+          <input class="form-control" id="forgot-email" type="email" name="email" required autocomplete="email" />
+        </div>
+        <div id="forgot-error" class="auth-error" style="display:none"></div>
+        <div id="forgot-message" class="auth-message" role="status" style="display:none"></div>
+        <button type="submit" class="btn btn-primary btn-full">Send reset link</button>
+      </form>
+    </div>
+
+    <div class="auth-card" id="step-reset" style="display:none">
+      <h2 class="auth-step-title">Choose a new password</h2>
+      <form id="reset-password-form" class="auth-form">
+        <div class="form-group">
+          <label for="reset-password">New password</label>
+          <input class="form-control" id="reset-password" type="password" name="password" required minlength="8" autocomplete="new-password" />
+        </div>
+        <div class="form-group">
+          <label for="reset-password-confirm">Confirm new password</label>
+          <input class="form-control" id="reset-password-confirm" type="password" name="confirmPassword" required minlength="8" autocomplete="new-password" />
+        </div>
+        <div id="reset-error" class="auth-error" style="display:none"></div>
+        <button type="submit" class="btn btn-primary btn-full">Reset password</button>
       </form>
     </div>
 
@@ -73,14 +106,14 @@
       <h2 class="auth-step-title">Set up your household</h2>
       <p class="text-muted text-sm" style="margin-bottom:1.25rem">A household lets you share prices and shopping lists with family or housemates.</p>
       <div class="household-choice">
-        <button class="household-choice-btn" id="btn-create-household">
+        <button class="household-choice-btn" id="btn-choose-create-household" data-action="create">
           <span class="choice-icon">🏠</span>
           <div>
             <div class="choice-title">Create a household</div>
             <div class="choice-desc">Start fresh as the household owner</div>
           </div>
         </button>
-        <button class="household-choice-btn" id="btn-join-household">
+        <button class="household-choice-btn" id="btn-choose-join-household" data-action="join">
           <span class="choice-icon">🔗</span>
           <div>
             <div class="choice-title">Join a household</div>
@@ -97,10 +130,10 @@
       <form id="create-household-form" class="auth-form">
         <div class="form-group">
           <label>Household Name</label>
-          <input class="form-control" type="text" name="householdName" required placeholder="e.g. The Smith Family" autocomplete="off" />
+          <input class="form-control" id="household-name" type="text" name="householdName" required placeholder="e.g. The Smith Family" autocomplete="off" />
         </div>
         <div id="create-error" class="auth-error" style="display:none"></div>
-        <button type="submit" class="btn btn-primary btn-full">Create Household</button>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-create-household">Create Household</button>
       </form>
     </div>
 
@@ -118,32 +151,36 @@
         </div>
         <button type="button" id="btn-scan-qr" class="btn btn-outline btn-full" style="margin-bottom:0.75rem">&#128247; Scan QR Code</button>
         <div id="join-error" class="auth-error" style="display:none"></div>
-        <button type="submit" class="btn btn-primary btn-full">Join Household</button>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-join-household">Join Household</button>
       </form>
     </div>
   </div>
 
   <!-- QR scanner overlay -->
-  <div id="qr-scanner-overlay" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.88);align-items:center;justify-content:center;padding:1rem">
-    <div style="width:100%;max-width:340px">
+  <div id="qr-scanner-overlay" aria-hidden="true" style="display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.88);align-items:center;justify-content:center;padding:1rem">
+    <div role="dialog" aria-modal="true" aria-label="Scan invite QR code" tabindex="-1" style="width:100%;max-width:340px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
         <span style="color:#fff;font-weight:700;font-size:1.0625rem">Scan Invite QR Code</span>
-        <button id="qr-close-btn" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem">&#x2715;</button>
+        <button id="qr-close-btn" aria-label="Close QR scanner" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;line-height:1;padding:0.25rem;min-width:44px;min-height:44px">&#x2715;</button>
       </div>
       <div class="scanner-viewfinder-wrap">
         <video id="qr-video" autoplay playsinline muted></video>
         <div class="scanner-viewfinder"></div>
       </div>
-      <p id="qr-status" class="scanner-status" style="color:#ccc;margin-top:0.75rem">Align the QR code within the frame</p>
+      <p id="qr-status" class="scanner-status" role="status" aria-live="polite" style="color:#ccc;margin-top:0.75rem">Align the QR code within the frame</p>
     </div>
   </div>
 
   <script>
     // Prefill invite code from URL param (QR code link)
     const urlCode = new URLSearchParams(window.location.search).get('code');
+    const resetToken = new URLSearchParams(window.location.search).get('token');
+    const resetEmail = new URLSearchParams(window.location.search).get('email');
 
     let pendingUser = null; // { name, email, password } from register step
     let _qrCodeReader = null;
+    let _qrDialogTrigger = null;
+    let _qrTrapHandler = null;
 
     async function _startQrCamera() {
       _qrCodeReader = new ZXing.BrowserMultiFormatReader();
@@ -183,7 +220,23 @@
     }
 
     function openQrScanner() {
-      document.getElementById('qr-scanner-overlay').style.display = 'flex';
+      const overlay = document.getElementById('qr-scanner-overlay');
+      const dialog = overlay.querySelector('[role="dialog"]');
+      _qrDialogTrigger = document.activeElement;
+      document.querySelector('.auth-container').inert = true;
+      overlay.style.display = 'flex';
+      overlay.setAttribute('aria-hidden', 'false');
+      _qrTrapHandler = event => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeQrScanner();
+        } else if (event.key === 'Tab') {
+          event.preventDefault();
+          document.getElementById('qr-close-btn').focus();
+        }
+      };
+      dialog.addEventListener('keydown', _qrTrapHandler);
+      requestAnimationFrame(() => document.getElementById('qr-close-btn').focus());
       if (window.ZXing?.BrowserMultiFormatReader) {
         _startQrCamera();
         return;
@@ -200,8 +253,17 @@
 
     function closeQrScanner() {
       try { if (_qrCodeReader) { _qrCodeReader.reset(); _qrCodeReader = null; } } catch (_) {}
-      document.getElementById('qr-scanner-overlay').style.display = 'none';
+      const overlay = document.getElementById('qr-scanner-overlay');
+      const dialog = overlay.querySelector('[role="dialog"]');
+      if (_qrTrapHandler) dialog.removeEventListener('keydown', _qrTrapHandler);
+      _qrTrapHandler = null;
+      overlay.style.display = 'none';
+      overlay.setAttribute('aria-hidden', 'true');
+      document.querySelector('.auth-container').inert = false;
       document.getElementById('qr-status').textContent = 'Align the QR code within the frame';
+      const trigger = _qrDialogTrigger;
+      _qrDialogTrigger = null;
+      if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus());
     }
 
     // Tab switching
@@ -222,12 +284,19 @@
 
     function showError(id, msg) {
       const el = document.getElementById(id);
+      el.setAttribute('role', 'alert');
+      el.textContent = msg;
+      el.style.display = '';
+    }
+
+    function showMessage(id, msg) {
+      const el = document.getElementById(id);
       el.textContent = msg;
       el.style.display = '';
     }
 
     function showStep(id) {
-      ['step-mode', 'step-household', 'step-create', 'step-join'].forEach(s => {
+      ['step-mode', 'step-forgot', 'step-reset', 'step-household', 'step-create', 'step-join'].forEach(s => {
         document.getElementById(s).style.display = s === id ? '' : 'none';
       });
     }
@@ -264,6 +333,66 @@
       }
     });
 
+    document.getElementById('forgot-password-link').addEventListener('click', () => {
+      const loginEmail = document.getElementById('login-email').value;
+      document.getElementById('forgot-email').value = loginEmail;
+      showStep('step-forgot');
+      document.getElementById('forgot-email').focus();
+    });
+    document.getElementById('back-from-forgot').addEventListener('click', () => showStep('step-mode'));
+
+    document.getElementById('forgot-password-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      clearErrors();
+      const button = event.target.querySelector('button[type="submit"]');
+      button.disabled = true;
+      button.textContent = 'Sending…';
+      try {
+        const result = await postJSON('/api/auth/forgot-password', { email: event.target.email.value.trim() });
+        showMessage('forgot-message', result.message);
+        if (result.resetUrl) {
+          const link = document.createElement('a');
+          link.href = result.resetUrl;
+          link.textContent = 'Open local reset link';
+          link.className = 'auth-local-reset-link';
+          document.getElementById('forgot-message').append(' ', link);
+        }
+      } catch (err) {
+        showError('forgot-error', err.message);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Send reset link';
+      }
+    });
+
+    document.getElementById('reset-password-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      clearErrors();
+      if (!resetToken || !resetEmail) return showError('reset-error', 'This password reset link is incomplete');
+      if (event.target.password.value !== event.target.confirmPassword.value) {
+        return showError('reset-error', 'Passwords do not match');
+      }
+      const button = event.target.querySelector('button[type="submit"]');
+      button.disabled = true;
+      button.textContent = 'Resetting…';
+      try {
+        await postJSON('/api/auth/reset-password', {
+          email: resetEmail,
+          token: resetToken,
+          newPassword: event.target.password.value
+        });
+        history.replaceState({}, '', '/login.html');
+        showStep('step-mode');
+        showMessage('login-message', 'Password reset. Sign in with your new password.');
+        document.getElementById('login-email').value = resetEmail;
+        document.getElementById('login-password').focus();
+      } catch (err) {
+        showError('reset-error', err.message);
+        button.disabled = false;
+        button.textContent = 'Reset password';
+      }
+    });
+
     // Register step 1
     document.getElementById('register-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -288,8 +417,8 @@
     });
 
     // Create / Join choice
-    document.getElementById('btn-create-household').addEventListener('click', () => showStep('step-create'));
-    document.getElementById('btn-join-household').addEventListener('click', () => showStep('step-join'));
+    document.getElementById('btn-choose-create-household').addEventListener('click', () => showStep('step-create'));
+    document.getElementById('btn-choose-join-household').addEventListener('click', () => showStep('step-join'));
     document.getElementById('back-from-create').addEventListener('click', () => showStep('step-household'));
     document.getElementById('back-from-join').addEventListener('click', () => {
       showStep(urlCode ? 'step-mode' : 'step-household');
@@ -348,6 +477,11 @@
 
     document.getElementById('btn-scan-qr').addEventListener('click', openQrScanner);
     document.getElementById('qr-close-btn').addEventListener('click', closeQrScanner);
+
+    if (window.location.pathname === '/reset-password' || resetToken) {
+      showStep('step-reset');
+      if (!resetToken || !resetEmail) showError('reset-error', 'This password reset link is incomplete');
+    }
   </script>
 </body>
 </html>

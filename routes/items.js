@@ -26,15 +26,29 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/items - create item (admin+)
-router.post('/', requireAuth, requireAdmin, async (req, res) => {
+// POST /api/items - add a non-destructive household catalog entry (all roles)
+router.post('/', requireAuth, async (req, res) => {
   try {
     const { name, category, unit } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
     if (!category || !category.trim()) return res.status(400).json({ error: 'category is required' });
     if (!unit || !unit.trim()) return res.status(400).json({ error: 'unit is required' });
 
-    const itemData = { ...req.body, householdId: req.user.householdId, isSeeded: false };
+    const itemData = {
+      householdId: req.user.householdId,
+      name,
+      category,
+      unit,
+      brand: req.body.brand,
+      size: req.body.size,
+      barcode: req.body.barcode,
+      upc: req.body.upc,
+      upcSource: req.body.upcSource,
+      upcPendingLookup: req.body.upcPendingLookup,
+      isOrganic: req.body.isOrganic,
+      isSeeded: false
+    };
+    Object.keys(itemData).forEach(key => itemData[key] === undefined && delete itemData[key]);
     if (itemData.upc) itemData.upc = normalizeUpc(String(itemData.upc)) ?? null;
     const item = new Item(itemData);
     await item.save();
@@ -47,7 +61,12 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
 // PUT /api/items/:id - update item (admin+)
 router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const updates = { ...req.body };
+    const updates = {};
+    ['name', 'brand', 'category', 'unit', 'size', 'barcode', 'upc', 'upcSource', 'upcPendingLookup', 'isOrganic']
+      .forEach(field => {
+        if (req.body[field] !== undefined) updates[field] = req.body[field];
+      });
+    if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
     if (updates.upc !== undefined) {
       updates.upc = updates.upc ? (normalizeUpc(String(updates.upc)) ?? null) : null;
     }

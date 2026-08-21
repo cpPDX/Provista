@@ -32,6 +32,8 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check public/js/api.js
+          node --check public/js/autocomplete.js
+          node --check public/js/offline.js
           node --check public/js/ui.js
           node --check public/js/more.js
           node --check public/js/householdPeople.js
@@ -42,24 +44,36 @@ jobs:
           node --check public/js/onboarding.js
           node --check public/js/shoppingList.js
           node --check models/FavoriteMeal.js
+          node --check models/Household.js
+          node --check models/InventoryItem.js
+          node --check models/User.js
           node --check models/ShoppingTrip.js
           node --check services/completeShoppingTrip.js
+          node --check services/passwordResetEmail.js
           node --check utils/mealShopping.js
           node --check routes/mealPlan.js
+          node --check routes/auth.js
+          node --check routes/household.js
+          node --check routes/inventory.js
+          node --check routes/items.js
           node --check routes/shoppingList.js
           node --check routes/spend.js
+          node --check routes/stores.js
           node --check tests/e2e/prices.spec.js
           node --check tests/e2e/mealPlan.spec.js
           node --check tests/e2e/home.spec.js
           node --check tests/e2e/navigation.spec.js
           node --check tests/e2e/shoppingList.spec.js
+          node --check tests/e2e/inventory.spec.js
+          node --check tests/e2e/auth.spec.js
+          node --check tests/e2e/accessibility.spec.js
 
       - name: Run API test suite
         run: npm run test:api
 
   browser-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     services:
       mongodb:
         image: mongo:7
@@ -87,8 +101,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
 
-      - name: Run home, grocery, and meal-plan browser tests
-        run: npx playwright test tests/e2e/home.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/mealPlan.spec.js
+      - name: Run critical household, latency, and mobile accessibility tests
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/accessibility.spec.js

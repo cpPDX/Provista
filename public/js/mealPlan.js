@@ -775,7 +775,11 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
     removeBtn.style.fontSize = '0.75rem';
     removeBtn.style.marginTop = '0.375rem';
     removeBtn.setAttribute('aria-label', 'Remove separate meal');
-    removeBtn.addEventListener('click', () => { row.remove(); scheduleSave(); });
+    removeBtn.addEventListener('click', () => {
+      if (!confirm('Remove this separate meal from the plan?')) return;
+      row.remove();
+      scheduleSave();
+    });
     row.appendChild(removeBtn);
   }
 
@@ -867,9 +871,9 @@ function renderMealPlan(plan) {
   const html = `
     <div class="meal-plan">
       <div class="meal-plan-nav">
-        <button class="btn btn-icon" id="mp-prev-week">&#8249;</button>
+        <button class="btn btn-icon" id="mp-prev-week" aria-label="Previous week">&#8249;</button>
         <span class="meal-plan-week-label">${formatWeekRange(mealPlanState.weekStart)}</span>
-        <button class="btn btn-icon" id="mp-next-week">&#8250;</button>
+        <button class="btn btn-icon" id="mp-next-week" aria-label="Next week">&#8250;</button>
       </div>
 
       <div class="meal-plan-tools">
@@ -901,7 +905,19 @@ function renderMealPlan(plan) {
   container.innerHTML = html;
 
   const daysContainer = document.getElementById('mp-days-container');
-  (plan.days || []).forEach((day, di) => daysContainer.appendChild(renderDayCard(day, di)));
+  const todayKey = (() => {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  })();
+  const todayIndex = (plan.days || []).findIndex(day => String(day.date || '').slice(0, 10) === todayKey);
+  const emphasisStart = todayIndex >= 0 ? todayIndex : 0;
+  const expandedIndexes = new Set([emphasisStart, emphasisStart + 1, emphasisStart + 2]);
+  (plan.days || []).forEach((day, di) => {
+    daysContainer.appendChild(renderDayCard(day, di, expandedIndexes.has(di)));
+  });
 
   ['mp-produce-notes', 'mp-shopping-notes'].forEach(id => {
     const el = document.getElementById(id);
@@ -922,7 +938,7 @@ function renderMealPlan(plan) {
   document.getElementById('mp-settings-btn')?.addEventListener('click', openWeekStartSettings);
 }
 
-function renderDayCard(day, di) {
+function renderDayCard(day, di, expanded = true) {
   const MEAL_LABELS = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', special: 'Special Occasion' };
   const MEAL_TYPES_ORDER = ['breakfast', 'lunch', 'dinner', 'special'];
   const dateStr = day.date ? (typeof day.date === 'string' ? day.date : new Date(day.date).toISOString()) : null;
@@ -933,21 +949,63 @@ function renderDayCard(day, di) {
   dayEl.dataset.dayIndex = di;
   dayEl.dataset.date = dateStr || '';
   dayEl.dataset.specialCollapsed = specialCollapsed ? 'true' : 'false';
+  dayEl.dataset.expanded = String(expanded);
 
-  const header = document.createElement('div');
+  const content = document.createElement('div');
+  content.className = 'meal-day-content';
+  content.hidden = !expanded;
+
+  const header = document.createElement('button');
+  header.type = 'button';
   header.className = 'meal-day-header';
-  header.textContent = dateStr ? formatDayHeader(dateStr) : `Day ${di + 1}`;
+  header.setAttribute('aria-expanded', String(expanded));
+  const label = document.createElement('span');
+  label.textContent = dateStr ? formatDayHeader(dateStr) : `Day ${di + 1}`;
+  const plannedNames = (day.meals || []).map(meal => String(meal.name || '').trim()).filter(Boolean);
+  const summary = document.createElement('span');
+  summary.className = 'meal-day-summary';
+  summary.textContent = plannedNames.length ? plannedNames.slice(0, 2).join(' · ') : 'Not planned';
+  const chevron = document.createElement('span');
+  chevron.className = 'meal-day-chevron';
+  chevron.textContent = expanded ? '−' : '+';
+  header.append(label, summary, chevron);
+  header.addEventListener('click', () => setMealDayExpanded(dayEl, dayEl.dataset.expanded !== 'true'));
   dayEl.appendChild(header);
 
   MEAL_TYPES_ORDER.forEach(mealType => {
     const typeMeals = (day.meals || []).filter(m => m.mealType === mealType);
-    dayEl.appendChild(buildMealTypeSection(
+    content.appendChild(buildMealTypeSection(
       mealType, MEAL_LABELS[mealType], typeMeals,
       mealType === 'special', specialCollapsed
     ));
   });
+  dayEl.appendChild(content);
 
   return dayEl;
+}
+
+function setMealDayExpanded(dayEl, expanded) {
+  if (!dayEl) return;
+  dayEl.dataset.expanded = String(expanded);
+  const content = dayEl.querySelector('.meal-day-content');
+  const header = dayEl.querySelector('.meal-day-header');
+  if (content) content.hidden = !expanded;
+  header?.setAttribute('aria-expanded', String(expanded));
+  const chevron = header?.querySelector('.meal-day-chevron');
+  if (chevron) chevron.textContent = expanded ? '−' : '+';
+}
+
+function focusTodaysDinner() {
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const day = [...document.querySelectorAll('.meal-day[data-date]')]
+    .find(element => element.dataset.date.slice(0, 10) === today);
+  if (!day) return;
+  setMealDayExpanded(day, true);
+  const input = day.querySelector('.meal-type-section[data-meal-type="dinner"] .meal-name-input');
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  day.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' });
+  input?.focus({ preventScroll: true });
 }
 
 function escHtml(str) {

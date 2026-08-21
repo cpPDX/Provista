@@ -9,6 +9,12 @@
 function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
   const minChars = opts.minChars ?? 2;
   let debounceTimer;
+  if (!dropdownEl.id) dropdownEl.id = `item-options-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  inputEl.setAttribute('role', 'combobox');
+  inputEl.setAttribute('aria-autocomplete', 'list');
+  inputEl.setAttribute('aria-controls', dropdownEl.id);
+  inputEl.setAttribute('aria-expanded', 'false');
+  dropdownEl.setAttribute('role', 'listbox');
 
   inputEl.addEventListener('input', () => {
     clearTimeout(debounceTimer);
@@ -29,38 +35,53 @@ function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
   });
 
   inputEl.addEventListener('blur', () => {
-    setTimeout(closeDropdown, 150);
+    setTimeout(() => {
+      if (!inputEl.closest('.autocomplete-wrap')?.contains(document.activeElement)) closeDropdown();
+    }, 150);
+  });
+  inputEl.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown') {
+      const firstOption = dropdownEl.querySelector('button');
+      if (firstOption) { event.preventDefault(); firstOption.focus(); }
+    } else if (event.key === 'Escape') {
+      closeDropdown();
+    }
   });
 
   function renderItemDropdown(items, query) {
     dropdownEl.innerHTML = '';
     items.forEach(item => {
-      const div = document.createElement('div');
-      div.className = 'autocomplete-item';
-      div.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(item.name)}${item.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.brand) + ')</span>' : ''}</div>
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'autocomplete-item';
+      button.setAttribute('role', 'option');
+      button.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(item.name)}${item.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.brand) + ')</span>' : ''}</div>
         <div class="autocomplete-item-meta">${formatItemMeta(item)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>`;
-      div.addEventListener('mousedown', () => {
+      button.addEventListener('click', () => {
         inputEl.value = item.name;
         closeDropdown();
         if (opts.onSelect) opts.onSelect(item);
       });
-      dropdownEl.appendChild(div);
+      dropdownEl.appendChild(button);
     });
 
     // "Create new" option
     if (opts.onCreateNew) {
-      const div = document.createElement('div');
-      div.className = 'autocomplete-create';
-      div.textContent = `+ Create "${query}"`;
-      div.addEventListener('mousedown', () => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'autocomplete-create';
+      button.setAttribute('role', 'option');
+      button.textContent = `+ Create "${query}"`;
+      button.addEventListener('click', () => {
         closeDropdown();
         opts.onCreateNew(query);
       });
-      dropdownEl.appendChild(div);
+      dropdownEl.appendChild(button);
     }
 
     if (dropdownEl.children.length > 0) {
       dropdownEl.classList.add('open');
+      inputEl.setAttribute('aria-expanded', 'true');
     } else {
       closeDropdown();
     }
@@ -69,6 +90,7 @@ function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
   function closeDropdown() {
     dropdownEl.classList.remove('open');
     dropdownEl.innerHTML = '';
+    inputEl.setAttribute('aria-expanded', 'false');
   }
 }
 
@@ -78,6 +100,12 @@ function attachItemAutocomplete(inputEl, dropdownEl, opts = {}) {
 function attachStoreAutocomplete(inputEl, dropdownEl, opts = {}) {
   let allStores = [];
   let loaded = false;
+  if (!dropdownEl.id) dropdownEl.id = `store-options-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  inputEl.setAttribute('role', 'combobox');
+  inputEl.setAttribute('aria-autocomplete', 'list');
+  inputEl.setAttribute('aria-controls', dropdownEl.id);
+  inputEl.setAttribute('aria-expanded', 'false');
+  dropdownEl.setAttribute('role', 'listbox');
 
   async function loadStores() {
     if (loaded) return;
@@ -98,37 +126,52 @@ function attachStoreAutocomplete(inputEl, dropdownEl, opts = {}) {
   });
 
   inputEl.addEventListener('blur', () => {
-    setTimeout(closeDropdown, 150);
+    setTimeout(() => {
+      if (!inputEl.closest('.autocomplete-wrap')?.contains(document.activeElement)) closeDropdown();
+    }, 150);
+  });
+  inputEl.addEventListener('keydown', event => {
+    if (event.key === 'ArrowDown') {
+      const firstOption = dropdownEl.querySelector('button');
+      if (firstOption) { event.preventDefault(); firstOption.focus(); }
+    } else if (event.key === 'Escape') {
+      closeDropdown();
+    }
   });
 
   function renderStoreDropdown(stores, query) {
     dropdownEl.innerHTML = '';
     stores.forEach(store => {
-      const div = document.createElement('div');
-      div.className = 'autocomplete-item';
-      div.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(store.name)}</div>
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'autocomplete-item';
+      button.setAttribute('role', 'option');
+      button.innerHTML = `<div class="autocomplete-item-name">${escapeHtml(store.name)}</div>
         ${store.location ? `<div class="autocomplete-item-meta">${escapeHtml(store.location)}</div>` : ''}`;
-      div.addEventListener('mousedown', () => {
+      button.addEventListener('click', () => {
         inputEl.value = store.name;
         closeDropdown();
         if (opts.onSelect) opts.onSelect(store);
       });
-      dropdownEl.appendChild(div);
+      dropdownEl.appendChild(button);
     });
 
     if (opts.onCreateNew && query) {
-      const div = document.createElement('div');
-      div.className = 'autocomplete-create';
-      div.textContent = `+ Add store "${query}"`;
-      div.addEventListener('mousedown', () => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'autocomplete-create';
+      button.setAttribute('role', 'option');
+      button.textContent = `+ Add store "${query}"`;
+      button.addEventListener('click', () => {
         closeDropdown();
         opts.onCreateNew(query);
       });
-      dropdownEl.appendChild(div);
+      dropdownEl.appendChild(button);
     }
 
     if (dropdownEl.children.length > 0) {
       dropdownEl.classList.add('open');
+      inputEl.setAttribute('aria-expanded', 'true');
     } else {
       closeDropdown();
     }
@@ -137,13 +180,96 @@ function attachStoreAutocomplete(inputEl, dropdownEl, opts = {}) {
   function closeDropdown() {
     dropdownEl.classList.remove('open');
     dropdownEl.innerHTML = '';
+    inputEl.setAttribute('aria-expanded', 'false');
   }
 
   // Expose reload for when a new store is added
   return { reload: () => { loaded = false; } };
 }
 
-// Inline create item modal
+// Reusable inline catalog-item fields for parent forms that must preserve state.
+function inlineItemCreationFields(prefix) {
+  return `
+    <input type="hidden" id="${prefix}-new-item-mode" value="false" />
+    <div id="${prefix}-new-item-fields" class="callout-box inline-item-create" style="display:none">
+      <div class="inline-item-create-title">New item details</div>
+      <div class="form-group">
+        <label for="${prefix}-new-brand">Brand <span class="text-muted text-sm">(optional)</span></label>
+        <input class="form-control" id="${prefix}-new-brand" placeholder="e.g. Kirkland" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="${prefix}-new-category">Category</label>
+          <input class="form-control" id="${prefix}-new-category" placeholder="e.g. Dairy"
+            list="${prefix}-category-list" />
+          <datalist id="${prefix}-category-list">
+            <option value="Produce"/><option value="Dairy"/><option value="Meat &amp; Seafood"/>
+            <option value="Bakery"/><option value="Pantry"/><option value="Frozen"/>
+            <option value="Beverages"/><option value="Snacks"/>
+            <option value="Condiments &amp; Sauces"/><option value="Cleaning &amp; Household"/>
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label for="${prefix}-new-unit">Unit</label>
+          <input class="form-control" id="${prefix}-new-unit" placeholder="e.g. lb, each"
+            list="${prefix}-unit-list" />
+          <datalist id="${prefix}-unit-list">
+            <option value="lb"/><option value="oz"/><option value="each"/><option value="fl oz"/>
+            <option value="gal"/><option value="dozen"/><option value="pack"/><option value="count"/>
+            <option value="loaf"/><option value="bunch"/><option value="pint"/><option value="roll"/>
+          </datalist>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="${prefix}-new-size">Size <span class="text-muted text-sm">(optional)</span></label>
+          <input class="form-control" type="number" id="${prefix}-new-size" step="any" min="0" placeholder="e.g. 28" />
+        </div>
+        <label class="checkbox-row inline-organic-option" for="${prefix}-new-organic">
+          <input type="checkbox" id="${prefix}-new-organic" />
+          <span>Organic</span>
+        </label>
+      </div>
+    </div>`;
+}
+
+function startInlineItemCreation(prefix, name, inputId, hiddenItemId) {
+  document.getElementById(inputId).value = name;
+  document.getElementById(hiddenItemId).value = '';
+  document.getElementById(`${prefix}-new-item-mode`).value = 'true';
+  document.getElementById(`${prefix}-new-item-fields`).style.display = '';
+  document.getElementById(`${prefix}-new-category`)?.focus();
+}
+
+function clearInlineItemCreation(prefix) {
+  const mode = document.getElementById(`${prefix}-new-item-mode`);
+  const fields = document.getElementById(`${prefix}-new-item-fields`);
+  if (mode) mode.value = 'false';
+  if (fields) fields.style.display = 'none';
+}
+
+function readInlineItemCreation(prefix, name) {
+  if (document.getElementById(`${prefix}-new-item-mode`)?.value !== 'true') return null;
+  const category = document.getElementById(`${prefix}-new-category`).value.trim();
+  const unit = document.getElementById(`${prefix}-new-unit`).value.trim();
+  if (!String(name || '').trim() || !category || !unit) {
+    throw new Error('Name, category, and unit are required for a new item');
+  }
+  const sizeRaw = document.getElementById(`${prefix}-new-size`).value;
+  const size = sizeRaw === '' ? null : Number(sizeRaw);
+  if (size !== null && (!Number.isFinite(size) || size <= 0)) throw new Error('Size must be greater than zero');
+  return {
+    name: String(name).trim(),
+    brand: document.getElementById(`${prefix}-new-brand`).value.trim(),
+    category,
+    unit,
+    size,
+    isOrganic: document.getElementById(`${prefix}-new-organic`).checked,
+    isSeeded: false
+  };
+}
+
+// Separate modal retained for direct Catalog creation.
 async function promptCreateItem(name, onCreated) {
   const bodyHTML = `
     <form id="new-item-form">

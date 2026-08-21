@@ -21,7 +21,7 @@ window.BarcodeScanner = (() => {
   function close() {
     _stopCamera();
     const overlay = document.getElementById('scanner-overlay');
-    if (overlay) overlay.style.display = 'none';
+    if (overlay) deactivateDialogSurface(overlay, overlay.querySelector('.scanner-sheet'));
     const manualWrap = document.getElementById('scanner-manual-wrap');
     if (manualWrap) manualWrap.style.display = 'none';
     const manualInput = document.getElementById('scanner-manual-input');
@@ -59,7 +59,15 @@ window.BarcodeScanner = (() => {
       if (onResult) onResult(null);
       return;
     }
-    overlay.style.display = 'flex';
+    activateDialogSurface(
+      overlay,
+      overlay.querySelector('.scanner-sheet'),
+      document.getElementById('scanner-close-btn'),
+      () => {
+        close();
+        if (onResult) onResult(null);
+      }
+    );
 
     // Wire close button
     document.getElementById('scanner-close-btn').onclick = () => {

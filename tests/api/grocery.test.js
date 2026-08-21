@@ -127,7 +127,7 @@ describe('POST /api/grocery/log', () => {
     expect(res.body.entry.status).toBe('pending');
   });
 
-  it('does not allow a member to create a catalog item through logging', async () => {
+  it('lets a member create a catalog item while its standalone price stays pending', async () => {
     const { cookie: ownerCookie } = await createOwnerSession(app);
     const store = await request(app).post('/api/stores').set('Cookie', ownerCookie)
       .send({ name: 'Safeway' });
@@ -143,7 +143,9 @@ describe('POST /api/grocery/log', () => {
         regularPrice: 2.5
       });
 
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+    expect(res.body.createdItem.name).toBe('New Thing');
+    expect(res.body.entry.status).toBe('pending');
   });
 
   it('can mark an entry as CSV-sourced', async () => {

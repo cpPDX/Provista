@@ -131,6 +131,61 @@ describe('POST /api/auth/login', () => {
   });
 });
 
+describe('password recovery', () => {
+  it('offers an enumeration-safe reset flow and invalidates the link after use', async () => {
+    const originalApiKey = process.env.RESEND_API_KEY;
+    const originalFrom = process.env.PASSWORD_RESET_FROM;
+    process.env.RESEND_API_KEY = '';
+    process.env.PASSWORD_RESET_FROM = '';
+    try {
+      await createOwnerSession(app, { email: 'recover@test.com' });
+
+      const existing = await request(app).post('/api/auth/forgot-password')
+        .send({ email: 'recover@test.com' });
+      const missing = await request(app).post('/api/auth/forgot-password')
+        .send({ email: 'unknown-recovery@test.com' });
+      expect(existing.status).toBe(200);
+      expect(missing.status).toBe(200);
+      expect(existing.body.message).toBe(missing.body.message);
+      expect(existing.body.resetUrl).toBeTruthy();
+      expect(missing.body.resetUrl).toBeUndefined();
+
+      const resetUrl = new URL(existing.body.resetUrl);
+      const payload = {
+        email: resetUrl.searchParams.get('email'),
+        token: resetUrl.searchParams.get('token'),
+        newPassword: 'replacement456'
+      };
+      const reset = await request(app).post('/api/auth/reset-password').send(payload);
+      expect(reset.status).toBe(200);
+      expect(reset.body.success).toBe(true);
+
+      const oldLogin = await request(app).post('/api/auth/login')
+        .send({ email: 'recover@test.com', password: 'password123' });
+      const newLogin = await request(app).post('/api/auth/login')
+        .send({ email: 'recover@test.com', password: 'replacement456' });
+      const reused = await request(app).post('/api/auth/reset-password').send(payload);
+      expect(oldLogin.status).toBe(401);
+      expect(newLogin.status).toBe(200);
+      expect(reused.status).toBe(400);
+    } finally {
+      if (originalApiKey === undefined) delete process.env.RESEND_API_KEY;
+      else process.env.RESEND_API_KEY = originalApiKey;
+      if (originalFrom === undefined) delete process.env.PASSWORD_RESET_FROM;
+      else process.env.PASSWORD_RESET_FROM = originalFrom;
+    }
+  });
+
+  it('rejects incomplete and short reset requests', async () => {
+    const incomplete = await request(app).post('/api/auth/reset-password')
+      .send({ email: 'somebody@test.com' });
+    const short = await request(app).post('/api/auth/reset-password')
+      .send({ email: 'somebody@test.com', token: 'token', newPassword: 'short' });
+    expect(incomplete.status).toBe(400);
+    expect(short.status).toBe(400);
+  });
+});
+
 describe('POST /api/auth/logout', () => {
   it('returns 200 and clears cookie', async () => {
     const res = await request(app).post('/api/auth/logout');

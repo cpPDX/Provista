@@ -55,6 +55,7 @@ function showIOSInstallSheet() {
   const overlay = document.createElement('div');
   overlay.id = 'install-sheet-overlay';
   overlay.className = 'install-sheet-overlay';
+  overlay.setAttribute('aria-hidden', 'true');
 
   // Share icon SVG for iOS
   const shareIcon = `<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -63,8 +64,8 @@ function showIOSInstallSheet() {
   </svg>`;
 
   overlay.innerHTML = `
-    <div class="install-sheet">
-      <h3>Use Provista in the store</h3>
+    <div class="install-sheet" role="dialog" aria-modal="true" aria-labelledby="install-sheet-title" tabindex="-1">
+      <h3 id="install-sheet-title">Use Provista in the store</h3>
       <p>Add to your home screen to access your shopping list and price history even without a connection &mdash; no WiFi needed in the store.</p>
       <div class="install-steps">
         <div class="install-step">
@@ -87,6 +88,12 @@ function showIOSInstallSheet() {
     </div>`;
 
   document.body.appendChild(overlay);
+  activateDialogSurface(
+    overlay,
+    overlay.querySelector('.install-sheet'),
+    document.getElementById('install-got-it'),
+    () => dismissInstallSheet('later')
+  );
 
   // Close on overlay tap (outside sheet)
   overlay.addEventListener('click', (e) => {
@@ -104,7 +111,10 @@ function showIOSInstallSheet() {
 
 function dismissInstallSheet(type) {
   const overlay = document.getElementById('install-sheet-overlay');
-  if (overlay) overlay.remove();
+  if (overlay) {
+    deactivateDialogSurface(overlay, overlay.querySelector('.install-sheet'));
+    overlay.remove();
+  }
 
   if (type === 'permanent') {
     localStorage.setItem('installPromptDismissed', 'true');

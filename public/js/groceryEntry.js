@@ -70,7 +70,7 @@
     const submitLabel = isAdmin ? 'Save Grocery' : 'Submit for Review';
     const intro = isAdmin
       ? 'Pick an existing item, or create it here and record its first price in the same step.'
-      : 'Pick an existing item and record what you paid. You can add a new store here if needed; new catalog items require an admin.';
+      : 'Pick an existing item, or create it here, then submit what you paid for review.';
 
     const bodyHTML = `
       <form id="add-price-form">
@@ -94,8 +94,7 @@
           </div>
         </div>
 
-        ${isAdmin ? `
-          <div id="price-new-item" class="callout-box" style="display:none;margin-bottom:0.75rem">
+        <div id="price-new-item" class="callout-box" style="display:none;margin-bottom:0.75rem">
             <div style="font-weight:700;margin-bottom:0.5rem">New item details</div>
             <div class="form-group">
               <label>Brand <span class="text-muted text-sm">(optional)</span></label>
@@ -123,7 +122,7 @@
                 <label for="price-new-organic" style="margin:0">Organic</label>
               </div>
             </div>
-          </div>` : ''}
+        </div>
 
         <div class="form-group">
           <label>Where did you buy it? <span class="required-star">*</span></label>
@@ -223,10 +222,10 @@
         selectedItemName = item.name;
         setSelectedItem(item);
       },
-      onCreateNew: isAdmin ? name => {
+      onCreateNew: name => {
         selectedItemName = '';
         startNewItem(name);
-      } : null
+      }
     });
     itemInput.addEventListener('input', () => {
       if (document.getElementById('price-new-item-mode').value === 'true') return;
@@ -280,7 +279,7 @@
       const newItemMode = document.getElementById('price-new-item-mode').value === 'true';
       const newStoreMode = document.getElementById('price-new-store-mode').value === 'true';
 
-      if (!itemId && !newItemMode) return showToast(isAdmin ? 'Select an item or choose Create' : 'Please select an item from the list');
+      if (!itemId && !newItemMode) return showToast('Select an item or choose Create');
       if (!storeId && !newStoreMode) return showToast('Select a store or choose Add store');
 
       const payload = {
@@ -322,7 +321,7 @@
         };
       }
 
-      const submit = event.target.querySelector('button[type="submit"]');
+      const submit = formSubmitButton(event.target);
       submit.disabled = true;
       submit.textContent = 'Saving…';
       try {

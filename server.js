@@ -24,6 +24,8 @@ const passwordLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, k
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/password', passwordLimiter);
+app.use('/api/auth/forgot-password', passwordLimiter);
+app.use('/api/auth/reset-password', passwordLimiter);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -51,6 +53,10 @@ app.use('/api/barcode', require('./routes/barcode'));
 
 // Serve login page for /join route (join via QR code link)
 app.get('/join', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+app.get('/reset-password', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 

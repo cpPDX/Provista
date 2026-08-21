@@ -45,6 +45,13 @@ function formatDate(d) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function formatPriceAge(dateValue, ageOnly = false) {
+  if (!dateValue) return ageOnly ? 'date unknown' : 'Last seen date unknown';
+  const ageDays = Math.max(0, Math.floor((Date.now() - new Date(dateValue).getTime()) / 86400000));
+  const age = ageDays === 0 ? 'today' : ageDays === 1 ? '1 day ago' : `${ageDays} days ago`;
+  return ageOnly ? age : `Last seen ${age}`;
+}
+
 // Format month label
 function formatMonthLabel(str) {
   const [y, m] = str.split('-');
@@ -56,17 +63,117 @@ function formatMonthLabel(str) {
 let toastTimer = null;
 function showToast(msg, duration = 2500) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
   el.style.display = 'block';
+  // Replacing an empty live region reliably announces repeated messages too.
+  el.textContent = '';
+  requestAnimationFrame(() => { el.textContent = msg; });
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.style.display = 'none'; }, duration);
 }
 
+const dialogFocusableSelector = [
+  'button:not([disabled])',
+  '[href]',
+  'input:not([type="hidden"]):not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'summary',
+  '[tabindex]:not([tabindex="-1"])'
+].join(',');
+
+function visibleDialogControls(dialog) {
+  return [...dialog.querySelectorAll(dialogFocusableSelector)]
+    .filter(element => element.offsetParent !== null && !element.closest('[hidden]'));
+}
+
+function updateDialogBackgroundInert() {
+  const modalOverlay = document.getElementById('modal-overlay');
+  const modalOpen = Boolean(modalOverlay && modalOverlay.style.display !== 'none');
+  const surfaceOpen = Boolean(document.querySelector('[data-dialog-active="true"]'));
+  const inert = modalOpen || surfaceOpen;
+  ['app', 'cart-bar'].forEach(id => {
+    const element = document.getElementById(id);
+    if (element) element.inert = inert;
+  });
+  const nav = document.querySelector('.bottom-nav');
+  if (nav) nav.inert = inert;
+  if (modalOverlay) modalOverlay.inert = surfaceOpen && modalOpen;
+}
+
+// Shared accessibility lifecycle for bottom sheets and other non-primary dialog surfaces.
+function activateDialogSurface(overlay, dialog, initialFocus, onRequestClose) {
+  if (!overlay || !dialog) return;
+  overlay._dialogTrigger = document.activeElement;
+  overlay._dialogRequestClose = onRequestClose;
+  overlay.dataset.dialogActive = 'true';
+  overlay.setAttribute('aria-hidden', 'false');
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  if (!dialog.hasAttribute('tabindex')) dialog.tabIndex = -1;
+  overlay.style.display = 'flex';
+  updateDialogBackgroundInert();
+
+  overlay._dialogTrap = event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      overlay._dialogRequestClose?.();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const controls = visibleDialogControls(dialog);
+    if (!controls.length) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  dialog.addEventListener('keydown', overlay._dialogTrap);
+  requestAnimationFrame(() => {
+    const target = initialFocus?.offsetParent !== null ? initialFocus : visibleDialogControls(dialog)[0];
+    (target || dialog).focus({ preventScroll: true });
+  });
+}
+
+function deactivateDialogSurface(overlay, dialog) {
+  if (!overlay) return;
+  const trigger = overlay._dialogTrigger;
+  if (dialog && overlay._dialogTrap) dialog.removeEventListener('keydown', overlay._dialogTrap);
+  delete overlay.dataset.dialogActive;
+  overlay.setAttribute('aria-hidden', 'true');
+  overlay.style.display = 'none';
+  overlay._dialogTrap = null;
+  overlay._dialogRequestClose = null;
+  overlay._dialogTrigger = null;
+  updateDialogBackgroundInert();
+  if (trigger?.isConnected) requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
+}
+
+function formSubmitButton(form) {
+  if (!form) return null;
+  return form.querySelector('button[type="submit"]') ||
+    [...document.querySelectorAll('#modal-footer button[type="submit"]')].find(button => button.form === form) ||
+    null;
+}
+
 // Modal
 function openModal(title, bodyHTML, onConfirm) {
+  const overlay = document.getElementById('modal-overlay');
+  const wasClosed = overlay.style.display === 'none';
+  if (wasClosed) window._modalTrigger = document.activeElement;
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').innerHTML = bodyHTML;
-  document.getElementById('modal-overlay').style.display = 'flex';
+  overlay.style.display = 'flex';
+  overlay.setAttribute('aria-hidden', 'false');
+  updateDialogBackgroundInert();
   if (onConfirm) {
     const form = document.querySelector('#modal-body form');
     if (form) {
@@ -97,9 +204,31 @@ function openModal(title, bodyHTML, onConfirm) {
     footer.style.display = 'none';
   }
 
-  // Move focus to the first focusable field for keyboard/accessibility
-  const firstInput = document.querySelector('#modal-body input:not([type=hidden]), #modal-body select, #modal-body textarea');
-  if (firstInput) firstInput.focus();
+  // Focus entry and trapping keep keyboard and screen-reader users inside the dialog.
+  const modal = document.querySelector('.modal');
+  const firstInput = [...modal.querySelectorAll('[autofocus], input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])')]
+    .find(element => element.offsetParent !== null && !element.closest('[hidden]'));
+  (firstInput || modal).focus();
+  if (window._modalTrapHandler) modal.removeEventListener('keydown', window._modalTrapHandler);
+  window._modalTrapHandler = event => {
+    if (event.key !== 'Tab') return;
+    const focusable = visibleDialogControls(modal);
+    if (!focusable.length) {
+      event.preventDefault();
+      modal.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  modal.addEventListener('keydown', window._modalTrapHandler);
 
   // Resize modal to fit above the virtual keyboard on mobile
   if (window.visualViewport) {
@@ -153,7 +282,9 @@ function showUnsavedPrompt(onLeave) {
 
 function closeModal() {
   clearDirtyForm();
-  document.getElementById('modal-overlay').style.display = 'none';
+  const overlay = document.getElementById('modal-overlay');
+  overlay.style.display = 'none';
+  overlay.setAttribute('aria-hidden', 'true');
   document.getElementById('modal-body').innerHTML = '';
   const footer = document.getElementById('modal-footer');
   if (footer) { footer.innerHTML = ''; footer.style.display = 'none'; }
@@ -165,13 +296,23 @@ function closeModal() {
     delete window._modalVpHandler;
   }
   const modal = document.querySelector('.modal');
-  if (modal) modal.style.maxHeight = '';
+  if (modal) {
+    modal.style.maxHeight = '';
+    if (window._modalTrapHandler) modal.removeEventListener('keydown', window._modalTrapHandler);
+  }
+  window._modalTrapHandler = null;
+  updateDialogBackgroundInert();
 
   // Fire optional close callback (e.g. shopping list price confirmation dismiss)
   if (window._modalCloseCallback) {
     const cb = window._modalCloseCallback;
     window._modalCloseCallback = null;
     cb();
+  }
+  const trigger = window._modalTrigger;
+  window._modalTrigger = null;
+  if (overlay.style.display === 'none' && trigger?.isConnected) {
+    requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
   }
 }
 

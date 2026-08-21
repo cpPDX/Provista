@@ -53,14 +53,14 @@ function renderBreakdown(containerId, items, drillType) {
   }
   const max = items[0].amount;
   container.innerHTML = items.map(item => `
-    <div class="breakdown-item" data-drill="${escapeAttr(item.name)}" data-drill-type="${drillType}" title="Tap to view in Prices">
+    <button type="button" class="breakdown-item" data-drill="${escapeAttr(item.name)}" data-drill-type="${drillType}" title="View in Prices">
       <div class="breakdown-name">${escapeHtml(item.name)}</div>
       <div class="breakdown-bar-wrap">
         <div class="breakdown-bar" style="width:${Math.round((item.amount / max) * 100)}%"></div>
       </div>
       <div class="breakdown-amount">${formatCurrency(item.amount)}</div>
       <span class="breakdown-drill-hint">›</span>
-    </div>`).join('');
+    </button>`).join('');
 
   // Tap to drill into prices tab with that category/store pre-filtered
   container.querySelectorAll('.breakdown-item[data-drill]').forEach(el => {

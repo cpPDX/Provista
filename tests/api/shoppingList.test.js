@@ -38,6 +38,16 @@ describe('POST /api/shopping-list', () => {
       .send({ quantity: 1 });
     expect(res.status).toBe(400);
   });
+
+  it('rejects an item from another household', async () => {
+    const first = await setupFixtures();
+    const { cookie: otherCookie } = await createOwnerSession(app);
+    const foreignItem = await request(app).post('/api/items').set('Cookie', otherCookie)
+      .send({ name: 'Foreign List Item', category: 'Other', unit: 'each' });
+    const res = await request(app).post('/api/shopping-list').set('Cookie', first.ownerCookie)
+      .send({ itemId: foreignItem.body._id, quantity: 1 });
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('GET /api/shopping-list', () => {
@@ -53,6 +63,62 @@ describe('GET /api/shopping-list', () => {
   it('returns 401 when not authenticated', async () => {
     const res = await request(app).get('/api/shopping-list');
     expect(res.status).toBe(401);
+  });
+
+  it('marks stale prices and keeps the usual store as the practical default', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const usual = await request(app).post('/api/stores').set('Cookie', ownerCookie)
+      .send({ name: 'Usual Market' });
+    const staleCheap = await request(app).post('/api/stores').set('Cookie', ownerCookie)
+      .send({ name: 'Old Bargain' });
+    await request(app).patch('/api/household/settings').set('Cookie', ownerCookie)
+      .send({ usualStoreId: usual.body._id, priceFreshnessDays: 30, additionalStopSavingsThreshold: 5 });
+    await request(app).post('/api/prices').set('Cookie', ownerCookie).send({
+      itemId, storeId: usual.body._id, regularPrice: 6, quantity: 1, date: new Date().toISOString()
+    });
+    await request(app).post('/api/prices').set('Cookie', ownerCookie).send({
+      itemId,
+      storeId: staleCheap.body._id,
+      regularPrice: 1,
+      quantity: 1,
+      date: new Date(Date.now() - 60 * 86400000).toISOString()
+    });
+    await request(app).post('/api/shopping-list').set('Cookie', ownerCookie)
+      .send({ itemId, quantity: 1 });
+
+    const res = await request(app).get('/api/shopping-list').set('Cookie', ownerCookie);
+    expect(res.status).toBe(200);
+    expect(res.body[0].tripStore._id).toBe(usual.body._id);
+    expect(res.body[0].bestPrice.store._id).toBe(usual.body._id);
+    const oldPrice = res.body[0].priceOptions.find(price => price.store._id === staleCheap.body._id);
+    expect(oldPrice.isStale).toBe(true);
+    expect(oldPrice.ageDays).toBeGreaterThanOrEqual(59);
+  });
+
+  it('suggests another store only when total estimated savings clear the configured threshold', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const usual = await request(app).post('/api/stores').set('Cookie', ownerCookie)
+      .send({ name: 'Normal Store' });
+    const alternate = await request(app).post('/api/stores').set('Cookie', ownerCookie)
+      .send({ name: 'Alternate Store' });
+    await request(app).post('/api/prices').set('Cookie', ownerCookie)
+      .send({ itemId, storeId: usual.body._id, regularPrice: 10, quantity: 1 });
+    await request(app).post('/api/prices').set('Cookie', ownerCookie)
+      .send({ itemId, storeId: alternate.body._id, regularPrice: 7, quantity: 1 });
+    await request(app).post('/api/shopping-list').set('Cookie', ownerCookie)
+      .send({ itemId, quantity: 1 });
+
+    await request(app).patch('/api/household/settings').set('Cookie', ownerCookie)
+      .send({ usualStoreId: usual.body._id, additionalStopSavingsThreshold: 5 });
+    const below = await request(app).get('/api/shopping-list').set('Cookie', ownerCookie);
+    expect(below.body[0].tripStore._id).toBe(usual.body._id);
+    expect(below.body[0].priceContext.additionalStore).toBeNull();
+
+    await request(app).patch('/api/household/settings').set('Cookie', ownerCookie)
+      .send({ additionalStopSavingsThreshold: 2 });
+    const above = await request(app).get('/api/shopping-list').set('Cookie', ownerCookie);
+    expect(above.body[0].tripStore._id).toBe(alternate.body._id);
+    expect(above.body[0].priceContext.estimatedAdditionalStopSavings).toBe(3);
   });
 });
 
@@ -245,7 +311,7 @@ describe('POST /api/shopping-list/complete', () => {
     expect(spend.body.total).toBe(3.25);
   });
 
-  it('updates Spend and Pantry for a member while leaving price history pending', async () => {
+  it('trusts a member shopping-trip price by default while updating Spend and Pantry', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     const purchase = await createCheckedPurchase(ownerCookie, itemId);
     const code = await getInviteCode(app, ownerCookie);
@@ -259,15 +325,37 @@ describe('POST /api/shopping-list/complete', () => {
       });
 
     expect(res.status).toBe(201);
-    expect(res.body).toMatchObject({ pendingPriceCount: 1, approvedPriceCount: 0, total: 4.75 });
+    expect(res.body).toMatchObject({ pendingPriceCount: 0, approvedPriceCount: 1, total: 4.75 });
     const [pantry, prices, spend] = await Promise.all([
       request(app).get('/api/inventory').set('Cookie', memberCookie),
       request(app).get(`/api/prices/history/${itemId}`).set('Cookie', memberCookie),
       request(app).get(`/api/spend?month=${new Date().toISOString().slice(0, 7)}`).set('Cookie', memberCookie)
     ]);
     expect(pantry.body[0].quantity).toBe(1);
-    expect(prices.body[0].status).toBe('pending');
+    expect(prices.body[0].status).toBe('approved');
     expect(spend.body.total).toBe(4.75);
+  });
+
+  it('leaves member shopping-trip prices pending only when strict review is enabled', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const purchase = await createCheckedPurchase(ownerCookie, itemId);
+    const settings = await request(app).patch('/api/household/settings').set('Cookie', ownerCookie)
+      .send({ strictPriceReview: true });
+    expect(settings.status).toBe(200);
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+
+    const res = await request(app).post('/api/shopping-list/complete').set('Cookie', memberCookie)
+      .send({
+        idempotencyKey: `strict-member-trip-${Date.now()}`,
+        addToPantry: true,
+        purchases: [{ ...purchase, price: 5.25 }]
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ pendingPriceCount: 1, approvedPriceCount: 0 });
+    const prices = await request(app).get(`/api/prices/history/${itemId}`).set('Cookie', memberCookie);
+    expect(prices.body[0].status).toBe('pending');
   });
 
   it('can finish with missing prices without changing Pantry', async () => {

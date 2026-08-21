@@ -70,7 +70,7 @@
         const name = document.getElementById('profile-name').value.trim();
         const displayName = document.getElementById('profile-display-name').value.trim();
         const email = document.getElementById('profile-email').value.trim();
-        const submit = form.querySelector('button[type="submit"]');
+        const submit = formSubmitButton(form);
         if (submit) submit.disabled = true;
 
         try {

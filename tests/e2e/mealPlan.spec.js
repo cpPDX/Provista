@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { loginAsNewUser } = require('./helpers/login');
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
+const TEST_WEEK_START_DAY = new Date().getDay();
 
 function dateKey(date) {
   const year = date.getFullYear();
@@ -10,7 +11,7 @@ function dateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
-function currentWeekStart(weekStartDay = 6) {
+function currentWeekStart(weekStartDay = TEST_WEEK_START_DAY) {
   const date = new Date();
   let offset = date.getDay() - weekStartDay;
   if (offset < 0) offset += 7;
@@ -49,7 +50,7 @@ test.describe('Meal Plan Tab', () => {
     await loginAsNewUser(page, baseURL);
 
     const settingsResponse = await page.request.put('/api/meal-plan/settings', {
-      data: { weekStartDay: 6, mealPlanMode: 'dinner' }
+      data: { weekStartDay: TEST_WEEK_START_DAY, mealPlanMode: 'dinner' }
     });
     expect(settingsResponse.ok()).toBeTruthy();
 
@@ -80,6 +81,18 @@ test.describe('Meal Plan Tab', () => {
   test('meal plan content loads with seven day cards', async ({ page }) => {
     await expect(page.locator('#meal-plan-content')).toBeVisible();
     await expect(page.locator('.meal-day')).toHaveCount(7);
+  });
+
+  test('emphasizes today and the next two days while keeping later days collapsible', async ({ page }) => {
+    const days = page.locator('.meal-day');
+    for (let index = 0; index < 3; index++) {
+      await expect(days.nth(index)).toHaveAttribute('data-expanded', 'true');
+      await expect(days.nth(index).locator('.meal-day-content')).toBeVisible();
+    }
+    await expect(days.nth(3)).toHaveAttribute('data-expanded', 'false');
+    await expect(days.nth(3).locator('.meal-day-content')).toBeHidden();
+    await days.nth(3).locator('.meal-day-header').click();
+    await expect(days.nth(3).locator('.meal-day-content')).toBeVisible();
   });
 
   test('each day starts with four meal type sections and quiet default audiences', async ({ page }) => {

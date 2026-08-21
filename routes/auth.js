@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Household = require('../models/Household');
@@ -13,6 +14,7 @@ const FavoriteMeal = require('../models/FavoriteMeal');
 const { requireSession } = require('../middleware/auth');
 const { seedHousehold } = require('../utils/seed');
 const { fallbackDisplayName, syncUserHouseholdPerson } = require('../utils/householdPeople');
+const { sendPasswordResetEmail } = require('../services/passwordResetEmail');
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
@@ -43,6 +45,10 @@ function publicUser(user) {
     householdId: user.householdId,
     preferences: user.preferences
   };
+}
+
+function resetTokenHash(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
 }
 
 // POST /api/auth/register
@@ -115,6 +121,69 @@ router.post('/login', async (req, res) => {
     if (user.householdId) await syncUserHouseholdPerson(user);
     issueToken(res, user._id);
     res.json({ user: publicUser(user) });
+  } catch (err) {
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// POST /api/auth/forgot-password
+// Always returns the same response so this endpoint cannot be used to enumerate accounts.
+router.post('/forgot-password', async (req, res) => {
+  const genericMessage = 'If that email is registered, a password reset link is on its way.';
+  try {
+    const email = String(req.body.email || '').toLowerCase().trim();
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    const user = await User.findOne({ email });
+    if (!user) return res.json({ message: genericMessage });
+
+    const token = crypto.randomBytes(32).toString('base64url');
+    user.passwordResetTokenHash = resetTokenHash(token);
+    user.passwordResetExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    await user.save();
+
+    const baseUrl = String(process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+    let delivery;
+    try {
+      delivery = await sendPasswordResetEmail({ email, resetUrl });
+    } catch (err) {
+      console.error('Password reset email delivery failed', err.message);
+      delivery = { delivered: false, reason: 'delivery-failed' };
+    }
+
+    const response = { message: genericMessage };
+    if (process.env.NODE_ENV !== 'production' && !delivery.delivered) response.resetUrl = resetUrl;
+    res.json(response);
+  } catch (err) {
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const email = String(req.body.email || '').toLowerCase().trim();
+    const token = String(req.body.token || '');
+    const newPassword = String(req.body.newPassword || '');
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ error: 'Email, reset token, and new password are required' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+
+    const user = await User.findOne({
+      email,
+      passwordResetTokenHash: resetTokenHash(token),
+      passwordResetExpiresAt: { $gt: new Date() }
+    }).select('+passwordResetTokenHash +passwordResetExpiresAt');
+    if (!user) return res.status(400).json({ error: 'This password reset link is invalid or has expired' });
+
+    user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    user.passwordResetTokenHash = null;
+    user.passwordResetExpiresAt = null;
+    await user.save();
+    res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -203,6 +272,8 @@ router.put('/password', requireSession, async (req, res) => {
     if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
 
     user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    user.passwordResetTokenHash = null;
+    user.passwordResetExpiresAt = null;
     await user.save();
     res.json({ success: true });
   } catch (err) {

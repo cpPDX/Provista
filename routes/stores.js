@@ -18,7 +18,11 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     if (!req.body.name || !req.body.name.trim()) return res.status(400).json({ error: 'name is required' });
-    const store = new Store({ ...req.body, householdId: req.user.householdId });
+    const store = new Store({
+      householdId: req.user.householdId,
+      name: req.body.name,
+      location: req.body.location
+    });
     await store.save();
     res.status(201).json(store);
   } catch (err) {
@@ -28,9 +32,13 @@ router.post('/', requireAuth, async (req, res) => {
 
 router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
+    const update = {};
+    if (req.body.name !== undefined) update.name = req.body.name;
+    if (req.body.location !== undefined) update.location = req.body.location;
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'Nothing to update' });
     const store = await Store.findOneAndUpdate(
       { _id: req.params.id, householdId: req.user.householdId },
-      req.body,
+      { $set: update },
       { new: true, runValidators: true }
     );
     if (!store) return res.status(404).json({ error: 'Store not found' });
