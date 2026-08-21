@@ -82,6 +82,9 @@ express.static('public')
 | `MONGODB_URI` | `mongodb://localhost:27017/grocerytracker` | MongoDB connection string |
 | `JWT_SECRET` | — | **Required — fatal if missing.** Signs 30-day JWTs |
 | `NODE_ENV` | `development` | Affects cookie `secure` flag |
+| `APP_BASE_URL` | request origin | Public origin used in reset links |
+| `RESEND_API_KEY` | — | Resend key for production password-reset delivery |
+| `PASSWORD_RESET_FROM` | — | Verified reset-email sender |
 
 ### Cookie Configuration
 
@@ -103,14 +106,16 @@ express.static('public')
 | GET | `/api/health` | — | Lightweight connectivity check |
 | POST | `/api/auth/register` | — | Create user + household, or join via invite |
 | POST | `/api/auth/login` | — | Authenticate user, issue JWT cookie |
+| POST | `/api/auth/forgot-password` | — | Request an enumeration-safe 30-minute reset link |
+| POST | `/api/auth/reset-password` | — | Consume a single-use reset token |
 | POST | `/api/auth/logout` | — | Clear auth cookie |
-| GET | `/api/auth/me` | — | Current user + household + feature flags |
+| GET | `/api/auth/me` | cookie | Current user + household + feature flags |
 | PUT | `/api/auth/profile` | cookie | Update name/email/barcode preference |
 | PUT | `/api/auth/password` | cookie | Change password |
 | DELETE | `/api/auth/account` | cookie | Delete own account |
 | GET | `/api/household` | auth | Household info + member list |
 | PUT | `/api/household` | auth + owner | Rename household |
-| PATCH | `/api/household/settings` | auth + admin | Update barcode auto-accept setting |
+| PATCH | `/api/household/settings` | auth + admin | Update trust, usual-store, savings, freshness, and barcode settings |
 | GET | `/api/household/invite` | auth + admin | Get invite code + expiry |
 | GET | `/api/household/invite/qr` | auth + admin | Invite QR code as PNG |
 | POST | `/api/household/invite` | auth + admin | Regenerate invite code |
@@ -118,7 +123,7 @@ express.static('public')
 | PUT | `/api/household/members/:id` | auth + owner | Update member role |
 | DELETE | `/api/household` | auth + owner | Delete household + cascade |
 | GET | `/api/items` | auth | List / search items |
-| POST | `/api/items` | auth + admin | Create item |
+| POST | `/api/items` | auth | Add a non-destructive household catalog item |
 | PUT | `/api/items/:id` | auth + admin | Update item |
 | POST | `/api/items/:id/merge` | auth + admin | Merge item into target |
 | DELETE | `/api/items/:id` | auth + admin | Delete item |
@@ -135,12 +140,12 @@ express.static('public')
 | GET | `/api/prices/compare/:itemId` | auth | Latest price per store |
 | GET | `/api/prices/history/:itemId` | auth | Approved history + current user's pending |
 | GET | `/api/prices/last-purchased/:itemId` | auth | Most recent per store |
-| GET | `/api/inventory` | auth | List items with quantity > 0 |
-| POST | `/api/inventory` | auth + admin | Create / upsert inventory item |
-| PUT | `/api/inventory/:id` | auth + admin | Update inventory item |
+| GET | `/api/inventory` | auth | List Pantry items, low/out first |
+| POST | `/api/inventory` | auth | Create / upsert routine Pantry item |
+| PUT | `/api/inventory/:id` | auth | Update Pantry status / quantity / notes |
 | DELETE | `/api/inventory/:id` | auth + admin | Delete inventory item |
-| GET | `/api/inventory/low-stock` | auth | Items below threshold |
-| GET | `/api/shopping-list` | auth | List with price context |
+| GET | `/api/inventory/low-stock` | auth | Running-low or out items (plus legacy thresholds) |
+| GET | `/api/shopping-list` | auth | List with practical usual-store, savings, and freshness context |
 | POST | `/api/shopping-list` | auth | Add item |
 | POST | `/api/shopping-list/complete` | auth | Complete a trip across Pantry, price history, Spend, list, and low stock |
 | PUT | `/api/shopping-list/:id` | auth | Update item |
@@ -164,6 +169,7 @@ express.static('public')
 | GET | `/api/sync/bootstrap` | auth | Offline cache population |
 | GET | `/api/barcode/:upc` | auth | Lookup barcode locally or via Open Food Facts |
 | GET | `/join` | — | Serve login.html for invite links |
+| GET | `/reset-password` | — | Serve the password-reset form |
 | GET | `/*` | — | SPA fallback → index.html |
 
 ---
@@ -185,11 +191,13 @@ Password hashing: bcrypt, `SALT_ROUNDS = 12`.
 | Action | member | admin | owner |
 |---|:---:|:---:|:---:|
 | View prices, items, stores | ✓ | ✓ | ✓ |
-| Submit price (→ pending) | ✓ | ✓ | ✓ |
-| Price auto-approved on submit | | ✓ | ✓ |
+| Complete a trip with trusted prices (default) | ✓ | ✓ | ✓ |
+| Submit a standalone manual price (member → pending) | ✓ | ✓ | ✓ |
 | Approve / reject pending prices | | ✓ | ✓ |
-| Create/edit/delete items & stores | | ✓ | ✓ |
-| Manage inventory | | ✓ | ✓ |
+| Add catalog items and stores | ✓ | ✓ | ✓ |
+| Edit / merge / delete catalog items and stores | | ✓ | ✓ |
+| Change routine Pantry status / quantities | ✓ | ✓ | ✓ |
+| Delete a Pantry tracking record | | ✓ | ✓ |
 | Change household settings | | ✓ | ✓ |
 | Manage invite codes | | ✓ | ✓ |
 | Remove members | | ✓ | ✓ |
@@ -338,6 +346,7 @@ pricePerUnit = finalPrice / quantity;
 | `householdId` | ObjectId → Household | required |
 | `itemId` | ObjectId → Item | required, unique per household |
 | `quantity` | Number | required, default 0 |
+| `stockStatus` | `have` \| `low` \| `out` | routine status, default `have` |
 | `unit` | String | trimmed |
 | `lowStockThreshold` | Number | default null |
 | `lastUpdatedBy` | ObjectId → User | |
@@ -600,7 +609,7 @@ Database: `provista-offline` v1.  Stale threshold: **15 minutes**.
 | `/prices/last-purchased/:itemId` | Most recent per store |
 | `/spend?month=YYYY-MM` | Cached spend object for month |
 | `/spend/summary` | All cached months |
-| `/inventory/low-stock` | `quantity <= lowStockThreshold` |
+| `/inventory/low-stock` | `stockStatus` is `low` / `out`, with legacy threshold fallback |
 | `/prices/pending` | `status === 'pending'` |
 | `/items?search=...` | Name substring, case-insensitive |
 

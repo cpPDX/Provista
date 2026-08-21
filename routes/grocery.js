@@ -44,8 +44,8 @@ function calcFinalPrice(regularPrice, salePrice, couponAmount) {
 
 // POST /api/grocery/log
 // One user action can create/select the catalog item and store, then record its price.
-// Catalog-item creation remains admin/owner controlled; store creation follows the
-// existing household policy and is available to authenticated household members.
+// Adding a catalog item or store is non-destructive household collaboration.
+// Replacing existing price history remains admin/owner controlled.
 router.post('/log', requireAuth, async (req, res) => {
   const householdId = req.user.householdId;
   const isAdmin = ['admin', 'owner'].includes(req.user.role);
@@ -77,7 +77,6 @@ router.post('/log', requireAuth, async (req, res) => {
       item = await Item.findOne({ _id: req.body.itemId, householdId });
       if (!item) fail(404, 'Item not found in this household');
     } else if (req.body.item) {
-      if (!isAdmin) fail(403, 'Admin or owner role required to create a new item');
       const data = req.body.item;
       const name = String(data.name || '').trim();
       const category = String(data.category || '').trim();

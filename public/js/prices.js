@@ -110,7 +110,7 @@ function renderPricesList(clusters) {
       isMulti ? `<span class="badge badge-muted">${members.length} variants</span>` : ''
     ].filter(Boolean).join(' ');
     return `
-      <div class="card price-list-card" data-cluster-idx="${idx}">
+      <button type="button" class="card price-list-card" data-cluster-idx="${idx}" aria-label="View price history for ${escapeAttr(item?.name || 'Unknown item')}">
         <div class="card-body">
           <div class="card-title">${escapeHtml(item?.name || 'Unknown item')}${item?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.brand) + ')</span>' : ''}</div>
           <div class="card-subtitle">${item ? formatItemMeta(item) : ''} &middot; ${storeName} &middot; ${formatDate(latest.date)}</div>
@@ -120,7 +120,7 @@ function renderPricesList(clusters) {
           <div class="price-big">${formatCurrency(latest.finalPrice)}</div>
           <div class="price-unit">${formatPPU(latest.pricePerUnit, escapeHtml(unit))}</div>
         </div>
-      </div>`;
+      </button>`;
   }).join('');
 
   container.querySelectorAll('.price-list-card').forEach(card => {
@@ -227,14 +227,14 @@ function openPricesFilterSheet() {
     ${stores.length ? `<div><div class="filter-section-label">Store</div><div class="filter-chips">${storeChips}</div></div>` : ''}
     <div>
       <div class="filter-section-label">Show only</div>
-      <div class="filter-toggle-row">
+      <label class="filter-toggle-row">
         <span>Organic only</span>
-        <input type="checkbox" ${f.organicOnly ? 'checked' : ''} onchange="pricesState.filter.organicOnly=this.checked" />
-      </div>
-      <div class="filter-toggle-row">
+        <input type="checkbox" aria-label="Organic only" ${f.organicOnly ? 'checked' : ''} onchange="pricesState.filter.organicOnly=this.checked" />
+      </label>
+      <label class="filter-toggle-row">
         <span>On sale only</span>
-        <input type="checkbox" ${f.saleOnly ? 'checked' : ''} onchange="pricesState.filter.saleOnly=this.checked" />
-      </div>
+        <input type="checkbox" aria-label="On sale only" ${f.saleOnly ? 'checked' : ''} onchange="pricesState.filter.saleOnly=this.checked" />
+      </label>
     </div>`;
 
   document.getElementById('filter-sheet-clear').onclick = () => {
@@ -243,14 +243,16 @@ function openPricesFilterSheet() {
     applyPricesFilter();
   };
   document.getElementById('filter-sheet-done').onclick = () => { closeFilterSheet(); applyPricesFilter(); };
-  document.getElementById('filter-sheet-overlay').style.display = 'flex';
-  document.getElementById('filter-sheet-overlay').onclick = (e) => {
-    if (e.target === document.getElementById('filter-sheet-overlay')) { closeFilterSheet(); applyPricesFilter(); }
+  const overlay = document.getElementById('filter-sheet-overlay');
+  const closeAndApply = () => { closeFilterSheet(); applyPricesFilter(); };
+  activateDialogSurface(overlay, document.getElementById('filter-sheet'), document.getElementById('filter-sheet-done'), closeAndApply);
+  overlay.onclick = (e) => {
+    if (e.target === overlay) closeAndApply();
   };
 }
 
 function closeFilterSheet() {
-  document.getElementById('filter-sheet-overlay').style.display = 'none';
+  deactivateDialogSurface(document.getElementById('filter-sheet-overlay'), document.getElementById('filter-sheet'));
 }
 
 function togglePriceFilterCat(btn) {
@@ -499,7 +501,7 @@ async function loadDetailHistory(itemId) {
           <div class="card-meta">
             <div class="price-big ${isBest ? 'price-best' : ''}">${formatCurrency(e.finalPrice)}</div>
             <div class="price-unit">${formatPPU(e.pricePerUnit, unit)}</div>
-            ${canDelete ? `<button class="btn btn-icon text-danger" onclick="deletePriceEntry('${e._id}','${itemId}')" style="font-size:1rem;min-height:32px;min-width:32px">✕</button>` : ''}
+            ${canDelete ? `<button class="btn btn-icon text-danger" onclick="deletePriceEntry('${e._id}','${itemId}')" style="font-size:1rem" aria-label="Delete price entry">✕</button>` : ''}
           </div>
         </div>`;
     }).join('');

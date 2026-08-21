@@ -43,4 +43,29 @@ async function loginAsNewUser(page, baseURL) {
   return { ..._credentials };
 }
 
-module.exports = { loginAsNewUser };
+/**
+ * Adds a normal member to the owner household currently open in `page`, then
+ * signs the browser into that member account.
+ */
+async function loginAsHouseholdMember(page, baseURL) {
+  const inviteResponse = await page.request.get('/api/household/invite');
+  if (!inviteResponse.ok()) throw new Error(`Invite lookup failed: ${await inviteResponse.text()}`);
+  const { inviteCode } = await inviteResponse.json();
+  const email = `e2e-member-${uid()}@test.com`;
+  const password = 'password123';
+  const apiReq = await request.newContext({ baseURL });
+  const register = await apiReq.post('/api/auth/register', {
+    data: { name: 'E2E Member', email, password, action: 'join', inviteCode }
+  });
+  if (!register.ok()) throw new Error(`Member register failed: ${await register.text()}`);
+  await apiReq.dispose();
+
+  await page.goto('/login.html');
+  await page.locator('#login-form input[name="email"]').fill(email);
+  await page.locator('#login-form input[name="password"]').fill(password);
+  await page.locator('#login-form').getByRole('button', { name: 'Sign In' }).click();
+  await page.waitForURL('/', { timeout: 15000 });
+  return { email, password };
+}
+
+module.exports = { loginAsNewUser, loginAsHouseholdMember };

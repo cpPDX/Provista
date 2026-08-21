@@ -158,11 +158,15 @@ async function loadTripContext(householdId, purchases, session) {
 }
 
 async function countLowStock(householdId, session) {
-  const query = InventoryItem.find({ householdId, lowStockThreshold: { $ne: null } })
-    .select('quantity lowStockThreshold')
+  const query = InventoryItem.find({ householdId })
+    .select('quantity lowStockThreshold stockStatus')
     .lean();
   const items = await withSession(query, session);
-  return items.filter(item => item.quantity <= item.lowStockThreshold).length;
+  return items.filter(item =>
+    item.stockStatus === 'low' || item.stockStatus === 'out' || (
+      item.lowStockThreshold != null && item.quantity <= item.lowStockThreshold
+    )
+  ).length;
 }
 
 async function applyPantryUpdates({ householdId, userId, tripId, snapshots, session, rollback }) {
@@ -194,6 +198,7 @@ async function applyPantryUpdates({ householdId, userId, tripId, snapshots, sess
       update: {
         $inc: { quantity: update.quantity },
         $set: {
+          stockStatus: 'have',
           lastUpdated: new Date(),
           lastUpdatedBy: userId,
           lastPurchaseTripId: tripId
@@ -211,7 +216,7 @@ async function applyPantryUpdates({ householdId, userId, tripId, snapshots, sess
   return updates.length;
 }
 
-async function executeTrip({ householdId, userId, role, request }, session, rollback = null) {
+async function executeTrip({ householdId, userId, role, strictPriceReview, request }, session, rollback = null) {
   const existing = await findExistingTrip(householdId, request.idempotencyKey, session);
   if (existing?.status === 'completed') return tripSummary(existing, true);
   if (existing) fail(409, 'This shopping trip is already being processed');
@@ -222,6 +227,7 @@ async function executeTrip({ householdId, userId, role, request }, session, roll
   const pricedItemCount = snapshots.filter(item => item.price !== null).length;
   const missingPriceCount = snapshots.length - pricedItemCount;
   const isAdmin = ['admin', 'owner'].includes(role);
+  const trustSubmittedPrices = isAdmin || !strictPriceReview;
 
   const trip = new ShoppingTrip({
     householdId,
@@ -255,9 +261,9 @@ async function executeTrip({ householdId, userId, role, request }, session, roll
       date: now,
       source: 'shopping-trip',
       shoppingTripId: trip._id,
-      status: isAdmin ? 'approved' : 'pending',
-      reviewedBy: isAdmin ? userId : null,
-      reviewedAt: isAdmin ? now : null,
+      status: trustSubmittedPrices ? 'approved' : 'pending',
+      reviewedBy: trustSubmittedPrices ? userId : null,
+      reviewedAt: trustSubmittedPrices ? now : null,
       notes: 'Recorded when shopping trip was completed'
     }));
 
@@ -294,8 +300,8 @@ async function executeTrip({ householdId, userId, role, request }, session, roll
   trip.status = 'completed';
   trip.completedAt = now;
   trip.pantryItemCount = pantryItemCount;
-  trip.approvedPriceCount = isAdmin ? priceEntries.length : 0;
-  trip.pendingPriceCount = isAdmin ? 0 : priceEntries.length;
+  trip.approvedPriceCount = trustSubmittedPrices ? priceEntries.length : 0;
+  trip.pendingPriceCount = trustSubmittedPrices ? 0 : priceEntries.length;
   trip.lowStockCount = await countLowStock(householdId, session);
   await trip.save(writeOptions(session));
 
@@ -373,11 +379,12 @@ async function executeWithCompensation(input) {
   }
 }
 
-async function completeShoppingTrip({ householdId, userId, role, body }) {
+async function completeShoppingTrip({ householdId, userId, role, strictPriceReview = false, body }) {
   const input = {
     householdId,
     userId,
     role,
+    strictPriceReview,
     request: normalizeRequest(body)
   };
 
@@ -395,7 +402,7 @@ async function completeShoppingTrip({ householdId, userId, role, body }) {
   } catch (err) {
     if (err?.code === 11000) {
       const existing = await findExistingTrip(
-        householdId,
+        input.householdId,
         input.request.idempotencyKey,
         null
       );

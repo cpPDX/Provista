@@ -524,9 +524,12 @@ async function offlineFilter(store, path) {
   // /inventory/low-stock — filter inventory to low stock items
   if (path === '/inventory/low-stock') {
     const all = await offlineDb.getAll('inventory');
-    return all.filter(i =>
-      i.lowStockThreshold != null && i.quantity <= i.lowStockThreshold
-    );
+    return all.filter(i => {
+      const status = i.stockStatus || (i.quantity <= 0
+        ? 'out'
+        : (i.lowStockThreshold != null && i.quantity <= i.lowStockThreshold ? 'low' : 'have'));
+      return status === 'low' || status === 'out';
+    });
   }
 
   // /prices/pending — filter to pending entries
@@ -575,7 +578,7 @@ function openSyncFailureSheet() {
             </div>
             <div style="display:flex;gap:0.25rem;flex-shrink:0">
               <button class="btn btn-outline btn-sm" onclick="syncQueue.retry('${escapeAttr(item.id)}');closeModal()">Retry</button>
-              <button class="btn btn-danger btn-sm" onclick="syncQueue.discard('${escapeAttr(item.id)}');closeModal()">Discard</button>
+              <button class="btn btn-danger btn-sm" onclick="discardFailedSync('${escapeAttr(item.id)}')">Discard</button>
             </div>
           </div>`).join('')}
       </div>
@@ -585,4 +588,11 @@ function openSyncFailureSheet() {
 
     openModal('Sync Issues', bodyHTML);
   });
+}
+
+async function discardFailedSync(id) {
+  if (!confirm('Discard this unsaved offline change? This cannot be undone.')) return;
+  await syncQueue.discard(id);
+  closeModal();
+  showToast('Offline change discarded');
 }

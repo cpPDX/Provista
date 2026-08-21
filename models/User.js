@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true },
   householdId: { type: mongoose.Schema.Types.ObjectId, ref: 'Household', default: null },
   role: { type: String, enum: ['owner', 'admin', 'member'], default: 'member' },
+  passwordResetTokenHash: { type: String, default: null, select: false },
+  passwordResetExpiresAt: { type: Date, default: null, select: false },
   preferences: {
     barcodeAutoAccept: { type: Boolean, default: null }  // null = inherit household setting
   }

@@ -57,6 +57,53 @@ describe('PUT /api/household', () => {
   });
 });
 
+describe('PATCH /api/household/settings', () => {
+  it('lets an admin configure practical shopping defaults and strict review', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const store = await request(app).post('/api/stores').set('Cookie', cookie)
+      .send({ name: 'Usual Grocery' });
+    const res = await request(app).patch('/api/household/settings').set('Cookie', cookie)
+      .send({
+        usualStoreId: store.body._id,
+        additionalStopSavingsThreshold: 12.5,
+        priceFreshnessDays: 21,
+        strictPriceReview: true
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.settings).toMatchObject({
+      usualStoreId: store.body._id,
+      additionalStopSavingsThreshold: 12.5,
+      priceFreshnessDays: 21,
+      strictPriceReview: true
+    });
+  });
+
+  it('keeps shopping settings administrative', async () => {
+    const { cookie: ownerCookie } = await createOwnerSession(app);
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+    const res = await request(app).patch('/api/household/settings').set('Cookie', memberCookie)
+      .send({ strictPriceReview: true });
+    expect(res.status).toBe(403);
+  });
+
+  it('validates thresholds, freshness, and the usual store household', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const { cookie: otherCookie } = await createOwnerSession(app);
+    const foreignStore = await request(app).post('/api/stores').set('Cookie', otherCookie)
+      .send({ name: 'Foreign Store' });
+    const threshold = await request(app).patch('/api/household/settings').set('Cookie', cookie)
+      .send({ additionalStopSavingsThreshold: -1 });
+    const freshness = await request(app).patch('/api/household/settings').set('Cookie', cookie)
+      .send({ priceFreshnessDays: 0 });
+    const store = await request(app).patch('/api/household/settings').set('Cookie', cookie)
+      .send({ usualStoreId: foreignStore.body._id });
+    expect(threshold.status).toBe(400);
+    expect(freshness.status).toBe(400);
+    expect(store.status).toBe(404);
+  });
+});
+
 describe('household people', () => {
   it('owner can add a person without creating a user account', async () => {
     const { cookie } = await createOwnerSession(app);

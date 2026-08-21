@@ -55,13 +55,24 @@ describe('POST /api/inventory', () => {
     expect(list.body.length).toBe(1);
   });
 
-  it('returns 403 for member', async () => {
+  it('lets a member add a routine Pantry item', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     const code = await getInviteCode(app, ownerCookie);
     const { cookie: memberCookie } = await createMemberSession(app, code);
     const res = await request(app).post('/api/inventory').set('Cookie', memberCookie)
-      .send({ itemId, quantity: 1 });
-    expect(res.status).toBe(403);
+      .send({ itemId, stockStatus: 'low', quantity: 1 });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ stockStatus: 'low', quantity: 1 });
+  });
+
+  it('rejects a catalog item from another household', async () => {
+    const { ownerCookie } = await setupFixtures();
+    const { cookie: otherCookie } = await createOwnerSession(app);
+    const foreignItem = await request(app).post('/api/items').set('Cookie', otherCookie)
+      .send({ name: 'Foreign Milk', category: 'Dairy', unit: 'gallon' });
+    const res = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
+      .send({ itemId: foreignItem.body._id, stockStatus: 'have' });
+    expect(res.status).toBe(404);
   });
 });
 
@@ -111,6 +122,39 @@ describe('PUT /api/inventory/:id', () => {
     const res = await request(app).put('/api/inventory/64f0000000000000000000aa')
       .set('Cookie', ownerCookie).send({ quantity: 1 });
     expect(res.status).toBe(404);
+  });
+
+  it('lets a member mark an item low, out, and replenished without admin help', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const inv = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
+      .send({ itemId, quantity: 3, stockStatus: 'have' });
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+
+    const low = await request(app).put(`/api/inventory/${inv.body._id}`).set('Cookie', memberCookie)
+      .send({ stockStatus: 'low' });
+    const out = await request(app).put(`/api/inventory/${inv.body._id}`).set('Cookie', memberCookie)
+      .send({ stockStatus: 'out' });
+    const have = await request(app).put(`/api/inventory/${inv.body._id}`).set('Cookie', memberCookie)
+      .send({ stockStatus: 'have' });
+
+    expect(low.status).toBe(200);
+    expect(low.body.stockStatus).toBe('low');
+    expect(out.body).toMatchObject({ stockStatus: 'out', quantity: 0 });
+    expect(have.body.stockStatus).toBe('have');
+    expect(have.body.quantity).toBeGreaterThan(0);
+  });
+
+  it('lets a member adjust routine exact quantities', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const inv = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
+      .send({ itemId, quantity: 2 });
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+    const res = await request(app).put(`/api/inventory/${inv.body._id}`).set('Cookie', memberCookie)
+      .send({ quantity: 4 });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ quantity: 4, stockStatus: 'have' });
   });
 });
 

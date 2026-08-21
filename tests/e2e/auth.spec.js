@@ -36,6 +36,35 @@ test.describe('Authentication', () => {
 
     // Should land on main app
     await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.locator('#tab-prices')).toBeVisible();
+    await expect(page.locator('#tab-home')).toBeVisible();
+  });
+
+  test('recovers a forgotten password from the visible sign-in flow', async ({ page }) => {
+    const email = `e2e-recovery-${Date.now()}@test.com`;
+    const register = await page.request.post('/api/auth/register', {
+      data: {
+        name: 'Recovery User',
+        email,
+        password: 'password123',
+        action: 'create',
+        householdName: 'Recovery Household'
+      }
+    });
+    expect(register.ok()).toBeTruthy();
+
+    await page.goto('/login.html');
+    await page.click('#forgot-password-link');
+    await expect(page.locator('#step-forgot')).toBeVisible();
+    await page.fill('#forgot-email', email);
+    await page.getByRole('button', { name: 'Send reset link' }).click();
+    await expect(page.locator('#forgot-message')).toContainText('reset link');
+    await page.getByRole('link', { name: 'Open local reset link' }).click();
+
+    await expect(page.locator('#step-reset')).toBeVisible();
+    await page.fill('#reset-password', 'replacement456');
+    await page.fill('#reset-password-confirm', 'replacement456');
+    await page.getByRole('button', { name: 'Reset password' }).click();
+    await expect(page.locator('#login-message')).toContainText('Password reset');
+    await expect(page.locator('#login-email')).toHaveValue(email);
   });
 });

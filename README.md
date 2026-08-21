@@ -19,10 +19,10 @@ Grocery prices change constantly, vary by store, and go on sale in unpredictable
 Provista gives households a shared, running log of prices — tied to specific stores, with sale prices, coupon tracking, and a price-per-unit breakdown so you can compare apples to apples (literally).
 
 - **Barcode scanning** captures item details without manual entry
-- **Shopping list** shows the best-known price and which store to go to for each item
+- **Shopping list** defaults to the household’s usual store, shows price age, and suggests another stop only when the savings matter
 - **Spend analytics** break down monthly spend by category and store
-- **Inventory tracking** prevents over-buying
-- **Household sharing** with roles means everyone in the house has the same information, and a lightweight approval flow keeps the data clean when non-admin members submit prices
+- **Pantry status** keeps Have · Running low · Out sustainable without forcing exact cupboard counts
+- **Household sharing** trusts routine Pantry and trip activity while reserving approval for standalone member price submissions or an optional strict-review setting
 
 ---
 
@@ -31,11 +31,11 @@ Provista gives households a shared, running log of prices — tied to specific s
 - **Auth & Households** — JWT auth (httpOnly cookies), multi-user households with Owner/Admin/Member roles
 - **Invite System** — 6-character invite codes + QR codes; 48-hour expiry, admin-regeneratable
 - **Price Tracking** — Log prices per item per store with regular price, sale price, and coupon breakdown; compare stores; view trends over time
-- **Pending Approval** — Members submit prices for admin review; admins see a badge and inline review queue
+- **Household trust** — Normal shopping-trip prices are trusted by default; households can opt into strict admin review
 - **Barcode Scanning** — Scan UPC/EAN barcodes to auto-populate item details via Open Food Facts; partial matches let you fill in gaps and save them for future scans
-- **Shopping List** — Persistent list with best-price-per-store suggestions and "added by" attribution
+- **Shopping List** — Practical usual-store trip grouping, price freshness, optimistic check-off, and one-step trip completion
 - **Spend Analytics** — Monthly spend totals with breakdowns by category and store
-- **Inventory** — Basic in-stock tracking with quantity management (admin only)
+- **Pantry** — Have / Running low / Out status and optional exact quantities, editable by every household member
 - **Item Catalog** — ~200 seeded common US grocery items per household; fully editable
 - **Account Settings** — Each user can update their name, email, and password
 
@@ -58,7 +58,7 @@ Provista gives households a shared, running log of prices — tied to specific s
 - [Railway](https://railway.app) — only if you want to host it online (optional; local is fine for home use)
 
 **Install on your PC:**
-- [Node.js 18+](https://nodejs.org) — download the LTS version
+- [Node.js 20.19+](https://nodejs.org) — download the LTS version
 - [Git](https://git-scm.com) — to clone the repo
 
 ---
@@ -102,11 +102,17 @@ Create a `.env` file in the project root:
 MONGODB_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/provista?retryWrites=true&w=majority
 JWT_SECRET=any-long-random-string-you-make-up
 PORT=3000
+APP_BASE_URL=http://localhost:3000
+# Configure these in production to deliver password-reset email:
+# RESEND_API_KEY=re_...
+# PASSWORD_RESET_FROM=Provista <no-reply@example.com>
 ```
 
 - `MONGODB_URI` — paste your Atlas connection string from above
 - `JWT_SECRET` — any long random string (e.g. `mySuperSecretKey12345abc`); used to sign login tokens
 - `PORT` — `3000` works fine locally
+- `APP_BASE_URL` — public origin used in password-reset links (for example, `https://provista.example.com`)
+- `RESEND_API_KEY` / `PASSWORD_RESET_FROM` — required in production to deliver password-reset email
 
 ```bash
 # 4. Start the server
@@ -141,9 +147,9 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 
 | Role | Can do |
 |------|--------|
-| **Owner** | Everything — manage roles, rename household, approve/reject prices |
-| **Admin** | Approve prices, manage inventory/catalog/stores, view invite codes |
-| **Member** | Submit prices (pending admin review), manage shopping list, view data |
+| **Owner** | Everything — manage roles, household settings, and destructive catalog changes |
+| **Admin** | Manage catalog/stores, optional strict price review, and invite codes |
+| **Member** | Manage the List and routine Pantry status/quantities, add catalog items, and record trusted shopping-trip prices unless strict review is enabled |
 
 ---
 
@@ -159,6 +165,8 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
    - `MONGODB_URI` — your Atlas connection string
    - `JWT_SECRET` — your secret string
    - `NODE_ENV` — set to `production` (enables secure cookies)
+   - `APP_BASE_URL` — your Railway public URL
+   - `RESEND_API_KEY` and `PASSWORD_RESET_FROM` — password-reset delivery credentials
    - `PORT` is injected automatically; don't set it manually
 
 4. Push to the connected branch — Railway deploys automatically and gives you a public URL
@@ -173,6 +181,9 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 | `PORT` | `3000` | HTTP port (auto-set by Railway) |
 | `JWT_SECRET` | *(required)* | Long random secret for signing JWTs |
 | `NODE_ENV` | `development` | Set to `production` for secure cookies |
+| `APP_BASE_URL` | Request origin | Public origin placed in password-reset links |
+| `RESEND_API_KEY` | *(none)* | Resend API key; required for production reset-email delivery |
+| `PASSWORD_RESET_FROM` | *(none)* | Verified sender used for reset email |
 
 ---
 
@@ -228,7 +239,7 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
         ├── prices.js       # Price log tab
         ├── shoppingList.js # Shopping list tab
         ├── spend.js        # Analytics tab
-        ├── more.js         # Inventory, catalog, stores, household, account
+        ├── more.js         # Pantry, catalog, stores, household, account
         └── app.js          # Tab navigation + initialization
 ```
 
@@ -240,6 +251,8 @@ Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1
 POST   /api/auth/register             create account
 POST   /api/auth/login                login
 POST   /api/auth/logout               clear cookie
+POST   /api/auth/forgot-password      request an enumeration-safe reset link
+POST   /api/auth/reset-password       consume a 30-minute, single-use reset token
 GET    /api/auth/me                   current user + household + feature flags
 PUT    /api/auth/profile              update name/email/barcode preference
 PUT    /api/auth/password             change password
@@ -273,12 +286,12 @@ GET    /api/prices/last-purchased/:itemId  most recent approved entry per store
 
 GET    /api/barcode/:upc              look up item by UPC (local catalog, then Open Food Facts)
 
-GET    /api/inventory                 list inventory (quantity > 0)
-POST   /api/inventory                 add or update inventory item
-PUT    /api/inventory/:id             update quantity/notes
-DELETE /api/inventory/:id             remove from inventory
+GET    /api/inventory                 list Pantry items, low/out first
+POST   /api/inventory                 add or update a Pantry item (all roles)
+PUT    /api/inventory/:id             update status/quantity/notes (all roles)
+DELETE /api/inventory/:id             stop tracking a Pantry item (admin+)
 
-GET    /api/shopping-list             list with best-price context per item
+GET    /api/shopping-list             list with usual-store, savings, and freshness context
 POST   /api/shopping-list             add item to list
 POST   /api/shopping-list/complete    complete trip; update Pantry, prices, Spend, list + low stock
 PUT    /api/shopping-list/:id         update item (checked, quantity)

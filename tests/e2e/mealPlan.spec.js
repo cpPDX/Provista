@@ -2,6 +2,15 @@ const { test, expect } = require('@playwright/test');
 const { loginAsNewUser } = require('./helpers/login');
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
+const TODAY_DAY = new Date().getDay();
+// Household settings intentionally support the common Saturday, Sunday, and
+// Monday week starts. Pick one that keeps today and the next two days inside
+// the current test week instead of sending an unsupported setting on Tue-Fri.
+const TEST_WEEK_START_DAY = [0, 1, 6].includes(TODAY_DAY) ? TODAY_DAY : 1;
+
+function currentDayIndex() {
+  return (new Date().getDay() - TEST_WEEK_START_DAY + 7) % 7;
+}
 
 function dateKey(date) {
   const year = date.getFullYear();
@@ -10,7 +19,7 @@ function dateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
-function currentWeekStart(weekStartDay = 6) {
+function currentWeekStart(weekStartDay = TEST_WEEK_START_DAY) {
   const date = new Date();
   let offset = date.getDay() - weekStartDay;
   if (offset < 0) offset += 7;
@@ -40,7 +49,7 @@ function blankWeek(weekStart) {
   }));
 }
 
-function dinnerRow(page, dayIndex = 0) {
+function dinnerRow(page, dayIndex = currentDayIndex()) {
   return page.locator(`.meal-day[data-day-index="${dayIndex}"] .meal-type-section[data-meal-type="dinner"] .meal-row`).first();
 }
 
@@ -49,7 +58,7 @@ test.describe('Meal Plan Tab', () => {
     await loginAsNewUser(page, baseURL);
 
     const settingsResponse = await page.request.put('/api/meal-plan/settings', {
-      data: { weekStartDay: 6, mealPlanMode: 'dinner' }
+      data: { weekStartDay: TEST_WEEK_START_DAY, mealPlanMode: 'dinner' }
     });
     expect(settingsResponse.ok()).toBeTruthy();
 
@@ -82,8 +91,22 @@ test.describe('Meal Plan Tab', () => {
     await expect(page.locator('.meal-day')).toHaveCount(7);
   });
 
+  test('emphasizes today and the next two days while keeping later days collapsible', async ({ page }) => {
+    const days = page.locator('.meal-day');
+    const todayIndex = currentDayIndex();
+    for (let index = todayIndex; index < todayIndex + 3; index++) {
+      await expect(days.nth(index)).toHaveAttribute('data-expanded', 'true');
+      await expect(days.nth(index).locator('.meal-day-content')).toBeVisible();
+    }
+    const collapsedIndex = todayIndex === 0 ? 3 : 0;
+    await expect(days.nth(collapsedIndex)).toHaveAttribute('data-expanded', 'false');
+    await expect(days.nth(collapsedIndex).locator('.meal-day-content')).toBeHidden();
+    await days.nth(collapsedIndex).locator('.meal-day-header').click();
+    await expect(days.nth(collapsedIndex).locator('.meal-day-content')).toBeVisible();
+  });
+
   test('each day starts with four meal type sections and quiet default audiences', async ({ page }) => {
-    const dayCard = page.locator('.meal-day').first();
+    const dayCard = page.locator(`.meal-day[data-day-index="${currentDayIndex()}"]`);
     await expect(dayCard.locator('.meal-type-section')).toHaveCount(4);
     await expect(page.locator('.meal-plan-mode-summary')).toHaveText('Dinner only');
     await expect(dayCard.locator('.meal-type-section[data-meal-type="dinner"]')).toBeVisible();
@@ -111,7 +134,7 @@ test.describe('Meal Plan Tab', () => {
     await page.locator('#modal-footer button[form="meal-plan-settings-form"]').click();
 
     await expect(page.locator('.meal-plan-mode-summary')).toHaveText('All meals');
-    const breakfast = page.locator('.meal-day').first()
+    const breakfast = page.locator(`.meal-day[data-day-index="${currentDayIndex()}"]`)
       .locator('.meal-type-section[data-meal-type="breakfast"]');
     await expect(breakfast).toBeVisible();
     await expect(breakfast.locator('.meal-type-rows')).toBeHidden();
@@ -124,7 +147,7 @@ test.describe('Meal Plan Tab', () => {
     await firstDinner.locator('.meal-name-input').fill('Tacos');
     await firstDinner.locator('.meal-repeat-btn').click();
 
-    const nextDinner = dinnerRow(page, 1);
+    const nextDinner = dinnerRow(page, currentDayIndex() + 1);
     await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Tacos');
     await nextDinner.locator('.meal-leftovers-btn').click();
     await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Leftovers');
@@ -230,7 +253,7 @@ test.describe('Meal Plan Tab', () => {
   });
 
   test('a separate meal starts with a real household audience', async ({ page }) => {
-    const firstSection = page.locator('.meal-day').first()
+    const firstSection = page.locator(`.meal-day[data-day-index="${currentDayIndex()}"]`)
       .locator('.meal-type-section[data-meal-type="dinner"]');
     await firstSection.locator('.meal-add-row').click();
     await expect(firstSection.locator('.meal-row')).toHaveCount(2);
@@ -254,7 +277,7 @@ test.describe('Meal Plan Tab', () => {
     const weekStart = currentWeekStart();
     const previousWeekStart = addDays(weekStart, -7);
     const previousDays = blankWeek(previousWeekStart);
-    const previousDinner = previousDays[0].meals.find(meal => meal.mealType === 'dinner');
+    const previousDinner = previousDays[currentDayIndex()].meals.find(meal => meal.mealType === 'dinner');
     previousDinner.name = 'Last Week Tacos';
     previousDinner.notes = 'tortillas, lettuce, salsa';
 

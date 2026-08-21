@@ -30,12 +30,13 @@ describe('POST /api/items', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 403 when called by member', async () => {
+  it('lets a member add a non-destructive catalog item', async () => {
     const { cookie: ownerCookie } = await createOwnerSession(app);
     const code = await getInviteCode(app, ownerCookie);
     const { cookie: memberCookie } = await createMemberSession(app, code);
     const res = await createItem(memberCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+    expect(res.body.name).toBe('Apples');
   });
 });
 

@@ -50,10 +50,42 @@ router.put('/', requireAuth, requireOwner, async (req, res) => {
 // PATCH /api/household/settings - update household-level settings (admin+)
 router.patch('/settings', requireAuth, requireAdmin, async (req, res) => {
   try {
-    const { barcodeAutoAccept } = req.body;
+    const {
+      barcodeAutoAccept,
+      strictPriceReview,
+      usualStoreId,
+      additionalStopSavingsThreshold,
+      priceFreshnessDays
+    } = req.body;
     const update = {};
     if (typeof barcodeAutoAccept === 'boolean') {
       update['settings.barcodeAutoAccept'] = barcodeAutoAccept;
+    }
+    if (typeof strictPriceReview === 'boolean') {
+      update['settings.strictPriceReview'] = strictPriceReview;
+    }
+    if (usualStoreId !== undefined) {
+      if (usualStoreId === null || usualStoreId === '') {
+        update['settings.usualStoreId'] = null;
+      } else {
+        const store = await Store.exists({ _id: usualStoreId, householdId: req.user.householdId });
+        if (!store) return res.status(404).json({ error: 'Usual store was not found in this household' });
+        update['settings.usualStoreId'] = usualStoreId;
+      }
+    }
+    if (additionalStopSavingsThreshold !== undefined) {
+      const threshold = Number(additionalStopSavingsThreshold);
+      if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1000) {
+        return res.status(400).json({ error: 'Additional-stop savings must be between 0 and 1000' });
+      }
+      update['settings.additionalStopSavingsThreshold'] = threshold;
+    }
+    if (priceFreshnessDays !== undefined) {
+      const days = Number(priceFreshnessDays);
+      if (!Number.isInteger(days) || days < 1 || days > 365) {
+        return res.status(400).json({ error: 'Price freshness must be between 1 and 365 days' });
+      }
+      update['settings.priceFreshnessDays'] = days;
     }
     if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: 'No valid settings provided' });

@@ -21,7 +21,11 @@ const householdSchema = new mongoose.Schema({
   weekStartDay: { type: Number, default: 6 },
   mealPlanMode: { type: String, enum: ['dinner', 'all'], default: 'dinner' },
   settings: {
-    barcodeAutoAccept: { type: Boolean, default: false }
+    barcodeAutoAccept: { type: Boolean, default: false },
+    strictPriceReview: { type: Boolean, default: false },
+    usualStoreId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
+    additionalStopSavingsThreshold: { type: Number, min: 0, default: 10 },
+    priceFreshnessDays: { type: Number, min: 1, max: 365, default: 30 }
   }
 }, { timestamps: true });
 

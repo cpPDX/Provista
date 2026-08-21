@@ -556,7 +556,11 @@ function _handleCsvRowChange(e) {
 }
 
 function _closeCsvReview() {
-  document.getElementById('csv-review-overlay')?.remove();
+  const overlay = document.getElementById('csv-review-overlay');
+  if (overlay) {
+    deactivateDialogSurface(overlay, overlay.querySelector('.csv-review-sheet'));
+    overlay.remove();
+  }
   _csvRR = []; _csvItemMap = null; _csvStoreMap = null; _csvStatusEl = null;
 }
 
@@ -689,12 +693,13 @@ function openCsvReviewSheet(annotatedRows, itemMap, storeMap, canCreateItem, sta
   const overlay = document.createElement('div');
   overlay.id = 'csv-review-overlay';
   overlay.className = 'csv-review-overlay';
+  overlay.setAttribute('aria-hidden', 'true');
   overlay.innerHTML = `
-    <div class="csv-review-sheet">
+    <div class="csv-review-sheet" role="dialog" aria-modal="true" aria-labelledby="csv-review-title" tabindex="-1">
       <div class="csv-review-header">
         <div class="csv-review-title-row">
-          <span class="csv-review-title">Review Import (${annotatedRows.length} row${annotatedRows.length !== 1 ? 's' : ''})</span>
-          <button id="csv-review-close-btn" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-muted);padding:0.25rem;line-height:1">&#x2715;</button>
+          <span class="csv-review-title" id="csv-review-title">Review Import (${annotatedRows.length} row${annotatedRows.length !== 1 ? 's' : ''})</span>
+          <button id="csv-review-close-btn" aria-label="Close import review" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--text-muted);padding:0.25rem;line-height:1;min-width:44px;min-height:44px">&#x2715;</button>
         </div>
         <div id="csv-review-summary" class="csv-review-summary"></div>
       </div>
@@ -705,6 +710,7 @@ function openCsvReviewSheet(annotatedRows, itemMap, storeMap, canCreateItem, sta
       </div>
     </div>`;
   document.body.appendChild(overlay);
+  activateDialogSurface(overlay, overlay.querySelector('.csv-review-sheet'), overlay.querySelector('#csv-review-close-btn'), _closeCsvReview);
 
   overlay.addEventListener('click', e => { if (e.target === overlay) _closeCsvReview(); });
   overlay.querySelector('#csv-review-close-btn').addEventListener('click', _closeCsvReview);

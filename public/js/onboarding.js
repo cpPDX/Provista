@@ -215,7 +215,7 @@ function startAppTour() {
     {
       tab: 'list',
       title: 'Shopping List',
-      text: 'Build your shopping list here. Each item shows the best known price and which store to go to. The whole household shares the same list.',
+      text: 'Build the shared list around your usual store. Provista shows price age and suggests another stop only when the savings clear your household threshold.',
       anchor: '[data-tab="list"]'
     },
     {

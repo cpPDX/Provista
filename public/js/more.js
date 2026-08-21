@@ -7,16 +7,12 @@ function showMoreSection(sectionId) {
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
   const el = document.getElementById('section-' + sectionId);
   if (el) el.style.display = '';
-  // Show quick-access row so you can jump between sections without going back
-  document.getElementById('more-quick-access')?.style.removeProperty('display');
 }
 
 function hideMoreSection() {
   document.querySelector('#tab-more .page-header')?.style.removeProperty('display');
   document.querySelector('.more-menu').style.display = '';
   document.querySelectorAll('.sub-section').forEach(s => s.style.display = 'none');
-  // Hide quick-access row on the main menu — it's redundant there
-  document.getElementById('more-quick-access')?.style.setProperty('display', 'none');
 }
 
 // ===== Account Settings (all roles) =====
@@ -158,7 +154,7 @@ async function loadAccountSettings() {
           showToast('Please check the confirmation box');
           return;
         }
-        const btn = e.target.querySelector('button[type=submit]');
+        const btn = formSubmitButton(e.target);
         btn.disabled = true;
         btn.textContent = 'Deleting…';
         try {
@@ -174,8 +170,8 @@ async function loadAccountSettings() {
   }
 }
 
-// ===== Pantry (visible to all roles; editing remains admin-only) =====
-let inventoryState = { items: [] };
+// ===== Pantry (routine changes are available to every household member) =====
+let inventoryState = { items: [], search: '' };
 
 async function loadInventory() {
   try {
@@ -188,62 +184,104 @@ async function loadInventory() {
 
 function renderInventory() {
   const container = document.getElementById('inventory-list');
-  const items = inventoryState.items;
+  const query = inventoryState.search.trim().toLowerCase();
+  const priority = { out: 0, low: 1, have: 2 };
+  const items = inventoryState.items
+    .filter(inv => {
+      if (!query) return true;
+      return [inv.itemId?.name, inv.itemId?.brand, inv.itemId?.category, inv.notes]
+        .some(value => String(value || '').toLowerCase().includes(query));
+    })
+    .sort((a, b) => (priority[a.stockStatus] ?? 3) - (priority[b.stockStatus] ?? 3) ||
+      new Date(b.lastUpdated || 0) - new Date(a.lastUpdated || 0));
   if (!items.length) {
-    container.innerHTML = emptyState('🧺', 'No pantry items yet.');
+    container.innerHTML = emptyState('🧺', query ? 'No Pantry items match that search.' : 'No Pantry items yet.');
     return;
   }
   container.innerHTML = items.map(inv => {
     const name = escapeHtml(inv.itemId?.name || 'Unknown');
     const unit = escapeHtml(inv.unit || inv.itemId?.unit || '');
     const cat = escapeHtml(inv.itemId?.category || '');
-    const isLow = inv.lowStockThreshold != null && inv.quantity <= inv.lowStockThreshold;
-    const thresholdText = inv.lowStockThreshold != null ? `Alert ≤ ${inv.lowStockThreshold}` : '';
+    const status = inv.stockStatus || (inv.quantity <= 0 ? 'out' : 'have');
+    const statusLabel = { have: 'Have', low: 'Running low', out: 'Out' }[status];
     return `
-      <div class="card" data-inv-id="${inv._id}">
+      <div class="card pantry-card pantry-${status}" data-inv-id="${inv._id}">
         <div class="card-body">
-          <div class="card-title">${name}${inv.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(inv.itemId.brand) + ')</span>' : ''}${isLow ? ' <span class="badge badge-low-stock">Low</span>' : ''}</div>
+          <div class="card-title">${name}${inv.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(inv.itemId.brand) + ')</span>' : ''} <span class="badge pantry-status-badge">${statusLabel}</span></div>
           <div class="card-subtitle">${inv.itemId ? formatItemMeta(inv.itemId) : cat} &middot; Updated ${formatDate(inv.lastUpdated)}</div>
           ${inv.notes ? `<div class="text-muted text-sm">${escapeHtml(inv.notes)}</div>` : ''}
-          ${thresholdText ? `<div class="text-muted text-sm">${thresholdText}</div>` : ''}
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.375rem">
-          <div class="qty-controls admin-only">
-            <button class="qty-btn" onclick="adjustInventory('${inv._id}', ${inv.quantity - 1})">−</button>
-            <span class="qty-val">${inv.quantity}</span>
-            <button class="qty-btn" onclick="adjustInventory('${inv._id}', ${inv.quantity + 1})">+</button>
+          <div class="pantry-status-actions" role="group" aria-label="Stock status for ${escapeAttr(inv.itemId?.name || 'item')}">
+            ${['have', 'low', 'out'].map(value => `
+              <button type="button" class="pantry-status-option${status === value ? ' active' : ''}"
+                data-stock-status="${value}" onclick="setInventoryStatus('${inv._id}', '${value}')" aria-pressed="${status === value}">
+                ${{ have: 'Have', low: 'Running low', out: 'Out' }[value]}
+              </button>`).join('')}
           </div>
-          <span class="text-muted text-sm">${unit}</span>
-          <button class="btn btn-outline btn-sm admin-only" onclick="openEditInventoryModal('${inv._id}')">Edit</button>
-          <button class="btn btn-danger btn-sm admin-only" onclick="removeInventoryItem('${inv._id}')">Remove</button>
+          <details class="pantry-exact-quantity">
+            <summary>Exact quantity: ${inv.quantity}${unit ? ` ${unit}` : ''}</summary>
+            <div class="qty-controls">
+              <button type="button" class="qty-btn" onclick="adjustInventory('${inv._id}', ${inv.quantity - 1})" aria-label="Decrease ${escapeAttr(inv.itemId?.name || 'item')} quantity">−</button>
+              <span class="qty-val" aria-live="polite">${inv.quantity}</span>
+              <button type="button" class="qty-btn" onclick="adjustInventory('${inv._id}', ${inv.quantity + 1})" aria-label="Increase ${escapeAttr(inv.itemId?.name || 'item')} quantity">+</button>
+              <button type="button" class="btn btn-outline btn-sm" onclick="openEditInventoryModal('${inv._id}')">Edit details</button>
+              ${window.appAuth?.isAdmin() ? `<button type="button" class="btn btn-danger btn-sm" onclick="removeInventoryItem('${inv._id}')">Remove</button>` : ''}
+            </div>
+          </details>
         </div>
       </div>`;
   }).join('');
 }
 
+async function setInventoryStatus(id, stockStatus) {
+  const item = inventoryState.items.find(entry => entry._id === id);
+  if (!item || item.stockStatus === stockStatus) return;
+  const previous = { stockStatus: item.stockStatus, quantity: item.quantity };
+  item.stockStatus = stockStatus;
+  if (stockStatus === 'out') item.quantity = 0;
+  else if (item.quantity <= 0) item.quantity = 1;
+  renderInventory();
+  document.querySelector(`[data-inv-id="${CSS.escape(id)}"] .pantry-status-option[data-stock-status="${stockStatus}"]`)?.focus({ preventScroll: true });
+  try {
+    const updated = await api.inventory.update(id, { stockStatus });
+    Object.assign(item, updated);
+    renderInventory();
+    showToast(`${item.itemId?.name || 'Item'} marked ${stockStatus === 'low' ? 'running low' : stockStatus}`);
+  } catch (err) {
+    Object.assign(item, previous);
+    renderInventory();
+    handleError(err, 'Failed to update Pantry status');
+  }
+}
+
 async function adjustInventory(id, newQty) {
   if (newQty < 0) newQty = 0;
+  const item = inventoryState.items.find(entry => entry._id === id);
+  if (!item) return;
+  const previous = { quantity: item.quantity, stockStatus: item.stockStatus };
+  item.quantity = newQty;
+  item.stockStatus = newQty <= 0 ? 'out' : 'have';
+  renderInventory();
   try {
-    await api.inventory.update(id, { quantity: newQty });
-    const item = inventoryState.items.find(i => i._id === id);
-    if (item) {
-      const unit = item.unit || item.itemId?.unit || '';
-      showToast(`Updated to ${newQty}${unit ? ' ' + unit : ''}`);
-      item.quantity = newQty;
-    }
-    if (newQty === 0) inventoryState.items = inventoryState.items.filter(i => i._id !== id);
+    const updated = await api.inventory.update(id, { quantity: newQty });
+    Object.assign(item, updated);
+    const unit = item.unit || item.itemId?.unit || '';
+    showToast(`Updated to ${newQty}${unit ? ' ' + unit : ''}`);
     renderInventory();
   } catch (err) {
-    handleError(err, 'Failed to update inventory');
+    Object.assign(item, previous);
+    renderInventory();
+    handleError(err, 'Failed to update Pantry');
   }
 }
 
 async function removeInventoryItem(id) {
+  const item = inventoryState.items.find(entry => entry._id === id);
+  if (!confirm(`Remove ${item?.itemId?.name || 'this item'} from Pantry tracking?`)) return;
   try {
     await api.inventory.delete(id);
     inventoryState.items = inventoryState.items.filter(i => i._id !== id);
     renderInventory();
-    showToast('Removed from inventory');
+    showToast('Removed from Pantry');
   } catch (err) {
     handleError(err, 'Failed to remove item');
   }
@@ -253,67 +291,95 @@ function openAddInventoryModal() {
   const bodyHTML = `
     <form id="add-inv-form">
       <div class="form-group">
-        <label>Item</label>
+        <label for="inv-item-input">Item</label>
         <div class="autocomplete-wrap">
-          <input class="form-control" id="inv-item-input" placeholder="Search or create item..." autocomplete="off" required />
+          <input class="form-control" id="inv-item-input" placeholder="Search or create item…" autocomplete="off" required />
           <div class="autocomplete-dropdown" id="inv-item-dropdown"></div>
         </div>
         <input type="hidden" id="inv-item-id" />
         <input type="hidden" id="inv-item-unit" />
       </div>
+      ${inlineItemCreationFields('inv')}
       <div class="form-group">
-        <label>Quantity</label>
-        <input class="form-control" type="number" id="inv-qty" value="1" min="0" step="any" required />
+        <label for="inv-status">Pantry status</label>
+        <select class="form-control" id="inv-status">
+          <option value="have">Have</option>
+          <option value="low">Running low</option>
+          <option value="out">Out</option>
+        </select>
       </div>
       <div class="form-group">
-        <label>Notes (optional)</label>
+        <label for="inv-notes">Notes (optional)</label>
         <input class="form-control" id="inv-notes" placeholder="e.g. expires Friday" />
       </div>
-      <div class="form-group">
-        <label>Low Stock Alert (optional)</label>
-        <input class="form-control" type="number" id="inv-threshold" placeholder="e.g. 2 (alert when quantity ≤ this)" min="0" step="any" />
-      </div>
+      <details class="pantry-advanced-fields">
+        <summary>Track an exact quantity (optional)</summary>
+        <div class="form-group">
+          <label for="inv-qty">Quantity</label>
+          <input class="form-control" type="number" id="inv-qty" value="1" min="0" step="any" />
+        </div>
+        <div class="form-group">
+          <label for="inv-threshold">Quantity alert (optional)</label>
+          <input class="form-control" type="number" id="inv-threshold" placeholder="Alert at or below…" min="0" step="any" />
+        </div>
+      </details>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Add to Inventory</button>
+        <button type="submit" class="btn btn-primary">Add to Pantry</button>
       </div>
     </form>`;
-  openModal('Add to Inventory', bodyHTML);
+  openModal('Add to Pantry', bodyHTML);
 
-  attachItemAutocomplete(document.getElementById('inv-item-input'), document.getElementById('inv-item-dropdown'), {
+  const itemInput = document.getElementById('inv-item-input');
+  let selectedItemName = '';
+  attachItemAutocomplete(itemInput, document.getElementById('inv-item-dropdown'), {
     onSelect(item) {
+      selectedItemName = item.name;
       document.getElementById('inv-item-id').value = item._id;
       document.getElementById('inv-item-unit').value = item.unit;
+      clearInlineItemCreation('inv');
     },
-    onCreateNew(name) {
-      promptCreateItem(name, (item) => {
-        document.getElementById('inv-item-input').value = item.name;
-        document.getElementById('inv-item-id').value = item._id;
-        document.getElementById('inv-item-unit').value = item.unit;
-        openAddInventoryModal();
-      });
+    onCreateNew: name => {
+      selectedItemName = '';
+      startInlineItemCreation('inv', name, 'inv-item-input', 'inv-item-id');
     }
+  });
+  itemInput.addEventListener('input', () => {
+    if (document.getElementById('inv-new-item-mode')?.value === 'true') return;
+    if (selectedItemName && itemInput.value !== selectedItemName) document.getElementById('inv-item-id').value = '';
   });
 
   document.getElementById('add-inv-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const itemId = document.getElementById('inv-item-id').value;
-    if (!itemId) { showToast('Please select an item'); return; }
+    let itemId = document.getElementById('inv-item-id').value;
     const thresholdRaw = document.getElementById('inv-threshold').value.trim();
     const lowStockThreshold = thresholdRaw !== '' ? parseFloat(thresholdRaw) : null;
+    const submit = formSubmitButton(e.target);
+    submit.disabled = true;
+    submit.textContent = 'Adding…';
     try {
+      if (!itemId) {
+        const newItem = readInlineItemCreation('inv', itemInput.value);
+        if (!newItem) throw new Error('Select an item or choose Create');
+        const created = await api.items.create(newItem);
+        itemId = created._id;
+        document.getElementById('inv-item-unit').value = created.unit || '';
+      }
       await api.inventory.save({
         itemId,
         quantity: parseFloat(document.getElementById('inv-qty').value),
+        stockStatus: document.getElementById('inv-status').value,
         unit: document.getElementById('inv-item-unit').value,
         notes: document.getElementById('inv-notes').value.trim(),
         lowStockThreshold
       });
       closeModal();
-      showToast('Added to inventory');
+      showToast('Added to Pantry');
       await loadInventory();
     } catch (err) {
-      handleError(err, 'Failed to add to inventory');
+      handleError(err, 'Failed to add to Pantry');
+      submit.disabled = false;
+      submit.textContent = 'Add to Pantry';
     }
   });
 }
@@ -324,23 +390,34 @@ function openEditInventoryModal(id) {
   const bodyHTML = `
     <form id="edit-inv-form">
       <div class="form-group">
-        <label>Quantity</label>
-        <input class="form-control" type="number" id="edit-inv-qty" value="${inv.quantity}" min="0" step="any" required />
+        <label for="edit-inv-status">Pantry status</label>
+        <select class="form-control" id="edit-inv-status">
+          <option value="have"${inv.stockStatus === 'have' ? ' selected' : ''}>Have</option>
+          <option value="low"${inv.stockStatus === 'low' ? ' selected' : ''}>Running low</option>
+          <option value="out"${inv.stockStatus === 'out' ? ' selected' : ''}>Out</option>
+        </select>
       </div>
       <div class="form-group">
-        <label>Notes (optional)</label>
+        <label for="edit-inv-notes">Notes (optional)</label>
         <input class="form-control" id="edit-inv-notes" value="${escapeAttr(inv.notes || '')}" placeholder="e.g. expires Friday" />
       </div>
-      <div class="form-group">
-        <label>Low Stock Alert (optional)</label>
-        <input class="form-control" type="number" id="edit-inv-threshold" value="${escapeAttr(inv.lowStockThreshold ?? '')}" placeholder="e.g. 2 (alert when quantity ≤ this)" min="0" step="any" />
-      </div>
+      <details class="pantry-advanced-fields">
+        <summary>Exact quantity and alert</summary>
+        <div class="form-group">
+          <label for="edit-inv-qty">Quantity</label>
+          <input class="form-control" type="number" id="edit-inv-qty" value="${inv.quantity}" min="0" step="any" required />
+        </div>
+        <div class="form-group">
+          <label for="edit-inv-threshold">Quantity alert (optional)</label>
+          <input class="form-control" type="number" id="edit-inv-threshold" value="${escapeAttr(inv.lowStockThreshold ?? '')}" placeholder="Alert at or below…" min="0" step="any" />
+        </div>
+      </details>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>`;
-  openModal('Edit Inventory Item', bodyHTML);
+  openModal('Edit Pantry Item', bodyHTML);
   registerDirtyForm(() => document.getElementById('edit-inv-form')?.requestSubmit());
   document.getElementById('edit-inv-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -349,14 +426,15 @@ function openEditInventoryModal(id) {
     try {
       await api.inventory.update(id, {
         quantity: parseFloat(document.getElementById('edit-inv-qty').value),
+        stockStatus: document.getElementById('edit-inv-status').value,
         notes: document.getElementById('edit-inv-notes').value.trim(),
         lowStockThreshold
       });
       closeModal();
-      showToast('Inventory updated');
+      showToast('Pantry updated');
       await loadInventory();
     } catch (err) {
-      handleError(err, 'Failed to update inventory');
+      handleError(err, 'Failed to update Pantry');
     }
   });
 }
@@ -496,9 +574,11 @@ function openCatalogFilterSheet() {
     applyCatalogFilter();
   };
   document.getElementById('filter-sheet-done').onclick = () => { closeFilterSheet(); applyCatalogFilter(); };
-  document.getElementById('filter-sheet-overlay').style.display = 'flex';
-  document.getElementById('filter-sheet-overlay').onclick = (e) => {
-    if (e.target === document.getElementById('filter-sheet-overlay')) { closeFilterSheet(); applyCatalogFilter(); }
+  const overlay = document.getElementById('filter-sheet-overlay');
+  const closeAndApply = () => { closeFilterSheet(); applyCatalogFilter(); };
+  activateDialogSurface(overlay, document.getElementById('filter-sheet'), document.getElementById('filter-sheet-done'), closeAndApply);
+  overlay.onclick = (e) => {
+    if (e.target === overlay) closeAndApply();
   };
 }
 
@@ -528,13 +608,13 @@ function renderCatalog() {
   }
   container.innerHTML = items.map(item => `
     <div class="card swipeable" data-item-id="${item._id}">
-      <div class="card-body-wrap">
+      <button type="button" class="card-body-wrap" aria-label="Edit ${escapeAttr(item.name)}">
         <div class="card-body">
           <div class="card-title">${escapeHtml(item.name)}${item.isOrganic ? ' <span class="badge badge-organic">Organic</span>' : ''}</div>
           <div class="card-subtitle">${formatItemMeta(item)}</div>
         </div>
-      </div>
-      <div class="card-swipe-delete">Delete</div>
+      </button>
+      <button type="button" class="card-swipe-delete" aria-label="Delete ${escapeAttr(item.name)}">Delete</button>
     </div>`).join('');
 
   // Tap to edit, swipe left to delete
@@ -649,7 +729,7 @@ function openEditItemModal(id, name, category, unit, isOrganic = false, brand = 
       if (errEl) { errEl.textContent = 'Cannot merge an item into itself.'; errEl.style.display = ''; }
       return;
     }
-    if (!confirm(`Merge "${name}" into "${targetName}"?\n\nAll price history, shopping list entries, and inventory entries will move to "${targetName}". This item will be deleted.`)) return;
+    if (!confirm(`Merge "${name}" into "${targetName}"?\n\nAll price history, shopping list entries, and Pantry entries will move to "${targetName}". This item will be deleted.`)) return;
     mergeBtn.disabled = true;
     mergeBtn.textContent = 'Merging…';
     try {
@@ -694,13 +774,13 @@ function renderStores() {
   }
   container.innerHTML = storesState.stores.map(store => `
     <div class="card swipeable" data-store-id="${store._id}">
-      <div class="card-body-wrap">
+      <button type="button" class="card-body-wrap" aria-label="Edit ${escapeAttr(store.name)}">
         <div class="card-body">
           <div class="card-title">${escapeHtml(store.name)}</div>
           ${store.location ? `<div class="card-subtitle">${escapeHtml(store.location)}</div>` : ''}
         </div>
-      </div>
-      <div class="card-swipe-delete">Delete</div>
+      </button>
+      <button type="button" class="card-swipe-delete" aria-label="Delete ${escapeAttr(store.name)}">Delete</button>
     </div>`).join('');
 
   // Tap to edit, swipe left to delete
@@ -759,7 +839,10 @@ async function loadHousehold() {
   const container = document.getElementById('household-content');
   container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
   try {
-    const { household, members } = await api.household.get();
+    const [{ household, members }, stores] = await Promise.all([
+      api.household.get(),
+      api.stores.list()
+    ]);
     const auth = window.appAuth;
 
     let html = `
@@ -789,11 +872,51 @@ async function loadHousehold() {
       const autoAcceptChecked = household.settings?.barcodeAutoAccept ? ' checked' : '';
       html += `
         <h2 class="section-title" style="padding-left:0;margin-top:0.5rem">Barcode Scanning</h2>
-        <div class="filter-toggle-row" style="margin-bottom:0.5rem">
-          <label for="household-barcode-autaccept" style="cursor:pointer">Auto-accept barcode matches for new items</label>
+        <label class="filter-toggle-row" for="household-barcode-autaccept" style="margin-bottom:0.5rem;cursor:pointer">
+          <span>Auto-accept barcode matches for new items</span>
           <input type="checkbox" id="household-barcode-autaccept"${autoAcceptChecked} />
-        </div>
+        </label>
         <p class="text-muted text-sm">When enabled, confident barcode matches are saved automatically without requiring review.</p>`;
+    }
+
+    const usualStoreId = String(household.settings?.usualStoreId || '');
+    const usualStore = stores.find(store => String(store._id) === usualStoreId);
+    if (auth.isAdmin()) {
+      html += `
+        <h2 class="section-title" style="padding-left:0;margin-top:0.5rem">Shopping defaults</h2>
+        <form id="household-shopping-settings" class="household-settings-card">
+          <div class="form-group">
+            <label for="household-usual-store">Usual store</label>
+            <select class="form-control" id="household-usual-store">
+              <option value="">Infer from price history</option>
+              ${stores.map(store => `<option value="${escapeAttr(store._id)}"${String(store._id) === usualStoreId ? ' selected' : ''}>${escapeHtml(store.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="household-savings-threshold">Extra-stop savings ($)</label>
+              <input class="form-control" type="number" id="household-savings-threshold" min="0" max="1000" step="0.01"
+                value="${escapeAttr(household.settings?.additionalStopSavingsThreshold ?? 10)}" />
+            </div>
+            <div class="form-group">
+              <label for="household-price-freshness">Price freshness (days)</label>
+              <input class="form-control" type="number" id="household-price-freshness" min="1" max="365" step="1"
+                value="${escapeAttr(household.settings?.priceFreshnessDays ?? 30)}" />
+            </div>
+          </div>
+          <label class="trip-pantry-option" for="household-strict-price-review">
+            <input type="checkbox" id="household-strict-price-review"${household.settings?.strictPriceReview ? ' checked' : ''} />
+            <span><strong>Strict price review</strong><small>Require an admin to approve shopping-trip prices. Off by default for household trust.</small></span>
+          </label>
+          <button type="submit" class="btn btn-primary btn-full" style="margin-top:0.75rem">Save shopping defaults</button>
+        </form>`;
+    } else {
+      html += `
+        <h2 class="section-title" style="padding-left:0;margin-top:0.5rem">Shopping defaults</h2>
+        <div class="household-settings-card text-sm">
+          <div>Usual store: <strong>${escapeHtml(usualStore?.name || 'Inferred from price history')}</strong></div>
+          <div class="text-muted">Another stop is suggested only above ${formatCurrency(Number(household.settings?.additionalStopSavingsThreshold ?? 10))} in estimated savings.</div>
+        </div>`;
     }
 
     // Danger zone — delete household (owner only)
@@ -801,7 +924,7 @@ async function loadHousehold() {
       html += `
         <div class="danger-zone" style="margin:1.5rem 0 0">
           <h3>Danger Zone</h3>
-          <p>Permanently deletes the household and all its price history, items, stores, and inventory. All members will lose access.</p>
+          <p>Permanently deletes the household and all its price history, items, stores, and Pantry data. All members will lose access.</p>
           <button class="btn btn-danger btn-full" id="btn-delete-household">Delete Household &amp; All Data</button>
         </div>`;
     }
@@ -825,6 +948,27 @@ async function loadHousehold() {
       });
     }
 
+    document.getElementById('household-shopping-settings')?.addEventListener('submit', async event => {
+      event.preventDefault();
+      const submit = formSubmitButton(event.target);
+      submit.disabled = true;
+      submit.textContent = 'Saving…';
+      try {
+        await api.household.updateSettings({
+          usualStoreId: document.getElementById('household-usual-store').value || null,
+          additionalStopSavingsThreshold: Number(document.getElementById('household-savings-threshold').value),
+          priceFreshnessDays: Number(document.getElementById('household-price-freshness').value),
+          strictPriceReview: document.getElementById('household-strict-price-review').checked
+        });
+        showToast('Shopping defaults saved');
+      } catch (err) {
+        handleError(err, 'Failed to save shopping defaults');
+      } finally {
+        submit.disabled = false;
+        submit.textContent = 'Save shopping defaults';
+      }
+    });
+
     if (auth.isOwner()) {
       document.getElementById('btn-delete-household').addEventListener('click', () => {
         const hhName = household.name;
@@ -833,7 +977,7 @@ async function loadHousehold() {
           <ul style="font-size:var(--text-sm);color:var(--text-muted);margin:0 0 1rem 1.25rem;line-height:1.8">
             <li>All price entries and history</li>
             <li>All items and stores</li>
-            <li>Inventory and shopping list</li>
+            <li>Pantry and shopping list</li>
             <li>All member accounts will be unlinked</li>
           </ul>
           <form id="delete-household-form">
@@ -858,7 +1002,7 @@ async function loadHousehold() {
             showToast('Household name does not match');
             return;
           }
-          const btn = e.target.querySelector('button[type=submit]');
+          const btn = formSubmitButton(e.target);
           btn.disabled = true;
           btn.textContent = 'Deleting…';
           try {
@@ -907,6 +1051,8 @@ function renderMemberCard(m, auth, household) {
 }
 
 async function setMemberRole(memberId, role) {
+  const action = role === 'admin' ? 'make this person an administrator' : 'remove this person’s administrator access';
+  if (!confirm(`Are you sure you want to ${action}?`)) return;
   try {
     await api.household.updateMemberRole(memberId, role);
     showToast('Role updated');
@@ -1002,7 +1148,7 @@ function loadAboutSection() {
       <div style="margin-bottom:0.75rem">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="display:inline-block">
           <rect width="48" height="48" rx="12" fill="#21ABCD"/>
-          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="white" text-anchor="middle" letter-spacing="-0.5">P</text>
+          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="#1A1C20" text-anchor="middle" letter-spacing="-0.5">P</text>
         </svg>
       </div>
       <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Provista</h2>
@@ -1024,7 +1170,7 @@ function loadAboutSection() {
         <ul style="margin-top:0.5rem;padding-left:1.25rem;line-height:1.9;font-size:0.9rem;color:var(--text-muted)">
           <li>Price history by item &amp; store</li>
           <li>Shopping list with running cart total</li>
-          <li>Inventory &amp; low-stock alerts</li>
+          <li>Pantry &amp; low-stock alerts</li>
           <li>Weekly meal planning</li>
           <li>Spending analytics by category &amp; store</li>
           <li>Household sharing with roles</li>
@@ -1129,11 +1275,9 @@ async function handleMoreSectionNav(section) {
 }
 
 function initMoreTab() {
-  document.querySelectorAll('.more-item[data-section], .quick-tile[data-section]').forEach(btn => {
+  document.querySelectorAll('.more-item[data-section]').forEach(btn => {
     btn.addEventListener('click', () => handleMoreSectionNav(btn.dataset.section));
   });
-
-  document.getElementById('quick-tile-csv')?.addEventListener('click', () => openCsvImportModal());
 
   document.querySelectorAll('.back-btn').forEach(btn => {
     btn.addEventListener('click', hideMoreSection);
@@ -1150,6 +1294,10 @@ function initMoreTab() {
   });
 
   document.getElementById('btn-add-inventory')?.addEventListener('click', openAddInventoryModal);
+  document.getElementById('pantry-search')?.addEventListener('input', event => {
+    inventoryState.search = event.target.value;
+    renderInventory();
+  });
   document.getElementById('btn-add-item-catalog').addEventListener('click', openAddCatalogItemModal);
   const scanCatalogBtn = document.getElementById('btn-scan-catalog');
   if (scanCatalogBtn) {

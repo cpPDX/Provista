@@ -4,6 +4,7 @@ const inventoryItemSchema = new mongoose.Schema({
   householdId: { type: mongoose.Schema.Types.ObjectId, ref: 'Household', required: true },
   itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
   quantity: { type: Number, required: true, default: 0 },
+  stockStatus: { type: String, enum: ['have', 'low', 'out'], default: 'have' },
   unit: { type: String, trim: true },
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastPurchaseTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'ShoppingTrip', default: null },
