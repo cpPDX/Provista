@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Install the Home-first shell before navigation handlers are attached.
   try {
     await loadProductShellScript();
-    initProductShell();
+    if (typeof initProductShell === 'function') initProductShell();
   } catch (err) {
     console.error('Failed to load Home shell; falling back to legacy navigation', err);
   }
@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initModal();
   initPricesTab();
   initShoppingListTab();
-  initShoppingLoopEnhancements?.();
+  if (typeof initShoppingLoopEnhancements === 'function') initShoppingLoopEnhancements();
   initSpendTab();
   initMoreTab();
 
@@ -167,7 +167,9 @@ async function switchTab(tabId) {
   document.querySelector(`.nav-item[data-tab="${tabId}"]`)?.classList.add('active');
 
   switch (tabId) {
-    case 'home': await loadHomeTab?.(); break;
+    case 'home':
+      if (typeof loadHomeTab === 'function') await loadHomeTab();
+      break;
     case 'prices': await loadPricesTab(); break;
     case 'list': await loadShoppingListTab(); break;
     case 'spend': await loadSpendTab(); break;
