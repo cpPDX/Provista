@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const InventoryItem = require('../models/InventoryItem');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
@@ -19,7 +19,7 @@ router.get('/low-stock', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/', requireAuth, requireAdmin, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const items = await InventoryItem.find({ householdId: req.user.householdId, quantity: { $gt: 0 } })
       .populate('itemId', 'name brand category unit size isOrganic')
@@ -31,7 +31,7 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-router.post('/', requireAuth, requireAdmin, async (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   try {
     const { itemId, quantity, unit, notes, lowStockThreshold } = req.body;
     if (!itemId) return res.status(400).json({ error: 'itemId is required' });
@@ -50,8 +50,6 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
     if (notes !== undefined) setFields.notes = notes;
     if (lowStockThreshold !== undefined) setFields.lowStockThreshold = lowStockThreshold;
 
-    // Keep fields out of $setOnInsert when they may also be present in $set;
-    // MongoDB rejects an upsert that updates the same path through both operators.
     const inv = await InventoryItem.findOneAndUpdate(
       { householdId: req.user.householdId, itemId },
       { $set: setFields, $setOnInsert: { householdId: req.user.householdId, itemId } },
@@ -63,7 +61,7 @@ router.post('/', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   try {
     const update = { ...req.body, lastUpdated: new Date(), lastUpdatedBy: req.user._id };
     const inv = await InventoryItem.findOneAndUpdate(
@@ -78,7 +76,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
+router.delete('/:id', requireAuth, async (req, res) => {
   try {
     const inv = await InventoryItem.findOneAndDelete({ _id: req.params.id, householdId: req.user.householdId });
     if (!inv) return res.status(404).json({ error: 'Inventory item not found' });
