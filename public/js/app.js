@@ -1,11 +1,37 @@
 // Main app: auth check, tab navigation, initialization
 
+async function loadProductShellScript() {
+  if (typeof initProductShell === 'function') return;
+  await new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-product-shell]');
+    if (existing) {
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = '/js/productShell.js';
+    script.dataset.productShell = 'true';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Auth check — redirects to /login.html if not authenticated
   const ok = await window.appAuth.load();
   if (!ok) return;
 
   const { user, household, features } = window.appAuth;
+
+  // Install the Home-first shell before navigation handlers are attached.
+  try {
+    await loadProductShellScript();
+    initProductShell();
+  } catch (err) {
+    console.error('Failed to load Home shell; falling back to legacy navigation', err);
+  }
 
   // Show session expiry notice if using cached auth
   if (window.appAuth.offlineSession) {
@@ -27,7 +53,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Show user + household info in More tab header
   const userLabel = document.getElementById('user-label');
   if (userLabel) {
-    userLabel.textContent = `${user.name} · ${household?.name || ''} · ${capitalizeRole(user.role)}`;
+    userLabel.textContent = `${user.displayName || user.name} · ${household?.name || ''} · ${capitalizeRole(user.role)}`;
   }
 
   // Show admin-only items in More menu
@@ -51,11 +77,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   initModal();
   initPricesTab();
   initShoppingListTab();
+  initShoppingLoopEnhancements?.();
   initSpendTab();
   initMoreTab();
 
-  // Load default tab
-  await loadPricesTab();
+  // Load Home / Today as the default destination.
+  if (typeof loadHomeTab === 'function' && document.getElementById('tab-home')) {
+    await loadHomeTab();
+  } else {
+    await loadPricesTab();
+  }
 
   // Initialize offline support AFTER UI is interactive (non-blocking)
   if (features?.offlineAccess) {
@@ -136,6 +167,7 @@ async function switchTab(tabId) {
   document.querySelector(`.nav-item[data-tab="${tabId}"]`)?.classList.add('active');
 
   switch (tabId) {
+    case 'home': await loadHomeTab?.(); break;
     case 'prices': await loadPricesTab(); break;
     case 'list': await loadShoppingListTab(); break;
     case 'spend': await loadSpendTab(); break;
