@@ -19,6 +19,17 @@ async function householdStoreExists(householdId, storeId) {
   return Boolean(await Store.exists({ _id: storeId, householdId }));
 }
 
+function priceContext(row) {
+  if (!row) return null;
+  return {
+    pricePerUnit: row.pricePerUnit,
+    finalPrice: row.finalPrice,
+    quantity: row.quantity,
+    store: row.store,
+    date: row.date
+  };
+}
+
 // GET /api/shopping-list - list with price context
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -33,23 +44,26 @@ router.get('/', requireAuth, async (req, res) => {
       const obj = { ...li };
       if (!li.itemId) return obj;
 
+      // Fetch the latest approved price at each store once. bestPrice powers
+      // recommendations; expectedPrice follows the user's preferred store when
+      // one is assigned so checkout never records another store's price by mistake.
       const priceData = await PriceEntry.aggregate([
         { $match: { householdId: req.user.householdId, itemId: li.itemId._id, status: 'approved' } },
         { $sort: { date: -1 } },
         { $group: { _id: '$storeId', pricePerUnit: { $first: '$pricePerUnit' }, finalPrice: { $first: '$finalPrice' }, quantity: { $first: '$quantity' }, date: { $first: '$date' }, storeId: { $first: '$storeId' } } },
         { $sort: { pricePerUnit: 1 } },
-        { $limit: 1 },
         { $lookup: { from: 'stores', localField: 'storeId', foreignField: '_id', as: 'store' } },
         { $unwind: { path: '$store', preserveNullAndEmptyArrays: true } }
       ]);
 
-      obj.bestPrice = priceData.length > 0 ? {
-        pricePerUnit: priceData[0].pricePerUnit,
-        finalPrice: priceData[0].finalPrice,
-        quantity: priceData[0].quantity,
-        store: priceData[0].store,
-        date: priceData[0].date
-      } : null;
+      const best = priceData[0] || null;
+      const assignedStoreId = li.storeId?._id || li.storeId || null;
+      const assigned = assignedStoreId
+        ? priceData.find(row => String(row.storeId) === String(assignedStoreId)) || null
+        : null;
+
+      obj.bestPrice = priceContext(best);
+      obj.expectedPrice = priceContext(assigned || best);
       return obj;
     }));
 
@@ -106,9 +120,12 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
   if (listItemIds.length !== requested.length) {
     return res.status(400).json({ error: 'Each item requires listItemId' });
   }
+  if (new Set(listItemIds.map(String)).size !== listItemIds.length) {
+    return res.status(400).json({ error: 'Each shopping-list item may only appear once per trip' });
+  }
 
   const createdPriceIds = [];
-  const inventoryBefore = [];
+  const inventoryBefore = new Map();
 
   try {
     const checkedItems = await ShoppingListItem.find({
@@ -192,8 +209,10 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
       }
 
       if (updatePantry) {
-        const existing = await InventoryItem.findOne({ householdId, itemId: listItem.itemId._id }).lean();
-        inventoryBefore.push({ itemId: listItem.itemId._id, existing });
+        const itemKey = String(listItem.itemId._id);
+        if (!inventoryBefore.has(itemKey)) {
+          inventoryBefore.set(itemKey, await InventoryItem.findOne({ householdId, itemId: listItem.itemId._id }).lean());
+        }
         await InventoryItem.findOneAndUpdate(
           { householdId, itemId: listItem.itemId._id },
           {
@@ -205,11 +224,21 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
               unit: listItem.itemId.unit || undefined
             }
           },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+          // Do not ask Mongoose to inject schema defaults into $setOnInsert: the
+          // quantity default would conflict with the $inc on new Pantry records.
+          { upsert: true, new: true, setDefaultsOnInsert: false }
         );
         pantryUpdatedCount += 1;
       }
     }
+
+    // Recalculate after Pantry writes but before clearing the list so there are no
+    // fallible database reads after the destructive part of the operation.
+    const thresholdItems = await InventoryItem.find({
+      householdId,
+      lowStockThreshold: { $ne: null }
+    }).lean();
+    const lowStockCount = thresholdItems.filter(item => item.quantity <= item.lowStockThreshold).length;
 
     const deleted = await ShoppingListItem.deleteMany({
       _id: { $in: listItemIds },
@@ -220,12 +249,6 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
       throw new Error('Shopping list changed before the trip could be completed');
     }
 
-    const thresholdItems = await InventoryItem.find({
-      householdId,
-      lowStockThreshold: { $ne: null }
-    }).lean();
-    const lowStockCount = thresholdItems.filter(item => item.quantity <= item.lowStockThreshold).length;
-
     res.json({
       purchasedCount: requested.length,
       tripTotal: Math.round(tripTotal * 100) / 100,
@@ -235,11 +258,10 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
       lowStockCount
     });
   } catch (err) {
-    // Keep the action all-or-nothing for the records this endpoint owns. The app
-    // runs without Mongo transactions in some environments, so use compensating
-    // rollback rather than requiring a replica set.
+    // Keep price/Pantry writes all-or-nothing without requiring Mongo transactions
+    // (CI and some local setups use a standalone mongod rather than a replica set).
     await Promise.allSettled(createdPriceIds.map(id => PriceEntry.deleteOne({ _id: id, householdId })));
-    await Promise.allSettled(inventoryBefore.map(({ itemId, existing }) => {
+    await Promise.allSettled([...inventoryBefore.entries()].map(([itemId, existing]) => {
       if (existing) {
         return InventoryItem.updateOne(
           { householdId, itemId },
