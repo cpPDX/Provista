@@ -3,11 +3,21 @@ const router = express.Router();
 const ShoppingListItem = require('../models/ShoppingListItem');
 const PriceEntry = require('../models/PriceEntry');
 const InventoryItem = require('../models/InventoryItem');
+const Item = require('../models/Item');
 const Store = require('../models/Store');
 const { requireAuth } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
+
+async function householdItemExists(householdId, itemId) {
+  return Boolean(await Item.exists({ _id: itemId, householdId }));
+}
+
+async function householdStoreExists(householdId, storeId) {
+  if (!storeId) return true;
+  return Boolean(await Store.exists({ _id: storeId, householdId }));
+}
 
 // GET /api/shopping-list - list with price context
 router.get('/', requireAuth, async (req, res) => {
@@ -52,10 +62,26 @@ router.get('/', requireAuth, async (req, res) => {
 // POST /api/shopping-list - add item (all roles)
 router.post('/', requireAuth, async (req, res) => {
   try {
-    if (!req.body.itemId) return res.status(400).json({ error: 'itemId is required' });
+    const { itemId, quantity = 1, storeId = null } = req.body;
+    if (!itemId) return res.status(400).json({ error: 'itemId is required' });
+    if (!(await householdItemExists(req.user.householdId, itemId))) {
+      return res.status(404).json({ error: 'Item not found in this household' });
+    }
+    if (!(await householdStoreExists(req.user.householdId, storeId))) {
+      return res.status(404).json({ error: 'Store not found in this household' });
+    }
+
+    const parsedQuantity = Number(quantity);
+    if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
+      return res.status(400).json({ error: 'quantity must be a positive number' });
+    }
+
     const item = new ShoppingListItem({
-      ...req.body,
       householdId: req.user.householdId,
+      itemId,
+      quantity: parsedQuantity,
+      storeId: storeId || null,
+      checked: false,
       addedBy: req.user._id,
       addedAt: new Date()
     });
@@ -81,7 +107,6 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Each item requires listItemId' });
   }
 
-  const updatePantry = req.body.updatePantry !== false;
   const createdPriceIds = [];
   const inventoryBefore = [];
 
@@ -97,10 +122,25 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
     }
 
     const checkedById = new Map(checkedItems.map(item => [String(item._id), item]));
-    const requestedStoreIds = [...new Set(requested.map(item => item.storeId).filter(Boolean).map(String))];
-    if (requestedStoreIds.length) {
-      const validStoreCount = await Store.countDocuments({ _id: { $in: requestedStoreIds }, householdId });
-      if (validStoreCount !== requestedStoreIds.length) {
+    const normalized = [];
+    for (const input of requested) {
+      const listItem = checkedById.get(String(input.listItemId));
+      if (!listItem?.itemId) return res.status(400).json({ error: 'Shopping-list item no longer has a catalog item' });
+
+      const rawPrice = input.price;
+      const price = rawPrice === null || rawPrice === undefined || rawPrice === '' ? null : Number(rawPrice);
+      if (price !== null && (!Number.isFinite(price) || price < 0)) {
+        return res.status(400).json({ error: 'price must be a non-negative number when provided' });
+      }
+
+      const storeId = input.storeId || listItem.storeId || null;
+      normalized.push({ input, listItem, price, storeId });
+    }
+
+    const effectiveStoreIds = [...new Set(normalized.map(row => row.storeId).filter(Boolean).map(String))];
+    if (effectiveStoreIds.length) {
+      const validStoreCount = await Store.countDocuments({ _id: { $in: effectiveStoreIds }, householdId });
+      if (validStoreCount !== effectiveStoreIds.length) {
         return res.status(400).json({ error: 'Every selected store must belong to this household' });
       }
     }
@@ -113,23 +153,15 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
       if (Number.isNaN(purchaseDate.getTime())) return res.status(400).json({ error: 'Invalid purchase date' });
     }
 
+    const updatePantry = req.body.updatePantry !== false;
     let tripTotal = 0;
     let pricesRecorded = 0;
     let pantryUpdatedCount = 0;
     let needsPriceReviewCount = 0;
 
-    for (const input of requested) {
-      const listItem = checkedById.get(String(input.listItemId));
-      if (!listItem?.itemId) throw new Error('Shopping-list item no longer has a catalog item');
-
+    for (const row of normalized) {
+      const { input, listItem, price, storeId } = row;
       const quantity = Number(listItem.quantity || 1);
-      const rawPrice = input.price;
-      const price = rawPrice === null || rawPrice === undefined || rawPrice === '' ? null : Number(rawPrice);
-      if (price !== null && (!Number.isFinite(price) || price < 0)) {
-        return res.status(400).json({ error: 'price must be a non-negative number when provided' });
-      }
-
-      const storeId = input.storeId || listItem.storeId || null;
       if (price !== null) tripTotal += price;
 
       if (price !== null && storeId) {
@@ -232,10 +264,33 @@ router.post('/complete-trip', requireAuth, async (req, res) => {
 // PUT /api/shopping-list/:id - update (all roles)
 router.put('/:id', requireAuth, async (req, res) => {
   try {
+    const update = {};
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'checked')) {
+      if (typeof req.body.checked !== 'boolean') return res.status(400).json({ error: 'checked must be boolean' });
+      update.checked = req.body.checked;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'quantity')) {
+      const quantity = Number(req.body.quantity);
+      if (!Number.isFinite(quantity) || quantity <= 0) return res.status(400).json({ error: 'quantity must be a positive number' });
+      update.quantity = quantity;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'storeId')) {
+      const storeId = req.body.storeId || null;
+      if (!(await householdStoreExists(req.user.householdId, storeId))) {
+        return res.status(404).json({ error: 'Store not found in this household' });
+      }
+      update.storeId = storeId;
+    }
+
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'No supported fields to update' });
+
     const item = await ShoppingListItem.findOneAndUpdate(
       { _id: req.params.id, householdId: req.user.householdId },
-      req.body,
-      { new: true }
+      update,
+      { new: true, runValidators: true }
     ).populate('itemId', 'name brand category unit size isOrganic');
     if (!item) return res.status(404).json({ error: 'Item not found' });
     res.json(item);
