@@ -15,7 +15,7 @@ async function setupFixtures() {
 }
 
 describe('GET /api/inventory', () => {
-  it('admin can list inventory items', async () => {
+  it('owner can list Pantry items', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     await request(app).post('/api/inventory').set('Cookie', ownerCookie).send({ itemId, quantity: 2 });
     const res = await request(app).get('/api/inventory').set('Cookie', ownerCookie);
@@ -24,17 +24,19 @@ describe('GET /api/inventory', () => {
     expect(res.body.length).toBe(1);
   });
 
-  it('returns 403 for member', async () => {
-    const { ownerCookie } = await setupFixtures();
+  it('member can list Pantry items', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    await request(app).post('/api/inventory').set('Cookie', ownerCookie).send({ itemId, quantity: 2 });
     const code = await getInviteCode(app, ownerCookie);
     const { cookie: memberCookie } = await createMemberSession(app, code);
     const res = await request(app).get('/api/inventory').set('Cookie', memberCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(1);
   });
 });
 
 describe('POST /api/inventory', () => {
-  it('creates a new inventory item', async () => {
+  it('creates a new Pantry item', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     const res = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
       .send({ itemId, quantity: 3, notes: 'In fridge' });
@@ -54,13 +56,14 @@ describe('POST /api/inventory', () => {
     expect(list.body.length).toBe(1);
   });
 
-  it('returns 403 for member', async () => {
+  it('member can add an existing catalog item to Pantry', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     const code = await getInviteCode(app, ownerCookie);
     const { cookie: memberCookie } = await createMemberSession(app, code);
     const res = await request(app).post('/api/inventory').set('Cookie', memberCookie)
       .send({ itemId, quantity: 1 });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(201);
+    expect(res.body.quantity).toBe(1);
   });
 });
 
@@ -94,7 +97,7 @@ describe('GET /api/inventory/low-stock', () => {
 });
 
 describe('PUT /api/inventory/:id', () => {
-  it('admin can update quantity and lowStockThreshold', async () => {
+  it('owner can update quantity and lowStockThreshold', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     const inv = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
       .send({ itemId, quantity: 3 });
@@ -103,6 +106,18 @@ describe('PUT /api/inventory/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.quantity).toBe(10);
     expect(res.body.lowStockThreshold).toBe(3);
+  });
+
+  it('member can update Pantry quantity', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const inv = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
+      .send({ itemId, quantity: 3 });
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+    const res = await request(app).put(`/api/inventory/${inv.body._id}`).set('Cookie', memberCookie)
+      .send({ quantity: 2 });
+    expect(res.status).toBe(200);
+    expect(res.body.quantity).toBe(2);
   });
 
   it('returns 404 when inventory item not found', async () => {
@@ -114,7 +129,7 @@ describe('PUT /api/inventory/:id', () => {
 });
 
 describe('DELETE /api/inventory/:id', () => {
-  it('admin can remove an inventory item', async () => {
+  it('owner can remove a Pantry item', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     const inv = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
       .send({ itemId, quantity: 2 });
@@ -123,13 +138,14 @@ describe('DELETE /api/inventory/:id', () => {
     expect(res.body.success).toBe(true);
   });
 
-  it('returns 403 for member', async () => {
+  it('member can remove a Pantry item', async () => {
     const { ownerCookie, itemId } = await setupFixtures();
     const inv = await request(app).post('/api/inventory').set('Cookie', ownerCookie)
       .send({ itemId, quantity: 2 });
     const code = await getInviteCode(app, ownerCookie);
     const { cookie: memberCookie } = await createMemberSession(app, code);
     const res = await request(app).delete(`/api/inventory/${inv.body._id}`).set('Cookie', memberCookie);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 });
