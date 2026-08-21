@@ -5,7 +5,8 @@ const mealSchema = new mongoose.Schema({
   // personName remains for backward compatibility with existing plans while personIds is rolled out.
   personName: { type: String, trim: true, default: '' },
   personIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'HouseholdPerson' }],
-  forEveryone: { type: Boolean, default: true },
+  // Intentionally no schema default: legacy rows predate this field. New scaffolds explicitly set true.
+  forEveryone: { type: Boolean },
   name: { type: String, trim: true, default: '' },
   notes: { type: String, trim: true, default: '' }
 }, { _id: false });
