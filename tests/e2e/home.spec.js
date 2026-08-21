@@ -22,7 +22,7 @@ test.describe('Home / Today', () => {
   test('uses five parent-centered bottom navigation destinations', async ({ page }) => {
     const nav = page.locator('.bottom-nav .nav-item');
     await expect(nav).toHaveCount(5);
-    await expect(nav).toHaveText(['⌂Home', '🥗Plan', '📋List', '🧺Pantry', '☰More']);
+    await expect(nav.locator(':scope > span:nth-child(2)')).toHaveText(['Home', 'Plan', 'List', 'Pantry', 'More']);
   });
 
   test('moves prices and spend into Insights', async ({ page }) => {

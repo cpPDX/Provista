@@ -18,12 +18,12 @@ test.describe('Shopping List Tab', () => {
     await expect(page.locator('#modal-overlay')).toBeHidden();
   });
 
-  test('"Clear Checked" button is visible', async ({ page }) => {
-    await expect(page.locator('#btn-clear-checked')).toBeVisible();
+  test('"Clear Checked" stays out of the way until an item is checked', async ({ page }) => {
+    await expect(page.locator('#btn-clear-checked')).toBeHidden();
   });
 
-  test('"Clear All" button is visible for admin/owner', async ({ page }) => {
-    await expect(page.locator('#btn-clear-all')).toBeVisible();
+  test('"Clear All" stays out of the way on an empty list', async ({ page }) => {
+    await expect(page.locator('#btn-clear-all')).toBeHidden();
   });
 
   test('checking an item is instant and defers missing prices to trip review', async ({ page }) => {

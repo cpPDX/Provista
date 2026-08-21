@@ -6,7 +6,7 @@
 const { request } = require('@playwright/test');
 
 let _counter = 0;
-function uid() { return `${Date.now()}-${++_counter}`; }
+function uid() { return `${Date.now()}-${process.pid}-${++_counter}`; }
 
 let _credentials = null; // cached per worker / spec file
 

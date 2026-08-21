@@ -319,7 +319,11 @@ function renderCartDetail(container) {
   rows.push(`<div class="cart-detail-row cart-detail-total">
     <span>Total</span><span>${formatCurrency(total)}</span>
   </div>`);
+  rows.push(`<div class="done-shopping-row">
+    <button class="btn btn-primary btn-full" id="btn-done-shopping">Done Shopping ✓</button>
+  </div>`);
   container.innerHTML = rows.join('');
+  document.getElementById('btn-done-shopping')?.addEventListener('click', openDoneShoppingReview);
 }
 
 function openDoneShoppingReview() {
@@ -702,8 +706,6 @@ function initShoppingListTab() {
   }
 
   document.getElementById('btn-deselect-all')?.addEventListener('click', deselectAll);
-
-  document.getElementById('btn-done-shopping')?.addEventListener('click', openDoneShoppingReview);
 
   document.getElementById('btn-low-stock')?.addEventListener('click', openLowStockReview);
 
