@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../../server');
 const db = require('../helpers/db');
+const HouseholdPerson = require('../../models/HouseholdPerson');
 const { createOwnerSession, createMemberSession, getInviteCode } = require('../helpers/auth');
 
 beforeAll(db.connect);
@@ -69,6 +70,24 @@ describe('household people', () => {
 
     const household = await request(app).get('/api/household').set('Cookie', cookie);
     expect(household.body.people.some(p => p.displayName === 'Wiz')).toBe(true);
+  });
+
+  it('backfills a missing account-linked person even when manual people already exist', async () => {
+    const { cookie: ownerCookie } = await createOwnerSession(app);
+    const manual = await request(app)
+      .post('/api/household/people')
+      .set('Cookie', ownerCookie)
+      .send({ displayName: 'Kid' });
+    expect(manual.status).toBe(201);
+
+    const code = await getInviteCode(app, ownerCookie);
+    const { user: member } = await createMemberSession(app, code);
+    await HouseholdPerson.deleteOne({ userId: member._id });
+
+    const household = await request(app).get('/api/household').set('Cookie', ownerCookie);
+    expect(household.status).toBe(200);
+    expect(household.body.people.some(p => p._id === manual.body._id)).toBe(true);
+    expect(household.body.people.some(p => String(p.userId) === String(member._id))).toBe(true);
   });
 
   it('member cannot add household people', async () => {
