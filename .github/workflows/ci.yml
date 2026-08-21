@@ -38,6 +38,7 @@ jobs:
           node --check public/js/groceryEntry.js
           node --check public/js/csvImportUnified.js
           node --check public/js/mealPlan.js
+          node --check public/js/productShell.js
           node --check tests/e2e/prices.spec.js
           node --check tests/e2e/mealPlan.spec.js
 
