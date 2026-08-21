@@ -8,15 +8,16 @@ function fallbackDisplayName(user) {
 }
 
 async function ensureHouseholdPeople(householdId) {
-  const users = await User.find({ householdId })
-    .select('_id name displayName')
-    .sort({ createdAt: 1 })
-    .lean();
+  const [users, existing] = await Promise.all([
+    User.find({ householdId })
+      .select('_id name displayName')
+      .sort({ createdAt: 1 })
+      .lean(),
+    HouseholdPerson.find({ householdId }).lean()
+  ]);
 
-  if (!users.length) return [];
-
-  const existing = await HouseholdPerson.find({ householdId }).lean();
-  const byUserId = new Map(existing.filter(p => p.userId).map(p => [String(p.userId), p]));
+  const byUserId = new Map(existing.filter(person => person.userId).map(person => [String(person.userId), person]));
+  const maxSortOrder = existing.reduce((max, person) => Math.max(max, Number(person.sortOrder) || 0), -1);
 
   const missing = users
     .filter(user => !byUserId.has(String(user._id)))
@@ -24,7 +25,8 @@ async function ensureHouseholdPeople(householdId) {
       householdId,
       userId: user._id,
       displayName: fallbackDisplayName(user),
-      sortOrder: existing.length + index
+      active: true,
+      sortOrder: maxSortOrder + index + 1
     }));
 
   if (missing.length) {
@@ -42,14 +44,36 @@ async function syncUserHouseholdPerson(user) {
   if (!user?.householdId) return null;
 
   const displayName = fallbackDisplayName(user);
-  return HouseholdPerson.findOneAndUpdate(
-    { householdId: user.householdId, userId: user._id },
-    {
-      $set: { displayName, active: true },
-      $setOnInsert: { sortOrder: 0 }
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  const existing = await HouseholdPerson.findOne({
+    householdId: user.householdId,
+    userId: user._id
+  });
+
+  if (existing) {
+    existing.displayName = displayName;
+    existing.active = true;
+    return existing.save();
+  }
+
+  const last = await HouseholdPerson.findOne({ householdId: user.householdId })
+    .sort({ sortOrder: -1 })
+    .select('sortOrder')
+    .lean();
+
+  try {
+    return await HouseholdPerson.create({
+      householdId: user.householdId,
+      userId: user._id,
+      displayName,
+      active: true,
+      sortOrder: (Number(last?.sortOrder) || 0) + (last ? 1 : 0)
+    });
+  } catch (err) {
+    // Concurrent requests can both discover the same missing link. The unique partial index
+    // makes that safe; in that race, return the record created by the other request.
+    if (err?.code !== 11000) throw err;
+    return HouseholdPerson.findOne({ householdId: user.householdId, userId: user._id });
+  }
 }
 
 module.exports = { fallbackDisplayName, ensureHouseholdPeople, syncUserHouseholdPerson };
