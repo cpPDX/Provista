@@ -19,7 +19,7 @@ router.get('/low-stock', requireAuth, async (req, res) => {
   }
 });
 
-router.get('/', requireAuth, requireAdmin, async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const items = await InventoryItem.find({ householdId: req.user.householdId, quantity: { $gt: 0 } })
       .populate('itemId', 'name brand category unit size isOrganic')

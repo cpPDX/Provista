@@ -6,7 +6,9 @@ test.use({ timezoneId: 'America/Los_Angeles' });
 test.describe('Prices Tab', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await loginAsNewUser(page, baseURL);
-    await page.click('[data-tab="prices"]');
+    await page.click('[data-tab="more"]');
+    await page.click('.more-item[data-section="insights"]');
+    await page.click('[data-insight-tab="prices"]');
   });
 
   test('Log Price opens the unified Add Grocery modal', async ({ page }) => {

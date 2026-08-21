@@ -38,8 +38,14 @@ jobs:
           node --check public/js/groceryEntry.js
           node --check public/js/csvImportUnified.js
           node --check public/js/mealPlan.js
+          node --check public/js/home.js
+          node --check public/js/onboarding.js
+          node --check public/js/shoppingList.js
           node --check tests/e2e/prices.spec.js
           node --check tests/e2e/mealPlan.spec.js
+          node --check tests/e2e/home.spec.js
+          node --check tests/e2e/navigation.spec.js
+          node --check tests/e2e/shoppingList.spec.js
 
       - name: Run API test suite
         run: npm run test:api
@@ -77,5 +83,5 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run grocery and meal-plan browser tests
-        run: npx playwright test tests/e2e/prices.spec.js tests/e2e/mealPlan.spec.js
+      - name: Run home, grocery, and meal-plan browser tests
+        run: npx playwright test tests/e2e/home.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/mealPlan.spec.js

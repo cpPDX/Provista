@@ -22,14 +22,14 @@ test.describe('Meal Plan Tab', () => {
     await expect(page.locator('.meal-day')).toHaveCount(7);
   });
 
-  test('each day starts with four meal type sections and Everyone audiences', async ({ page }) => {
+  test('each day starts with four meal type sections and quiet default audiences', async ({ page }) => {
     const dayCard = page.locator('.meal-day').first();
     await expect(dayCard.locator('.meal-type-section')).toHaveCount(4);
 
     const audienceButtons = dayCard.locator('.meal-audience-toggle');
     await expect(audienceButtons).toHaveCount(4);
     for (let i = 0; i < 4; i++) {
-      await expect(audienceButtons.nth(i)).toHaveText('Everyone');
+      await expect(audienceButtons.nth(i)).toHaveText('Change who');
     }
   });
 
@@ -37,6 +37,14 @@ test.describe('Meal Plan Tab', () => {
     const firstRow = page.locator('.meal-row').first();
     await expect(firstRow.locator('.meal-name-input')).toBeVisible();
     await expect(firstRow.locator('.meal-notes-input')).toBeVisible();
+  });
+
+  test('autosave has one clear passive status instead of a Save button', async ({ page }) => {
+    await expect(page.locator('#mp-save-btn')).toHaveCount(0);
+    await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓');
+    await page.locator('.meal-name-input').first().fill('Tacos');
+    await expect(page.locator('#mp-save-status')).toHaveText('Saving…');
+    await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
   });
 
   test('a separate meal starts with a real household audience', async ({ page }) => {

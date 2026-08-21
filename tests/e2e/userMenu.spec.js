@@ -1,10 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const { loginAsNewUser } = require('./helpers/login');
 
-test.describe('User Menu (hamburger)', () => {
+test.describe('More menu', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await loginAsNewUser(page, baseURL);
-    await page.click('#btn-user-menu');
+    await page.click('[data-tab="more"]');
     await expect(page.locator('#tab-more')).toHaveClass(/active/);
   });
 

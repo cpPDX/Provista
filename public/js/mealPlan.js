@@ -132,7 +132,10 @@ function getAudienceLabel(row) {
 
 function refreshAudienceUI(row) {
   const button = row.querySelector('.meal-audience-toggle');
-  if (button) button.textContent = getAudienceLabel(row);
+  if (!button) return;
+  const label = getAudienceLabel(row);
+  button.textContent = label === 'Everyone' ? 'Change who' : label;
+  button.classList.toggle('meal-audience-default', label === 'Everyone');
 }
 
 function setEveryone(row, everyone) {
@@ -193,7 +196,15 @@ function collectPlanFromDOM() {
 
 function scheduleSave() {
   if (mealPlanState.saveTimer) clearTimeout(mealPlanState.saveTimer);
+  setMealPlanSaveStatus('Saving…', 'saving');
   mealPlanState.saveTimer = setTimeout(doSave, 500);
+}
+
+function setMealPlanSaveStatus(message, state = '') {
+  const status = document.getElementById('mp-save-status');
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.state = state;
 }
 
 async function doSave() {
@@ -201,7 +212,9 @@ async function doSave() {
   try {
     const saved = await saveMealPlan(payload);
     mealPlanState.plan = saved;
+    setMealPlanSaveStatus('Saved ✓', 'saved');
   } catch (err) {
+    setMealPlanSaveStatus('Couldn’t save', 'error');
     if (typeof showToast === 'function') showToast('Failed to save meal plan');
   }
 }
@@ -412,7 +425,7 @@ function renderMealPlan(plan) {
       </div>
 
       <div class="meal-plan-actions">
-        <button class="btn btn-primary" id="mp-save-btn">Save Plan</button>
+        <span class="meal-save-status" id="mp-save-status" role="status" aria-live="polite" data-state="saved">Saved ✓</span>
         <button class="btn btn-outline" id="mp-export-btn">Export Week</button>
         ${isAdmin ? `
           <button class="btn btn-outline btn-sm" id="mp-settings-btn" style="margin-left:auto;font-size:0.8125rem">⚙ Week starts</button>
@@ -437,14 +450,6 @@ function renderMealPlan(plan) {
   document.getElementById('mp-next-week')?.addEventListener('click', () => {
     mealPlanState.weekStart = addWeeks(mealPlanState.weekStart, 1);
     loadMealPlan();
-  });
-
-  document.getElementById('mp-save-btn')?.addEventListener('click', async () => {
-    const btn = document.getElementById('mp-save-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
-    await doSave();
-    if (btn) { btn.disabled = false; btn.textContent = 'Save Plan'; }
-    if (typeof showToast === 'function') showToast('Meal plan saved');
   });
 
   document.getElementById('mp-export-btn')?.addEventListener('click', exportWeekICS);

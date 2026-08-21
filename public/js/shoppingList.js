@@ -2,8 +2,8 @@
 
 let listState = { items: [], stores: [], filter: { storeId: null, category: null } };
 
-// Cart state: confirmed prices while shopping. In-memory, cleared when list is cleared.
-const cartState = new Map(); // listItemId → { name, price, quantity }
+// Cart state: inferred prices while shopping. Missing-price exceptions are reviewed at the end.
+const cartState = new Map(); // listItemId → { name, price, quantity, needsPrice }
 
 // Guard against rapid double-taps on the same item's checkbox
 const pendingCheckIds = new Set();
@@ -85,7 +85,9 @@ function renderShoppingList() {
 
     let priceInfo = '';
     if (cartEntry) {
-      priceInfo = `<div class="card-subtitle text-success">In cart: ${formatCurrency(cartEntry.price)}</div>`;
+      priceInfo = cartEntry.needsPrice
+        ? '<div class="card-subtitle" style="color:var(--warning)">In cart · price needed</div>'
+        : `<div class="card-subtitle text-success">In cart: ${formatCurrency(cartEntry.price)}</div>`;
     } else if (item.bestPrice) {
       const { store, pricePerUnit } = item.bestPrice;
       priceInfo = `<div class="card-subtitle text-success">${store?.name} &mdash; ${formatPPU(pricePerUnit, unit)}</div>`;
@@ -157,7 +159,7 @@ function renderStoreSummary(items) {
 }
 
 // =============================================================
-// Check-off with price confirmation
+// Instant check-off; price exceptions are handled at Done Shopping
 // =============================================================
 
 function handleListItemCheck(id, willBeChecked) {
@@ -172,19 +174,21 @@ function handleListItemCheck(id, willBeChecked) {
     return;
   }
 
-  // Checking — show price confirmation sheet
+  // Checking means “Got it.” Use the known price silently and defer exceptions.
   const name = item.itemId?.name || 'Unknown item';
   const qty = item.quantity || 1;
-  const unit = item.itemId?.unit || '';
-
-  // Estimate best known price: bestPrice.finalPrice or pricePerUnit * qty
   const knownPrice = item.bestPrice
     ? (item.bestPrice.finalPrice != null
         ? item.bestPrice.finalPrice
         : (item.bestPrice.pricePerUnit || 0) * qty)
     : null;
-
-  showPriceConfirmSheet(id, name, qty, unit, knownPrice);
+  cartState.set(id, {
+    name,
+    price: knownPrice || 0,
+    quantity: qty,
+    needsPrice: !(knownPrice != null && knownPrice > 0)
+  });
+  toggleListItem(id, true);
 }
 
 function showPriceConfirmSheet(listItemId, name, qty, unit, knownPrice) {
@@ -282,12 +286,19 @@ function updateCartBar() {
   }
 
   let total = 0;
-  cartState.forEach(entry => { total += entry.price; });
+  let missingPrices = 0;
+  cartState.forEach(entry => {
+    total += entry.price || 0;
+    if (entry.needsPrice) missingPrices++;
+  });
   const count = cartState.size;
 
   bar.style.display = '';
   tab?.classList.add('has-cart');
-  if (label) label.textContent = `In cart: ${formatCurrency(total)} (${count} item${count !== 1 ? 's' : ''})`;
+  if (label) {
+    const review = missingPrices ? ` · ${missingPrices} need price${missingPrices === 1 ? '' : 's'}` : '';
+    label.textContent = `In cart: ${formatCurrency(total)} (${count} item${count !== 1 ? 's' : ''})${review}`;
+  }
 
   const detail = document.getElementById('cart-bar-detail');
   if (detail && detail.style.display !== 'none') {
@@ -299,16 +310,73 @@ function renderCartDetail(container) {
   let total = 0;
   const rows = [];
   cartState.forEach((entry, id) => {
-    total += entry.price;
+    total += entry.price || 0;
     rows.push(`<div class="cart-detail-row">
       <span>${entry.name}</span>
-      <span>${formatCurrency(entry.price)}</span>
+      <span>${entry.needsPrice ? 'Price needed' : formatCurrency(entry.price)}</span>
     </div>`);
   });
   rows.push(`<div class="cart-detail-row cart-detail-total">
     <span>Total</span><span>${formatCurrency(total)}</span>
   </div>`);
   container.innerHTML = rows.join('');
+}
+
+function openDoneShoppingReview() {
+  const checkedItems = listState.items.filter(item => item.checked);
+  if (!checkedItems.length) { showToast('No items checked off'); return; }
+
+  let total = 0;
+  const missing = [];
+  cartState.forEach(entry => {
+    total += entry.price || 0;
+    if (entry.needsPrice) missing.push(entry.name);
+  });
+
+  openModal('Review shopping trip', `
+    <div class="trip-review-summary">
+      <strong>${checkedItems.length} item${checkedItems.length === 1 ? '' : 's'} · ${formatCurrency(total)}</strong>
+      <p class="text-muted text-sm">Known prices are applied automatically.</p>
+    </div>
+    ${missing.length ? `
+      <div class="trip-review-warning">
+        <strong>${missing.length} item${missing.length === 1 ? '' : 's'} need${missing.length === 1 ? 's' : ''} prices</strong>
+        <p>${missing.slice(0, 4).map(escapeHtml).join(', ')}${missing.length > 4 ? `, +${missing.length - 4} more` : ''}</p>
+      </div>` : '<p class="trip-review-ready">All item prices are accounted for.</p>'}
+    <div class="form-actions">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Keep shopping</button>
+      <button type="button" class="btn btn-primary" id="btn-finish-trip">Finish trip</button>
+    </div>`);
+
+  document.getElementById('btn-finish-trip')?.addEventListener('click', finishShoppingTrip);
+}
+
+async function finishShoppingTrip() {
+  const button = document.getElementById('btn-finish-trip');
+  if (button) { button.disabled = true; button.textContent = 'Finishing…'; }
+  const checkedItems = listState.items.filter(item => item.checked);
+  let total = 0;
+  let missingPrices = 0;
+  cartState.forEach(entry => {
+    total += entry.price || 0;
+    if (entry.needsPrice) missingPrices++;
+  });
+  const count = checkedItems.length;
+  const review = missingPrices
+    ? ` · ${missingPrices} item${missingPrices === 1 ? '' : 's'} still need${missingPrices === 1 ? 's' : ''} a price`
+    : '';
+  const msg = `Trip complete! ${count} item${count !== 1 ? 's' : ''} — ${formatCurrency(total)} total${review}`;
+
+  try {
+    await api.shoppingList.clear(true);
+    checkedItems.forEach(item => cartState.delete(item._id));
+    closeModal();
+    await loadShoppingListTab();
+    showToast(msg, 5000);
+  } catch (err) {
+    handleError(err, 'Failed to finish shopping trip');
+    if (button) { button.disabled = false; button.textContent = 'Finish trip'; }
+  }
 }
 
 // =============================================================
@@ -635,23 +703,7 @@ function initShoppingListTab() {
 
   document.getElementById('btn-deselect-all')?.addEventListener('click', deselectAll);
 
-  document.getElementById('btn-done-shopping')?.addEventListener('click', async () => {
-    const checkedItems = listState.items.filter(i => i.checked);
-    if (!checkedItems.length) { showToast('No items checked off'); return; }
-
-    let total = 0;
-    cartState.forEach(entry => { total += entry.price; });
-    const count = checkedItems.length;
-    const msg = `Trip complete! ${count} item${count !== 1 ? 's' : ''} — ${formatCurrency(total)} total`;
-
-    // Clear checked items from API and local state
-    checkedItems.forEach(i => cartState.delete(i._id));
-    try {
-      await api.shoppingList.clear(true); // clear checked=true only
-    } catch (_) {}
-    await loadShoppingListTab();
-    showToast(msg, 4000);
-  });
+  document.getElementById('btn-done-shopping')?.addEventListener('click', openDoneShoppingReview);
 
   document.getElementById('btn-low-stock')?.addEventListener('click', openLowStockReview);
 

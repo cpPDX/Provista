@@ -38,51 +38,39 @@ function markWizardDone() {
 const WIZARD_STEPS = [
   {
     tab: 'more',
-    section: 'stores',
-    sectionLoader: async () => { await loadStores(); },
-    targetId: 'btn-add-store',
-    actionId: 'add-store',
-    title: 'Step 1 of 4 — Add your stores',
-    text: 'Start by adding the grocery stores you shop at (Costco, Trader Joe\'s, Safeway…). Tap + Add Store — the wizard advances automatically when you save.',
-    nextLabel: 'Skip'
-  },
-  {
-    tab: 'prices',
-    section: null,
-    sectionLoader: null,
-    targetId: 'btn-add-price',
-    actionId: 'add-price',
-    title: 'Step 2 of 4 — Log a price',
-    text: 'Use the Prices tab to record what you paid for each item. Tap + Log Price and fill it in — the wizard advances automatically when you save. You can also import a CSV of past prices.',
-    nextLabel: 'Skip'
-  },
-  {
-    tab: 'more',
     section: 'household',
-    sectionLoader: async () => {
-      await loadHousehold();
-      // Auto-expand invite section after a short delay
-      setTimeout(async () => {
-        const btn = document.getElementById('btn-show-invite');
-        if (btn) {
-          btn.style.display = 'none'; // hide the button, show inline
-          await loadInviteCode();
-        }
-      }, 400);
-    },
+    sectionLoader: async () => { await loadHousehold(); },
     targetId: 'household-content',
-    title: 'Step 3 of 4 — Invite your household',
-    text: 'Share your invite code or QR code with family. They\'ll join your household and see prices, the shopping list, and inventory.',
+    title: 'Step 1 of 4 — Add your household',
+    text: 'Start with the people you plan and shop for. You can invite app users now or add planning-only people later.',
     nextLabel: 'Next'
   },
   {
-    tab: 'prices',
+    tab: 'meal-plan',
     section: null,
     sectionLoader: null,
-    targetId: null,
-    title: 'You\'re all set! 🎉',
-    text: 'Keep logging prices and the app builds a picture of where to find the best deals. You can revisit this tour anytime from More → App Tour.',
-    nextLabel: 'Get Started'
+    targetId: 'meal-plan-content',
+    title: 'Step 2 of 4 — Plan one meal',
+    text: 'Choose tonight’s dinner. Meal planning is the fastest way to turn an idea into a useful household plan.',
+    nextLabel: 'Next'
+  },
+  {
+    tab: 'list',
+    section: null,
+    sectionLoader: null,
+    targetId: 'btn-add-list-item',
+    title: 'Step 3 of 4 — Add what you need',
+    text: 'Add the ingredients or household items you need. Everyone shares this list.',
+    nextLabel: 'Next'
+  },
+  {
+    tab: 'home',
+    section: null,
+    sectionLoader: null,
+    targetId: 'home-content',
+    title: 'Your household is ready 🎉',
+    text: 'Home brings dinner, shopping, and Pantry priorities together. Stores and price tracking are optional enhancements in More → Insights.',
+    nextLabel: 'Go Home'
   }
 ];
 
@@ -192,7 +180,7 @@ function runWizard(startStep) {
   function complete() {
     markWizardDone();
     close();
-    switchTab('prices');
+    switchTab('home');
   }
 
   function close() {
@@ -213,10 +201,16 @@ function runWizard(startStep) {
 function startAppTour() {
   const steps = [
     {
-      tab: 'prices',
-      title: 'Product Prices',
-      text: 'Your price log. Log prices manually or import from CSV. Tap any item to see its full history and compare stores.',
-      anchor: '[data-tab="prices"]'
+      tab: 'home',
+      title: 'Home / Today',
+      text: 'See dinner, the shopping list, low-stock staples, and your next best action in one glance.',
+      anchor: '[data-tab="home"]'
+    },
+    {
+      tab: 'meal-plan',
+      title: 'Plan',
+      text: 'Plan meals for the household. Changes save automatically, so there is no extra Save step.',
+      anchor: '[data-tab="meal-plan"]'
     },
     {
       tab: 'list',
@@ -225,15 +219,15 @@ function startAppTour() {
       anchor: '[data-tab="list"]'
     },
     {
-      tab: 'spend',
-      title: 'Spend Analytics',
-      text: 'See where your money goes — broken down by month, category, and store. The more you log, the more useful this gets.',
-      anchor: '[data-tab="spend"]'
+      tab: 'inventory',
+      title: 'Pantry',
+      text: 'Keep an eye on household staples and low-stock alerts without tracking every cupboard item.',
+      anchor: '[data-tab="inventory"]'
     },
     {
       tab: 'more',
       title: 'More',
-      text: 'Manage inventory, product catalog, stores, household members, and your account. Admins can also review pending price submissions here.',
+      text: 'Open Insights for prices and spending, or manage household people, stores, and account settings.',
       anchor: '[data-tab="more"]'
     }
   ];
@@ -298,7 +292,7 @@ function startAppTour() {
     backdrop.classList.remove('visible');
     tooltip.classList.remove('visible');
     setTimeout(() => { backdrop.remove(); tooltip.remove(); }, 300);
-    switchTab('prices');
+    switchTab('home');
   }
 
   render();
