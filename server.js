@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const { securityHeaders, createRateLimiter } = require('./middleware/security');
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required');
@@ -10,14 +11,26 @@ if (!process.env.JWT_SECRET) {
 }
 
 const app = express();
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
+app.use(securityHeaders);
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// Keep brute-force / account abuse bounded. These stores are process-local,
+// which matches the current single-replica deployment.
+const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'login' });
+const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'register' });
+const passwordLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'password' });
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/register', registerLimiter);
+app.use('/api/auth/password', passwordLimiter);
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check (no auth required)
 app.use('/api/health', require('./routes/health'));
 
-// Auth routes (no auth middleware - these set/clear the cookie)
+// Auth routes
 app.use('/api/auth', require('./routes/auth'));
 
 // Household management
@@ -27,6 +40,7 @@ app.use('/api/household', require('./routes/household'));
 app.use('/api/items', require('./routes/items'));
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/prices', require('./routes/prices'));
+app.use('/api/grocery', require('./routes/grocery'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/shopping-list', require('./routes/shoppingList'));
 app.use('/api/spend', require('./routes/spend'));
@@ -49,7 +63,8 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocer
 
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
-  // Listen immediately so Railway's health check succeeds while DB connects
+  // Listen immediately so Railway's liveness check succeeds while DB connects.
+  // Deployment readiness should use /api/health/ready.
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
   });

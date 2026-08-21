@@ -70,6 +70,19 @@ describe('POST /api/prices', () => {
     expect(res.status).toBe(201);
     expect(res.body.pricePerUnit).toBeCloseTo(2.0);
   });
+
+  it('rejects item or store IDs from another household', async () => {
+    const first = await createOwnerSession(app, { email: 'prices-first@test.com', householdName: 'First' });
+    const second = await createOwnerSession(app, { email: 'prices-second@test.com', householdName: 'Second' });
+    const foreignItem = await request(app).post('/api/items').set('Cookie', second.cookie)
+      .send({ name: 'Foreign', category: 'Pantry', unit: 'each' });
+    const localStore = await request(app).post('/api/stores').set('Cookie', first.cookie)
+      .send({ name: 'Local' });
+
+    const res = await request(app).post('/api/prices').set('Cookie', first.cookie)
+      .send(pricePayload(foreignItem.body._id, localStore.body._id));
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('GET /api/prices', () => {
@@ -141,6 +154,27 @@ describe('PUT /api/prices/:id/approve', () => {
       .put(`/api/prices/${pending.body._id}/approve`)
       .set('Cookie', memberCookie);
     expect(res.status).toBe(403);
+  });
+
+  it('rejects changing a pending entry to a store from another household', async () => {
+    const local = await setupFixtures(app);
+    const code = await getInviteCode(app, local.ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+    const pending = await request(app).post('/api/prices').set('Cookie', memberCookie)
+      .send(pricePayload(local.itemId, local.storeId));
+
+    const foreign = await createOwnerSession(app, { email: 'prices-foreign@test.com', householdName: 'Foreign' });
+    const foreignStore = await request(app).post('/api/stores').set('Cookie', foreign.cookie)
+      .send({ name: 'Foreign Store' });
+
+    const res = await request(app)
+      .put(`/api/prices/${pending.body._id}/approve`)
+      .set('Cookie', local.ownerCookie)
+      .send({ storeId: foreignStore.body._id });
+    expect(res.status).toBe(404);
+
+    const stillPending = await request(app).get('/api/prices/pending').set('Cookie', local.ownerCookie);
+    expect(stillPending.body.some(entry => entry._id === pending.body._id)).toBe(true);
   });
 });
 

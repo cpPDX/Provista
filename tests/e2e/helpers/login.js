@@ -34,9 +34,10 @@ async function loginAsNewUser(page, baseURL) {
 
   // Log in via browser (fast)
   await page.goto('/login.html');
-  await page.fill('#login-email', _credentials.email);
-  await page.fill('#login-password', _credentials.password);
-  await page.click('#btn-login');
+  const loginForm = page.locator('#login-form');
+  await loginForm.locator('input[name="email"]').fill(_credentials.email);
+  await loginForm.locator('input[name="password"]').fill(_credentials.password);
+  await loginForm.getByRole('button', { name: 'Sign In' }).click();
   await page.waitForURL('/', { timeout: 15000 });
 
   return { ..._credentials };

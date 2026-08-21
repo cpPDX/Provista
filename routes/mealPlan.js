@@ -1,8 +1,10 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const Household = require('../models/Household');
-const User = require('../models/User');
+const HouseholdPerson = require('../models/HouseholdPerson');
+const { ensureHouseholdPeople } = require('../utils/householdPeople');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -10,26 +12,58 @@ function serverErr(err) { return isProd ? 'Internal server error' : err.message;
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
 
-function buildScaffold(weekStart, members) {
+function buildScaffold(weekStart) {
   const days = [];
   const start = new Date(weekStart);
-  const memberNames = (members || []).map(m => m.name);
   for (let i = 0; i < 7; i++) {
     const date = new Date(start);
     date.setUTCDate(start.getUTCDate() + i);
-    const meals = [];
-    MEAL_TYPES.forEach(mealType => {
-      if (memberNames.length === 0) {
-        meals.push({ mealType, personName: '', name: '' });
-      } else {
-        memberNames.forEach(name => {
-          meals.push({ mealType, personName: name, name: '' });
-        });
-      }
-    });
+    const meals = MEAL_TYPES.map(mealType => ({
+      mealType,
+      personName: '',
+      personIds: [],
+      forEveryone: true,
+      name: '',
+      notes: ''
+    }));
     days.push({ date, meals, specialCollapsed: true });
   }
   return days;
+}
+
+function collectAudienceIds(days) {
+  if (!Array.isArray(days)) return [];
+  return [...new Set(days.flatMap(day =>
+    (Array.isArray(day?.meals) ? day.meals : []).flatMap(meal =>
+      Array.isArray(meal?.personIds) ? meal.personIds.map(String) : []
+    )
+  ))];
+}
+
+async function validateAudience(days, householdId) {
+  if (!Array.isArray(days)) return null;
+
+  for (const day of days) {
+    for (const meal of (Array.isArray(day?.meals) ? day.meals : [])) {
+      const ids = Array.isArray(meal?.personIds) ? meal.personIds.filter(Boolean).map(String) : [];
+      const legacyName = String(meal?.personName || '').trim();
+      if (meal?.forEveryone === false && ids.length === 0 && !legacyName) {
+        return 'A meal for selected people must include at least one person';
+      }
+    }
+  }
+
+  const ids = collectAudienceIds(days);
+  if (!ids.length) return null;
+  if (ids.some(id => !mongoose.isValidObjectId(id))) {
+    return 'Meal audience contains an invalid household person';
+  }
+
+  const count = await HouseholdPerson.countDocuments({
+    _id: { $in: ids },
+    householdId
+  });
+  return count === ids.length ? null : 'Meal audience contains a person outside this household';
 }
 
 // GET /api/meal-plan?weekStart=YYYY-MM-DD
@@ -41,21 +75,35 @@ router.get('/', requireAuth, async (req, res) => {
     const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
     if (isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
 
-    let plan = await MealPlan.findOne({ householdId: req.user.householdId, weekStart: weekStartDate });
+    const [plan, people] = await Promise.all([
+      MealPlan.findOne({ householdId: req.user.householdId, weekStart: weekStartDate }),
+      ensureHouseholdPeople(req.user.householdId)
+    ]);
 
     if (!plan) {
-      const members = await User.find({ householdId: req.user.householdId }).select('name').lean();
       return res.json({
         householdId: req.user.householdId,
         weekStart: weekStartDate,
-        days: buildScaffold(weekStartDate, members),
+        days: buildScaffold(weekStartDate),
+        people,
         produceNotes: '',
         shoppingNotes: '',
         _scaffold: true
       });
     }
 
-    res.json(plan);
+    const result = plan.toObject();
+    const activeIds = new Set(people.map(person => String(person._id)));
+    const referencedIds = collectAudienceIds(result.days)
+      .filter(id => mongoose.isValidObjectId(id) && !activeIds.has(id));
+    const historicalPeople = referencedIds.length
+      ? await HouseholdPerson.find({ _id: { $in: referencedIds }, householdId: req.user.householdId }).lean()
+      : [];
+    result.people = [
+      ...people,
+      ...historicalPeople.map(person => ({ ...person, historical: person.active === false }))
+    ];
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -70,20 +118,26 @@ router.put('/', requireAuth, async (req, res) => {
     const weekStartDate = new Date(weekStart + 'T00:00:00.000Z');
     if (isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
 
+    const audienceError = await validateAudience(days, req.user.householdId);
+    if (audienceError) return res.status(400).json({ error: audienceError });
+
     const plan = await MealPlan.findOneAndUpdate(
       { householdId: req.user.householdId, weekStart: weekStartDate },
       {
         $set: {
-          days: days || buildScaffold(weekStartDate, []),
+          days: days || buildScaffold(weekStartDate),
           produceNotes: produceNotes || '',
           shoppingNotes: shoppingNotes || ''
         }
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
     );
 
     res.json(plan);
   } catch (err) {
+    if (err?.name === 'ValidationError' || err?.name === 'CastError') {
+      return res.status(400).json({ error: serverErr(err) });
+    }
     res.status(500).json({ error: serverErr(err) });
   }
 });

@@ -12,13 +12,13 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "bcrypt": "^5.1.1",
+    "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
+    "express": "^4.22.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.4.1",
+    "mongoose": "^8.24.3",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
@@ -29,6 +29,6 @@
     "supertest": "^7.2.2"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.19.0"
   }
 }

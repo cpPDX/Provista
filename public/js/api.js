@@ -1,9 +1,11 @@
 // Centralized API helper with offline support
 
 // Returns true only for simple top-level CRUD paths (e.g. /items, /items/123).
-// Sub-resource actions like /items/123/merge are not safe to queue offline.
+// Sub-resource actions like /items/123/merge and combined-write actions like
+// /grocery/log are not safe to queue offline.
 function _isSimpleCrudPath(method, path) {
   if (method === 'GET') return true;
+  if (path.split('?')[0] === '/grocery/log') return false;
   const segments = path.split('?')[0].split('/').filter(Boolean);
   return segments.length <= 2;
 }
@@ -140,6 +142,9 @@ const api = {
     delete: (id) => api.delete(`/prices/${id}`),
     lastPurchased: (itemId) => api.get(`/prices/last-purchased/${itemId}`)
   },
+  grocery: {
+    log: (data) => api.post('/grocery/log', data)
+  },
   inventory: {
     list: () => api.get('/inventory'),
     save: (data) => api.post('/inventory', data),
@@ -172,6 +177,9 @@ const api = {
     updateSettings: (data) => api.patch('/household/settings', data),
     getInvite: () => api.get('/household/invite'),
     regenerateInvite: () => api.post('/household/invite', {}),
+    addPerson: (displayName) => api.post('/household/people', { displayName }),
+    updatePerson: (id, data) => api.put(`/household/people/${id}`, data),
+    removePerson: (id) => api.delete(`/household/people/${id}`),
     removeMember: (id) => api.delete(`/household/members/${id}`),
     updateMemberRole: (id, role) => api.put(`/household/members/${id}`, { role }),
     deleteHousehold: (data) => api.request('DELETE', '/household', data)

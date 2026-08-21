@@ -202,9 +202,12 @@ function buildCallout(entries) {
   const best = sorted[0];
   const worst = sorted[1];
   const unit = best.item?.unit || best.itemId?.unit || 'unit';
+  const safeUnit = escapeHtml(unit);
+  const bestStore = escapeHtml(best.store?.name || best.storeId?.name || 'Unknown store');
+  const worstStore = escapeHtml(worst.store?.name || worst.storeId?.name || 'Unknown store');
   return `<div class="callout-box">
-    Best value: ${best.quantity}${unit} @ ${formatCurrency(best.price)} (${formatPPU(best.pricePerUnit, unit)}) at ${best.store?.name || best.storeId?.name}
-    vs ${worst.quantity}${unit} @ ${formatCurrency(worst.price)} (${formatPPU(worst.pricePerUnit, unit)}) at ${worst.store?.name || worst.storeId?.name}
+    Best value: ${escapeHtml(best.quantity)}${safeUnit} @ ${formatCurrency(best.price)} (${escapeHtml(formatPPU(best.pricePerUnit, unit))}) at ${bestStore}
+    vs ${escapeHtml(worst.quantity)}${safeUnit} @ ${formatCurrency(worst.price)} (${escapeHtml(formatPPU(worst.pricePerUnit, unit))}) at ${worstStore}
   </div>`;
 }
 

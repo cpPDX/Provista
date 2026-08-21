@@ -3,9 +3,11 @@ const { defineConfig } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './tests/e2e',
   globalTeardown: './tests/e2e/global-teardown.js',
+  reporter: process.env.CI ? 'line' : 'list',
   timeout: 90000,
   retries: 1,
   use: {
+    actionTimeout: 15000,
     baseURL: 'http://127.0.0.1:3000',
     headless: true,
     viewport: { width: 390, height: 844 },
@@ -13,7 +15,7 @@ module.exports = defineConfig({
   },
   webServer: {
     command: 'node server.js',
-    url: 'http://127.0.0.1:3000',
+    url: 'http://127.0.0.1:3000/api/health/ready',
     reuseExistingServer: !process.env.CI,
     // No env override — server.js loads .env itself via require('dotenv').config()
   }

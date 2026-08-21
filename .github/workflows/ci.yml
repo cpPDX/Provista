@@ -1,0 +1,81 @@
+name: App CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20.19.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check public/js/api.js
+          node --check public/js/ui.js
+          node --check public/js/more.js
+          node --check public/js/householdPeople.js
+          node --check public/js/groceryEntry.js
+          node --check public/js/csvImportUnified.js
+          node --check public/js/mealPlan.js
+          node --check tests/e2e/prices.spec.js
+          node --check tests/e2e/mealPlan.spec.js
+
+      - name: Run API test suite
+        run: npm run test:api
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'quit(db.runCommand({ ping: 1 }).ok ? 0 : 2)'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      JWT_SECRET: ci-e2e-secret
+      MONGODB_URI: mongodb://127.0.0.1:27017/grocery-tracker-e2e
+      NODE_ENV: test
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20.19.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run grocery and meal-plan browser tests
+        run: npx playwright test tests/e2e/prices.spec.js tests/e2e/mealPlan.spec.js
