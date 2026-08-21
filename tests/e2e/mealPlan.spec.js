@@ -98,6 +98,12 @@ test.describe('Meal Plan Tab', () => {
     expect(ids.filter(id => id === listedItem._id)).toHaveLength(1);
     expect(ids.filter(id => id === addItem._id)).toHaveLength(1);
     expect(ids).not.toContain(pantryItem._id);
+
+    const ownedEntries = list.filter(entry => [listedItem._id, addItem._id].includes(entry.itemId?._id));
+    const cleanupResponses = await Promise.all(
+      ownedEntries.map(entry => page.request.delete(`/api/shopping-list/${entry._id}`))
+    );
+    expect(cleanupResponses.every(response => response.ok())).toBeTruthy();
   });
 
   test('autosave has one clear passive status instead of a Save button', async ({ page }) => {

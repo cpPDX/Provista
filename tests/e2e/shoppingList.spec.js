@@ -4,6 +4,8 @@ const { loginAsNewUser } = require('./helpers/login');
 test.describe('Shopping List Tab', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await loginAsNewUser(page, baseURL);
+    const clearResponse = await page.request.delete('/api/shopping-list');
+    expect(clearResponse.ok()).toBeTruthy();
     await page.click('[data-tab="list"]');
   });
 
