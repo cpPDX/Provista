@@ -37,6 +37,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/household', require('./routes/household'));
 
 // Data routes (all require auth via route-level middleware)
+app.use('/api/home', require('./routes/home'));
 app.use('/api/items', require('./routes/items'));
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/prices', require('./routes/prices'));
