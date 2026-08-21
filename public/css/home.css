@@ -62,13 +62,20 @@
   padding: 0.9rem 1rem;
 }
 
+/* Rapid capture follows the user's thumb rather than living in a top-right
+   header action. It sits just above the fixed bottom navigation. */
 .list-quick-capture {
   position: sticky;
-  top: 0;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   z-index: 7;
   background: var(--bg);
-  padding: 0.6rem 0.75rem 0.45rem;
-  border-bottom: 1px solid var(--border);
+  padding: 0.55rem 0.75rem 0.45rem;
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.08);
+}
+
+#tab-list.has-cart .list-quick-capture {
+  bottom: calc(126px + env(safe-area-inset-bottom, 0px));
 }
 
 .list-quick-row {
