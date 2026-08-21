@@ -14,7 +14,10 @@ async function ensureRapidShoppingCapture() {
       script.src = '/js/rapidShoppingCapture.js';
       script.dataset.rapidShoppingCapture = 'true';
       script.onload = resolve;
-      script.onerror = reject;
+      script.onerror = () => {
+        script.remove();
+        reject(new Error('Failed to load rapid shopping capture'));
+      };
       document.head.appendChild(script);
     });
   }
@@ -23,6 +26,7 @@ async function ensureRapidShoppingCapture() {
     await rapidShoppingCaptureLoadPromise;
     if (typeof initRapidShoppingCapture === 'function') initRapidShoppingCapture();
   } catch (err) {
+    rapidShoppingCaptureLoadPromise = null;
     console.error('Rapid shopping capture failed to load', err);
   }
 }
