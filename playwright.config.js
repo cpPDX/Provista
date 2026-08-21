@@ -10,7 +10,11 @@ module.exports = defineConfig({
     actionTimeout: 15000,
     baseURL: 'http://127.0.0.1:3000',
     headless: true,
-    screenshot: 'only-on-failure'
+    screenshot: 'only-on-failure',
+    // Network interception cannot observe requests already handled by a
+    // service worker. Block it in interaction tests so latency and failure
+    // routes exercise the browser's real optimistic-update behavior.
+    serviceWorkers: 'block'
   },
   projects: [
     {

@@ -116,6 +116,7 @@ function activateDialogSurface(overlay, dialog, initialFocus, onRequestClose) {
   overlay._dialogTrap = event => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      event.stopPropagation();
       overlay._dialogRequestClose?.();
       return;
     }
@@ -136,7 +137,10 @@ function activateDialogSurface(overlay, dialog, initialFocus, onRequestClose) {
       first.focus();
     }
   };
-  dialog.addEventListener('keydown', overlay._dialogTrap);
+  // Capture at the document so Escape remains reliable even if WebKit has not
+  // moved focus into the sheet by the first animation frame. This also keeps a
+  // sheet layered over a modal from closing the underlying modal as well.
+  document.addEventListener('keydown', overlay._dialogTrap, true);
   requestAnimationFrame(() => {
     const target = initialFocus?.offsetParent !== null ? initialFocus : visibleDialogControls(dialog)[0];
     (target || dialog).focus({ preventScroll: true });
@@ -146,7 +150,7 @@ function activateDialogSurface(overlay, dialog, initialFocus, onRequestClose) {
 function deactivateDialogSurface(overlay, dialog) {
   if (!overlay) return;
   const trigger = overlay._dialogTrigger;
-  if (dialog && overlay._dialogTrap) dialog.removeEventListener('keydown', overlay._dialogTrap);
+  if (overlay._dialogTrap) document.removeEventListener('keydown', overlay._dialogTrap, true);
   delete overlay.dataset.dialogActive;
   overlay.setAttribute('aria-hidden', 'true');
   overlay.style.display = 'none';
