@@ -32,33 +32,23 @@
       };
     }
 
-    const aggregated = new Map();
+    const tokens = [];
     const invalid = [];
 
     parts.forEach(raw => {
       const quantityMatch = raw.match(/^(.*?)(?:\s+(?:x|×)\s*(\d+))$/i);
       const name = String(quantityMatch?.[1] ?? raw).trim();
       const quantity = quantityMatch ? Number(quantityMatch[2]) : 1;
-      const key = normalizeRapidName(name);
 
-      if (!key || !Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY) {
+      if (!normalizeRapidName(name) || !Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY) {
         invalid.push(raw);
         return;
       }
 
-      const existing = aggregated.get(key);
-      if (existing) {
-        existing.quantity += quantity;
-        if (existing.quantity > MAX_QUANTITY) {
-          aggregated.delete(key);
-          invalid.push(raw);
-        }
-      } else {
-        aggregated.set(key, { name, quantity });
-      }
+      tokens.push({ name, quantity });
     });
 
-    return { tokens: [...aggregated.values()], invalid, error: null };
+    return { tokens, invalid, error: null };
   }
 
   function findRapidCatalogMatch(catalog, requestedName) {
@@ -140,7 +130,7 @@
         const existing = activeListByItemId.get(String(match.item._id));
         const nextQuantity = Number(existing?.quantity || 0) + match.quantity;
 
-        if (nextQuantity > MAX_QUANTITY) {
+        if (match.quantity > MAX_QUANTITY || nextQuantity > MAX_QUANTITY) {
           unresolved.push({ name: match.sourceNames[0], quantity: match.quantity });
           return;
         }
