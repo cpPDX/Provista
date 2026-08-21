@@ -4,7 +4,12 @@ const router = express.Router();
 const MealPlan = require('../models/MealPlan');
 const Household = require('../models/Household');
 const HouseholdPerson = require('../models/HouseholdPerson');
+const InventoryItem = require('../models/InventoryItem');
+const Item = require('../models/Item');
+const PriceEntry = require('../models/PriceEntry');
+const ShoppingListItem = require('../models/ShoppingListItem');
 const { ensureHouseholdPeople } = require('../utils/householdPeople');
+const { buildMealShoppingSuggestions, MAX_NOTES_LENGTH } = require('../utils/mealShopping');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -138,6 +143,44 @@ router.put('/', requireAuth, async (req, res) => {
     if (err?.name === 'ValidationError' || err?.name === 'CastError') {
       return res.status(400).json({ error: serverErr(err) });
     }
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// POST /api/meal-plan/shopping-suggestions
+// Parse one meal's notes and preview household-scoped catalog matches before
+// anything is added to the shopping list.
+router.post('/shopping-suggestions', requireAuth, async (req, res) => {
+  try {
+    const { notes } = req.body;
+    if (typeof notes !== 'string') return res.status(400).json({ error: 'notes must be a string' });
+    if (notes.length > MAX_NOTES_LENGTH) {
+      return res.status(400).json({ error: `notes must be ${MAX_NOTES_LENGTH} characters or fewer` });
+    }
+
+    const householdId = req.user.householdId;
+    const [items, listItems, inventoryItems, priceUsage] = await Promise.all([
+      Item.find({ householdId }).select('name brand category unit').lean(),
+      ShoppingListItem.find({ householdId }).select('itemId').lean(),
+      InventoryItem.find({ householdId, quantity: { $gt: 0 } }).select('itemId quantity').lean(),
+      PriceEntry.aggregate([
+        { $match: { householdId } },
+        { $group: { _id: '$itemId', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    const usageByItemId = new Map(priceUsage.map(entry => [String(entry._id), entry.count]));
+    listItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 5);
+    });
+    inventoryItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 3);
+    });
+
+    res.json(buildMealShoppingSuggestions({ notes, items, listItems, inventoryItems, usageByItemId }));
+  } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
 });

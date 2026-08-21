@@ -5,7 +5,12 @@
 // /grocery/log or /shopping-list/complete are not safe to queue offline.
 function _isSimpleCrudPath(method, path) {
   if (method === 'GET') return true;
-  if (['/grocery/log', '/shopping-list/complete'].includes(path.split('?')[0])) return false;
+  if ([
+    '/grocery/log',
+    '/meal-plan/shopping-suggestions',
+    '/shopping-list/complete',
+    '/shopping-list/from-meal'
+  ].includes(path.split('?')[0])) return false;
   const segments = path.split('?')[0].split('/').filter(Boolean);
   return segments.length <= 2;
 }
@@ -158,6 +163,10 @@ const api = {
     delete: (id) => api.delete(`/shopping-list/${id}`),
     complete: (data) => api.post('/shopping-list/complete', data),
     clear: (checkedOnly = false) => api.delete(`/shopping-list${checkedOnly ? '?checkedOnly=true' : ''}`)
+  },
+  mealPlan: {
+    shoppingSuggestions: (notes) => api.post('/meal-plan/shopping-suggestions', { notes }),
+    addShoppingSuggestions: (items) => api.post('/shopping-list/from-meal', { items })
   },
   spend: {
     month: (month) => api.get(`/spend?month=${month}`),

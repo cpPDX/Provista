@@ -79,6 +79,199 @@ async function fetchSettings() {
   return res.json();
 }
 
+// ===== Meal notes → Shopping List =====
+
+function countMealShoppingFragments(notes) {
+  const seen = new Set();
+  String(notes || '').slice(0, 2000).split(/[\n,;]+/).forEach(raw => {
+    const cleaned = raw
+      .replace(/^\s*(?:[-*•]+|\d+[.)])\s*/, '')
+      .replace(/^\s*(?:and|&)\s+/i, '')
+      .replace(/^(?:(?:please|we)\s+)?(?:need(?:\s+to\s+(?:buy|get))?|buy|get|grab|pick\s*up|add|restock|check\s+(?:the\s+)?pantry\s+for)\s+/i, '')
+      .trim()
+      .toLowerCase();
+    if (cleaned) seen.add(cleaned);
+  });
+  return Math.min(seen.size, 25);
+}
+
+function refreshMealShoppingAction(row) {
+  const button = row.querySelector('.meal-list-suggestions-btn');
+  const notes = row.querySelector('.meal-notes-input')?.value || '';
+  const count = countMealShoppingFragments(notes);
+  if (!button) return;
+  button.hidden = count === 0;
+  button.textContent = count === 1 ? 'Add 1 item to List' : `Add ${count} items to List`;
+}
+
+function suggestionStatusHtml(item, duplicateInNotes = false) {
+  if (duplicateInNotes) return '<span class="badge badge-no-data">Duplicate note</span>';
+  if (item?.onList) return '<span class="badge badge-no-data">Already on List</span>';
+  if (Number(item?.pantryQuantity) > 0) {
+    return `<span class="badge badge-no-data">In Pantry · ${escapeHtml(item.pantryQuantity)}</span>`;
+  }
+  return '';
+}
+
+function mealSuggestionCandidateLabel(item) {
+  const context = item.onList
+    ? ' — already on List'
+    : Number(item.pantryQuantity) > 0
+      ? ` — ${item.pantryQuantity} in Pantry`
+      : '';
+  return `${item.name}${item.brand ? ` (${item.brand})` : ''}${context}`;
+}
+
+function renderMealSuggestionRow(suggestion, index) {
+  const quantity = Number(suggestion.quantity) || 1;
+  if (suggestion.matchStatus === 'unmatched') {
+    return `<div class="meal-suggestion-row" data-suggestion-index="${index}">
+      <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</div>
+      <div class="meal-suggestion-unmatched">No catalog match. Edit the note or add this item from List.</div>
+    </div>`;
+  }
+
+  if (suggestion.matchStatus === 'ambiguous') {
+    const options = suggestion.candidates.map(item => `
+      <option value="${escapeAttr(item._id)}"
+        data-name="${escapeAttr(item.name)}"
+        data-on-list="${item.onList ? 'true' : 'false'}"
+        data-pantry-quantity="${escapeAttr(item.pantryQuantity || 0)}">
+        ${escapeHtml(mealSuggestionCandidateLabel(item))}
+      </option>`).join('');
+    return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
+      <label class="meal-suggestion-choice">
+        <input type="checkbox" class="meal-suggestion-check" disabled />
+        <span><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</span>
+      </label>
+      <select class="form-control meal-suggestion-select" aria-label="Choose catalog item for ${escapeAttr(suggestion.sourceText)}">
+        <option value="">Choose the household item…</option>
+        ${options}
+      </select>
+      <div class="meal-suggestion-status"></div>
+    </div>`;
+  }
+
+  const item = suggestion.item;
+  const disabled = item.onList || suggestion.duplicateInNotes;
+  const checked = !disabled && Number(item.pantryQuantity) <= 0;
+  return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
+    <label class="meal-suggestion-choice">
+      <input type="checkbox" class="meal-suggestion-check"
+        data-item-id="${escapeAttr(item._id)}" data-item-name="${escapeAttr(item.name)}"
+        ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
+      <span><strong>${escapeHtml(item.name)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}
+        ${suggestion.sourceText.toLowerCase() !== item.name.toLowerCase() ? `<small>From “${escapeHtml(suggestion.sourceText)}”</small>` : ''}
+      </span>
+    </label>
+    <div class="meal-suggestion-status">${suggestionStatusHtml(item, suggestion.duplicateInNotes)}</div>
+  </div>`;
+}
+
+function selectedMealSuggestionItems() {
+  const selectedById = new Map();
+  document.querySelectorAll('.meal-suggestion-row').forEach(row => {
+    const checkbox = row.querySelector('.meal-suggestion-check');
+    if (!checkbox?.checked || checkbox.disabled || !checkbox.dataset.itemId) return;
+    const quantity = Number(row.dataset.quantity) || 1;
+    const current = selectedById.get(checkbox.dataset.itemId);
+    selectedById.set(checkbox.dataset.itemId, Math.max(current?.quantity || 0, quantity));
+  });
+  return [...selectedById].map(([itemId, quantity]) => ({ itemId, quantity }));
+}
+
+function updateMealSuggestionSubmit() {
+  const items = selectedMealSuggestionItems();
+  const button = document.getElementById('btn-add-meal-suggestions');
+  if (!button) return;
+  button.disabled = items.length === 0;
+  button.textContent = items.length === 1 ? 'Add 1 to List' : `Add ${items.length} to List`;
+}
+
+function bindMealSuggestionControls() {
+  document.querySelectorAll('.meal-suggestion-select').forEach(select => {
+    select.addEventListener('change', () => {
+      const row = select.closest('.meal-suggestion-row');
+      const checkbox = row.querySelector('.meal-suggestion-check');
+      const status = row.querySelector('.meal-suggestion-status');
+      const option = select.selectedOptions[0];
+      if (!option?.value) {
+        checkbox.checked = false;
+        checkbox.disabled = true;
+        delete checkbox.dataset.itemId;
+        delete checkbox.dataset.itemName;
+        status.innerHTML = '';
+      } else {
+        const onList = option.dataset.onList === 'true';
+        const pantryQuantity = Number(option.dataset.pantryQuantity) || 0;
+        checkbox.dataset.itemId = option.value;
+        checkbox.dataset.itemName = option.dataset.name || '';
+        checkbox.disabled = onList;
+        checkbox.checked = !onList && pantryQuantity <= 0;
+        status.innerHTML = suggestionStatusHtml({ onList, pantryQuantity });
+      }
+      updateMealSuggestionSubmit();
+    });
+  });
+  document.querySelectorAll('.meal-suggestion-check').forEach(checkbox => {
+    checkbox.addEventListener('change', updateMealSuggestionSubmit);
+  });
+}
+
+async function openMealShoppingSuggestions(row, triggerButton) {
+  const notes = row.querySelector('.meal-notes-input')?.value.trim() || '';
+  const mealName = row.querySelector('.meal-name-input')?.value.trim() || '';
+  if (!notes) return;
+
+  triggerButton.disabled = true;
+  triggerButton.textContent = 'Finding List items…';
+  try {
+    const preview = await api.mealPlan.shoppingSuggestions(notes);
+    if (!preview.parsedCount) {
+      showToast('Separate shopping items with commas or new lines');
+      return;
+    }
+
+    const rows = preview.suggestions.map(renderMealSuggestionRow).join('');
+    openModal(mealName ? `Add items for ${mealName}` : 'Add meal items to List', `
+      <p class="text-muted text-sm meal-suggestion-help">
+        Provista matched these notes to your household catalog. Pantry items stay unchecked; List duplicates cannot be selected.
+      </p>
+      <div class="meal-suggestion-list">${rows}</div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-add-meal-suggestions">Add to List</button>
+      </div>`);
+
+    bindMealSuggestionControls();
+    updateMealSuggestionSubmit();
+    document.getElementById('btn-add-meal-suggestions')?.addEventListener('click', async event => {
+      const items = selectedMealSuggestionItems();
+      if (!items.length) return;
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = 'Adding…';
+      try {
+        const result = await api.mealPlan.addShoppingSuggestions(items);
+        closeModal();
+        triggerButton.dataset.added = 'true';
+        triggerButton.textContent = 'Added to List ✓';
+        const skipped = result.skippedCount ? ` · ${result.skippedCount} already on List` : '';
+        showToast(`Added ${result.addedCount} item${result.addedCount === 1 ? '' : 's'} to List${skipped}`);
+      } catch (err) {
+        handleError(err, 'Failed to add meal items');
+        button.disabled = false;
+        updateMealSuggestionSubmit();
+      }
+    });
+  } catch (err) {
+    handleError(err, 'Failed to match meal items');
+  } finally {
+    triggerButton.disabled = false;
+    if (triggerButton.dataset.added !== 'true') refreshMealShoppingAction(row);
+  }
+}
+
 // ===== Audience helpers =====
 
 function findLegacyPersonId(personName) {
@@ -312,8 +505,20 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   notesInput.placeholder = 'Items needed or notes (optional)…';
   notesInput.rows = 1;
   notesInput.style.marginTop = '0.5rem';
-  notesInput.addEventListener('input', scheduleSave);
+
+  const suggestionButton = document.createElement('button');
+  suggestionButton.type = 'button';
+  suggestionButton.className = 'meal-list-suggestions-btn btn-link';
+  notesInput.addEventListener('input', () => {
+    delete suggestionButton.dataset.added;
+    scheduleSave();
+    refreshMealShoppingAction(row);
+  });
   row.appendChild(notesInput);
+
+  suggestionButton.addEventListener('click', () => openMealShoppingSuggestions(row, suggestionButton));
+  row.appendChild(suggestionButton);
+  refreshMealShoppingAction(row);
 
   if (removable) {
     const removeBtn = document.createElement('button');

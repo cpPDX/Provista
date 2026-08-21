@@ -226,6 +226,57 @@ describe('PUT /api/meal-plan', () => {
   });
 });
 
+describe('POST /api/meal-plan/shopping-suggestions', () => {
+  it('matches meal notes while flagging List duplicates and Pantry items', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const createItem = name => request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name, category: 'Other', unit: 'each' });
+    const [tortillas, lettuce, salsa] = await Promise.all([
+      createItem('Meal Tortillas'),
+      createItem('Meal Lettuce'),
+      createItem('Meal Salsa')
+    ]);
+    expect(tortillas.status).toBe(201);
+    expect(lettuce.status).toBe(201);
+    expect(salsa.status).toBe(201);
+    const pantrySetup = await request(app).post('/api/inventory').set('Cookie', cookie)
+      .send({ itemId: tortillas.body._id, quantity: 2 });
+    const listSetup = await request(app).post('/api/shopping-list').set('Cookie', cookie)
+      .send({ itemId: lettuce.body._id, quantity: 1 });
+    expect(pantrySetup.status).toBe(201);
+    expect(listSetup.status).toBe(201);
+
+    const res = await request(app).post('/api/meal-plan/shopping-suggestions').set('Cookie', cookie)
+      .send({ notes: 'Need Meal Tortillas, Meal Lettuce, and Meal Salsa x2' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ parsedCount: 3, matchedCount: 3, ambiguousCount: 0, unmatchedCount: 0 });
+    const bySource = Object.fromEntries(res.body.suggestions.map(suggestion => [suggestion.sourceText, suggestion]));
+    expect(bySource['Meal Tortillas'].item).toMatchObject({ _id: tortillas.body._id, pantryQuantity: 2, onList: false });
+    expect(bySource['Meal Lettuce'].item).toMatchObject({ _id: lettuce.body._id, onList: true });
+    expect(bySource['Meal Salsa']).toMatchObject({ quantity: 2, item: { _id: salsa.body._id } });
+  });
+
+  it('does not expose catalog items from another household', async () => {
+    const first = await createOwnerSession(app, { email: 'meal-suggest-first@test.com', householdName: 'First' });
+    const second = await createOwnerSession(app, { email: 'meal-suggest-second@test.com', householdName: 'Second' });
+    await request(app).post('/api/items').set('Cookie', second.cookie)
+      .send({ name: 'Secret Ingredient ZXQ', category: 'Other', unit: 'each' });
+
+    const res = await request(app).post('/api/meal-plan/shopping-suggestions').set('Cookie', first.cookie)
+      .send({ notes: 'Secret Ingredient ZXQ' });
+    expect(res.status).toBe(200);
+    expect(res.body.suggestions[0]).toMatchObject({ matchStatus: 'unmatched', candidates: [] });
+  });
+
+  it('rejects oversized notes', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const res = await request(app).post('/api/meal-plan/shopping-suggestions').set('Cookie', cookie)
+      .send({ notes: 'x'.repeat(2001) });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('GET /api/meal-plan/settings', () => {
   it('returns weekStartDay from household', async () => {
     const { cookie } = await createOwnerSession(app);

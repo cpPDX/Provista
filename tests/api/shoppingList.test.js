@@ -56,6 +56,57 @@ describe('GET /api/shopping-list', () => {
   });
 });
 
+describe('POST /api/shopping-list/from-meal', () => {
+  it('adds reviewed meal items in one batch and skips List duplicates', async () => {
+    const { ownerCookie, itemId: breadId } = await setupFixtures();
+    const salsa = await request(app).post('/api/items').set('Cookie', ownerCookie)
+      .send({ name: 'Meal Batch Salsa', category: 'Other', unit: 'jar' });
+    expect(salsa.status).toBe(201);
+    const listSetup = await request(app).post('/api/shopping-list').set('Cookie', ownerCookie)
+      .send({ itemId: breadId, quantity: 1 });
+    expect(listSetup.status).toBe(201);
+
+    const res = await request(app).post('/api/shopping-list/from-meal').set('Cookie', ownerCookie)
+      .send({
+        items: [
+          { itemId: breadId, quantity: 4 },
+          { itemId: salsa.body._id, quantity: 2 },
+          { itemId: salsa.body._id, quantity: 1 }
+        ]
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ addedCount: 1, skippedCount: 1 });
+    const list = await request(app).get('/api/shopping-list').set('Cookie', ownerCookie);
+    expect(list.body).toHaveLength(2);
+    expect(list.body.find(item => item.itemId._id === breadId).quantity).toBe(1);
+    expect(list.body.find(item => item.itemId._id === salsa.body._id).quantity).toBe(2);
+  });
+
+  it('allows a household member to add reviewed meal items', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+    const res = await request(app).post('/api/shopping-list/from-meal').set('Cookie', memberCookie)
+      .send({ items: [{ itemId, quantity: 1 }] });
+    expect(res.status).toBe(201);
+    expect(res.body.addedCount).toBe(1);
+  });
+
+  it('rejects an item from another household', async () => {
+    const first = await setupFixtures();
+    const { cookie: otherCookie } = await createOwnerSession(app);
+    const foreignItem = await request(app).post('/api/items').set('Cookie', otherCookie)
+      .send({ name: 'Foreign Meal Item', category: 'Other', unit: 'each' });
+
+    const res = await request(app).post('/api/shopping-list/from-meal').set('Cookie', first.ownerCookie)
+      .send({ items: [{ itemId: foreignItem.body._id, quantity: 1 }] });
+    expect(res.status).toBe(404);
+    const list = await request(app).get('/api/shopping-list').set('Cookie', first.ownerCookie);
+    expect(list.body).toHaveLength(0);
+  });
+});
+
 describe('PUT /api/shopping-list/:id', () => {
   it('all roles can check an item', async () => {
     const { ownerCookie, itemId } = await setupFixtures();

@@ -43,6 +43,8 @@ jobs:
           node --check public/js/shoppingList.js
           node --check models/ShoppingTrip.js
           node --check services/completeShoppingTrip.js
+          node --check utils/mealShopping.js
+          node --check routes/mealPlan.js
           node --check routes/shoppingList.js
           node --check routes/spend.js
           node --check tests/e2e/prices.spec.js
