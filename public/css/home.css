@@ -1,0 +1,159 @@
+.home-shell {
+  padding: 0 0 1rem;
+}
+
+.home-hero {
+  padding: 1rem;
+}
+
+.home-date {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0 1rem 1rem;
+}
+
+.home-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: 0.9rem;
+  min-height: 120px;
+  text-align: left;
+}
+
+.home-card-wide {
+  grid-column: 1 / -1;
+  min-height: 0;
+}
+
+.home-card-label {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem;
+}
+
+.home-card-value {
+  font-size: 1.1rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.home-card-detail {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  margin-top: 0.35rem;
+  line-height: 1.35;
+}
+
+.home-next-action {
+  width: calc(100% - 2rem);
+  margin: 0 1rem 1rem;
+  text-align: left;
+  padding: 0.9rem 1rem;
+}
+
+.list-quick-capture {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  background: var(--bg);
+  padding: 0.6rem 0.75rem 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.list-quick-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.list-quick-row input {
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  font-size: 1rem;
+}
+
+.quick-item-chips {
+  display: flex;
+  gap: 0.4rem;
+  overflow-x: auto;
+  padding: 0.5rem 0 0.15rem;
+  scrollbar-width: none;
+}
+
+.quick-item-chips::-webkit-scrollbar { display: none; }
+
+.quick-item-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.42rem 0.7rem;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+}
+
+.trip-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.trip-review-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.65rem;
+  background: var(--surface);
+}
+
+.trip-review-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-weight: 700;
+  margin-bottom: 0.45rem;
+}
+
+.trip-review-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 0.5rem;
+}
+
+.trip-review-fields input,
+.trip-review-fields select {
+  min-width: 0;
+}
+
+.trip-review-missing {
+  color: var(--warning);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.trip-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 360px) {
+  .home-grid { grid-template-columns: 1fr; }
+  .home-card-wide { grid-column: auto; }
+  .trip-review-fields { grid-template-columns: 1fr; }
+}
