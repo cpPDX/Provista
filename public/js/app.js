@@ -1,5 +1,36 @@
 // Main app: auth check, tab navigation, initialization
 
+let rapidShoppingCaptureLoadPromise = null;
+
+async function ensureRapidShoppingCapture() {
+  if (typeof initRapidShoppingCapture === 'function') {
+    initRapidShoppingCapture();
+    return;
+  }
+
+  if (!rapidShoppingCaptureLoadPromise) {
+    rapidShoppingCaptureLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = '/js/rapidShoppingCapture.js';
+      script.dataset.rapidShoppingCapture = 'true';
+      script.onload = resolve;
+      script.onerror = () => {
+        script.remove();
+        reject(new Error('Failed to load rapid shopping capture'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+
+  try {
+    await rapidShoppingCaptureLoadPromise;
+    if (typeof initRapidShoppingCapture === 'function') initRapidShoppingCapture();
+  } catch (err) {
+    rapidShoppingCaptureLoadPromise = null;
+    console.error('Rapid shopping capture failed to load', err);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Auth check — redirects to /login.html if not authenticated
   const ok = await window.appAuth.load();
@@ -139,7 +170,10 @@ async function switchTab(tabId) {
   switch (tabId) {
     case 'home': await loadHomeTab(); break;
     case 'prices': await loadPricesTab(); break;
-    case 'list': await loadShoppingListTab(); break;
+    case 'list':
+      await ensureRapidShoppingCapture();
+      await loadShoppingListTab();
+      break;
     case 'spend': await loadSpendTab(); break;
     case 'inventory': await loadInventory(); break;
     case 'meal-plan':
