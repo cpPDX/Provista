@@ -108,7 +108,7 @@ test.describe('Meal Plan Tab', () => {
     await page.locator('#mp-settings-btn').click();
     await expect(page.locator('#modal-title')).toHaveText('Plan settings');
     await page.locator('select[name="mealPlanMode"]').selectOption('all');
-    await page.locator('#meal-plan-settings-form button[type="submit"]').click();
+    await page.locator('#modal-footer button[form="meal-plan-settings-form"]').click();
 
     await expect(page.locator('.meal-plan-mode-summary')).toHaveText('All meals');
     const breakfast = page.locator('.meal-day').first()
