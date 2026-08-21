@@ -3,10 +3,12 @@ const { loginAsNewUser } = require('./helpers/login');
 
 test.use({ timezoneId: 'America/Los_Angeles' });
 
-test.describe('Prices Tab', () => {
+test.describe('Price Insights', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await loginAsNewUser(page, baseURL);
-    await page.click('[data-tab="prices"]');
+    await page.click('[data-tab="more"]');
+    await page.click('#more-insights-prices');
+    await expect(page.locator('#tab-prices')).toHaveClass(/active/);
   });
 
   test('Log Price opens the unified Add Grocery modal', async ({ page }) => {
