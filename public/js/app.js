@@ -18,6 +18,34 @@ async function loadProductShellScript() {
   });
 }
 
+function configureShoppingPriceEstimates() {
+  if (typeof expectedCartEntry !== 'function') return;
+
+  // The list API exposes expectedPrice for the assigned store (falling back to
+  // the cheapest known store only when no store is assigned). Scale the known
+  // per-unit price to the quantity currently on the shopping list.
+  window.expectedCartEntry = function storeSpecificExpectedCartEntry(item) {
+    const quantity = Number(item.quantity || 1);
+    const context = item.expectedPrice || item.bestPrice || null;
+    const pricePerUnit = Number(context?.pricePerUnit);
+    const fallbackFinalPrice = context?.finalPrice == null ? null : Number(context.finalPrice);
+    const knownPrice = Number.isFinite(pricePerUnit)
+      ? pricePerUnit * quantity
+      : (Number.isFinite(fallbackFinalPrice) ? fallbackFinalPrice : null);
+    const assignedStoreId = item.storeId?._id || item.storeId || null;
+    const contextStoreId = context?.store?._id || null;
+
+    return {
+      name: item.itemId?.name || 'Unknown item',
+      price: knownPrice == null ? 0 : knownPrice,
+      quantity,
+      storeId: assignedStoreId || contextStoreId,
+      needsPrice: knownPrice == null,
+      priceSource: knownPrice == null ? 'missing' : 'expected'
+    };
+  };
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Auth check — redirects to /login.html if not authenticated
   const ok = await window.appAuth.load();
@@ -29,6 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadProductShellScript();
     if (typeof initProductShell === 'function') initProductShell();
+    configureShoppingPriceEstimates();
   } catch (err) {
     console.error('Failed to load Home shell; falling back to legacy navigation', err);
   }
