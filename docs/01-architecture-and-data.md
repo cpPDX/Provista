@@ -14,6 +14,7 @@
 │   ├── PriceEntry.js
 │   ├── InventoryItem.js
 │   ├── ShoppingListItem.js
+│   ├── ShoppingTrip.js
 │   └── MealPlan.js
 ├── routes/
 │   ├── auth.js
@@ -133,13 +134,14 @@ express.static('public')
 | GET | `/api/prices/compare/:itemId` | auth | Latest price per store |
 | GET | `/api/prices/history/:itemId` | auth | Approved history + current user's pending |
 | GET | `/api/prices/last-purchased/:itemId` | auth | Most recent per store |
-| GET | `/api/inventory` | auth + admin | List items with quantity > 0 |
+| GET | `/api/inventory` | auth | List items with quantity > 0 |
 | POST | `/api/inventory` | auth + admin | Create / upsert inventory item |
 | PUT | `/api/inventory/:id` | auth + admin | Update inventory item |
 | DELETE | `/api/inventory/:id` | auth + admin | Delete inventory item |
 | GET | `/api/inventory/low-stock` | auth | Items below threshold |
 | GET | `/api/shopping-list` | auth | List with price context |
 | POST | `/api/shopping-list` | auth | Add item |
+| POST | `/api/shopping-list/complete` | auth | Complete a trip across Pantry, price history, Spend, list, and low stock |
 | PUT | `/api/shopping-list/:id` | auth | Update item |
 | DELETE | `/api/shopping-list/:id` | auth | Remove item |
 | DELETE | `/api/shopping-list` | auth | Clear (all or checked) |
@@ -304,7 +306,8 @@ Indexes: `(householdId, name)`, `(householdId, upc)`.
 | `quantity` | Number | required, default 1 |
 | `pricePerUnit` | Number | required — `finalPrice / quantity` |
 | `date` | Date | default now |
-| `source` | `'manual'`\|`'csv'` | default `'manual'` |
+| `source` | `'manual'`\|`'csv'`\|`'shopping-trip'` | default `'manual'` |
+| `shoppingTripId` | ObjectId → ShoppingTrip | set for Done Shopping price records |
 | `status` | `'approved'`\|`'pending'` | admin submit → approved; member submit → pending |
 | `reviewedBy` | ObjectId → User | default null |
 | `reviewedAt` | Date | default null |
@@ -330,11 +333,21 @@ pricePerUnit = finalPrice / quantity;
 | `unit` | String | trimmed |
 | `lowStockThreshold` | Number | default null |
 | `lastUpdatedBy` | ObjectId → User | |
+| `lastPurchaseTripId` | ObjectId → ShoppingTrip | most recent trip that incremented this item |
 | `lastUpdated` | Date | default now |
 | `notes` | String | trimmed |
 | `lastConflict` | Object | see Item |
 
 Unique index: `(householdId, itemId)`.
+
+### ShoppingTrip
+
+Completed trips are the source of truth for new Spend totals. Each trip stores
+item/category/store snapshots, line prices, the trip total, Pantry-update choice,
+price-review counts, and an idempotency key. Related `PriceEntry` records update
+price history but are excluded from Spend aggregation to prevent double counting.
+
+Unique index: `(householdId, idempotencyKey)`.
 
 ### ShoppingListItem
 

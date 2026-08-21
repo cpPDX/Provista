@@ -13,7 +13,8 @@ const priceEntrySchema = new mongoose.Schema({
   quantity: { type: Number, required: true, default: 1 },
   pricePerUnit: { type: Number, required: true },         // finalPrice / quantity
   date: { type: Date, default: Date.now },
-  source: { type: String, enum: ['manual', 'csv'], default: 'manual' },
+  source: { type: String, enum: ['manual', 'csv', 'shopping-trip'], default: 'manual' },
+  shoppingTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'ShoppingTrip', default: null },
   status: { type: String, enum: ['approved', 'pending'], default: 'pending' },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   reviewedAt: { type: Date, default: null },
@@ -29,5 +30,6 @@ const priceEntrySchema = new mongoose.Schema({
 priceEntrySchema.index({ householdId: 1, itemId: 1, date: -1 });
 priceEntrySchema.index({ householdId: 1, status: 1 });
 priceEntrySchema.index({ householdId: 1, storeId: 1 });
+priceEntrySchema.index({ householdId: 1, shoppingTripId: 1 });
 
 module.exports = mongoose.model('PriceEntry', priceEntrySchema);

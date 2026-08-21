@@ -1365,6 +1365,17 @@ body.role-member .member-only { display: flex; }
 .trip-review-warning { background: rgba(240,165,0,0.12); border: 1px solid rgba(240,165,0,0.35); border-radius: var(--radius-sm); padding: 0.875rem; margin-bottom: 1rem; }
 .trip-review-warning p { color: var(--text-muted); font-size: 0.8125rem; margin-top: 0.25rem; }
 .trip-review-ready { color: var(--success); font-weight: 600; margin-bottom: 1rem; }
+.trip-review-items { display: grid; gap: 0.625rem; margin-bottom: 0.875rem; }
+.trip-review-item { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.75rem; background: var(--surface); }
+.trip-review-item-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin-bottom: 0.5rem; }
+.trip-review-fields { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(100px, 0.75fr); gap: 0.5rem; }
+.trip-review-fields label { min-width: 0; }
+.trip-review-fields label > span { display: block; color: var(--text-muted); font-size: 0.75rem; font-weight: 600; margin-bottom: 0.25rem; }
+.trip-review-fields .form-control { min-height: 44px; }
+.trip-pantry-option { display: flex; align-items: flex-start; gap: 0.625rem; padding: 0.875rem; border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+.trip-pantry-option input { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 0.1rem; }
+.trip-pantry-option span { display: grid; gap: 0.15rem; }
+.trip-pantry-option small { color: var(--text-muted); font-size: 0.75rem; font-weight: 400; }
 /* Extra padding on shopping list tab when cart bar is visible */
 #tab-list.has-cart { padding-bottom: calc(var(--nav-height) + 48px); }
 
@@ -1751,6 +1762,7 @@ body.role-member .member-only { display: flex; }
   .form-row {
     grid-template-columns: 1fr;
   }
+  .trip-review-fields { grid-template-columns: minmax(0, 1.2fr) minmax(96px, 0.8fr); }
 }
 
 /* ===== CSV Import Review Sheet ===== */

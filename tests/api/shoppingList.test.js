@@ -117,3 +117,145 @@ describe('DELETE /api/shopping-list (bulk)', () => {
     expect(res.status).toBe(403);
   });
 });
+
+describe('POST /api/shopping-list/complete', () => {
+  async function createCheckedPurchase(ownerCookie, itemId, quantity = 1) {
+    const store = await request(app).post('/api/stores').set('Cookie', ownerCookie)
+      .send({ name: `Trip Store ${Date.now()}-${Math.random()}` });
+    const added = await request(app).post('/api/shopping-list').set('Cookie', ownerCookie)
+      .send({ itemId, quantity, storeId: store.body._id });
+    await request(app).put(`/api/shopping-list/${added.body._id}`).set('Cookie', ownerCookie)
+      .send({ checked: true });
+    return { storeId: store.body._id, listItemId: added.body._id };
+  }
+
+  it('closes the loop across Pantry, price history, Spend, list, and low stock', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    await request(app).post('/api/inventory').set('Cookie', ownerCookie)
+      .send({ itemId, quantity: 0, lowStockThreshold: 1 });
+    const purchase = await createCheckedPurchase(ownerCookie, itemId, 2);
+
+    const res = await request(app).post('/api/shopping-list/complete').set('Cookie', ownerCookie)
+      .send({
+        idempotencyKey: `owner-trip-${Date.now()}`,
+        addToPantry: true,
+        purchases: [{ ...purchase, price: 8.5 }]
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      total: 8.5,
+      itemCount: 1,
+      missingPriceCount: 0,
+      pantryUpdated: true,
+      pantryItemCount: 1,
+      approvedPriceCount: 1,
+      pendingPriceCount: 0,
+      lowStockCount: 0
+    });
+
+    const [list, pantry, prices, spend] = await Promise.all([
+      request(app).get('/api/shopping-list').set('Cookie', ownerCookie),
+      request(app).get('/api/inventory').set('Cookie', ownerCookie),
+      request(app).get(`/api/prices/history/${itemId}`).set('Cookie', ownerCookie),
+      request(app).get(`/api/spend?month=${new Date().toISOString().slice(0, 7)}`).set('Cookie', ownerCookie)
+    ]);
+    expect(list.body).toHaveLength(0);
+    expect(pantry.body).toHaveLength(1);
+    expect(pantry.body[0].quantity).toBe(2);
+    expect(prices.body).toHaveLength(1);
+    expect(prices.body[0]).toMatchObject({ source: 'shopping-trip', finalPrice: 8.5, quantity: 2, status: 'approved' });
+    expect(spend.body.total).toBe(8.5);
+  });
+
+  it('is idempotent when the client retries the same completion', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const purchase = await createCheckedPurchase(ownerCookie, itemId);
+    const body = {
+      idempotencyKey: `retry-trip-${Date.now()}`,
+      addToPantry: true,
+      purchases: [{ ...purchase, price: 3.25 }]
+    };
+
+    const first = await request(app).post('/api/shopping-list/complete').set('Cookie', ownerCookie).send(body);
+    const retry = await request(app).post('/api/shopping-list/complete').set('Cookie', ownerCookie).send(body);
+    expect(first.status).toBe(201);
+    expect(retry.status).toBe(200);
+    expect(retry.body.idempotent).toBe(true);
+    expect(retry.body.tripId).toBe(first.body.tripId);
+
+    const [pantry, prices, spend] = await Promise.all([
+      request(app).get('/api/inventory').set('Cookie', ownerCookie),
+      request(app).get(`/api/prices/history/${itemId}`).set('Cookie', ownerCookie),
+      request(app).get(`/api/spend?month=${new Date().toISOString().slice(0, 7)}`).set('Cookie', ownerCookie)
+    ]);
+    expect(pantry.body[0].quantity).toBe(1);
+    expect(prices.body).toHaveLength(1);
+    expect(spend.body.total).toBe(3.25);
+  });
+
+  it('updates Spend and Pantry for a member while leaving price history pending', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const purchase = await createCheckedPurchase(ownerCookie, itemId);
+    const code = await getInviteCode(app, ownerCookie);
+    const { cookie: memberCookie } = await createMemberSession(app, code);
+
+    const res = await request(app).post('/api/shopping-list/complete').set('Cookie', memberCookie)
+      .send({
+        idempotencyKey: `member-trip-${Date.now()}`,
+        addToPantry: true,
+        purchases: [{ ...purchase, price: 4.75 }]
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ pendingPriceCount: 1, approvedPriceCount: 0, total: 4.75 });
+    const [pantry, prices, spend] = await Promise.all([
+      request(app).get('/api/inventory').set('Cookie', memberCookie),
+      request(app).get(`/api/prices/history/${itemId}`).set('Cookie', memberCookie),
+      request(app).get(`/api/spend?month=${new Date().toISOString().slice(0, 7)}`).set('Cookie', memberCookie)
+    ]);
+    expect(pantry.body[0].quantity).toBe(1);
+    expect(prices.body[0].status).toBe('pending');
+    expect(spend.body.total).toBe(4.75);
+  });
+
+  it('can finish with missing prices without changing Pantry', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const purchase = await createCheckedPurchase(ownerCookie, itemId);
+
+    const res = await request(app).post('/api/shopping-list/complete').set('Cookie', ownerCookie)
+      .send({
+        idempotencyKey: `no-pantry-trip-${Date.now()}`,
+        addToPantry: false,
+        purchases: [{ listItemId: purchase.listItemId, price: null, storeId: null }]
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ total: 0, missingPriceCount: 1, pantryUpdated: false, pantryItemCount: 0 });
+    const [pantry, prices] = await Promise.all([
+      request(app).get('/api/inventory').set('Cookie', ownerCookie),
+      request(app).get(`/api/prices/history/${itemId}`).set('Cookie', ownerCookie)
+    ]);
+    expect(pantry.body).toHaveLength(0);
+    expect(prices.body).toHaveLength(0);
+  });
+
+  it('rejects a store from another household without changing the list', async () => {
+    const { ownerCookie, itemId } = await setupFixtures();
+    const purchase = await createCheckedPurchase(ownerCookie, itemId);
+    const { cookie: otherCookie } = await createOwnerSession(app);
+    const otherStore = await request(app).post('/api/stores').set('Cookie', otherCookie)
+      .send({ name: 'Other Household Store' });
+
+    const res = await request(app).post('/api/shopping-list/complete').set('Cookie', ownerCookie)
+      .send({
+        idempotencyKey: `cross-household-trip-${Date.now()}`,
+        purchases: [{ listItemId: purchase.listItemId, price: 2.5, storeId: otherStore.body._id }]
+      });
+    expect(res.status).toBe(404);
+
+    const list = await request(app).get('/api/shopping-list').set('Cookie', ownerCookie);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0].checked).toBe(true);
+  });
+});

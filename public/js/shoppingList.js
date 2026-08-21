@@ -3,7 +3,8 @@
 let listState = { items: [], stores: [], filter: { storeId: null, category: null } };
 
 // Cart state: inferred prices while shopping. Missing-price exceptions are reviewed at the end.
-const cartState = new Map(); // listItemId → { name, price, quantity, needsPrice }
+const cartState = new Map();
+let activeTripKey = null;
 
 // Guard against rapid double-taps on the same item's checkbox
 const pendingCheckIds = new Set();
@@ -41,11 +42,14 @@ function renderShoppingList() {
   renderStoreSummary(items);
   updateListFilterDot();
 
-  // Keep cart bar in sync with the current checked state
+  // Keep cart state recoverable after reloads and in sync with server check-off state.
+  const currentIds = new Set(items.map(item => item._id));
+  [...cartState.keys()].forEach(id => {
+    if (!currentIds.has(id)) cartState.delete(id);
+  });
   items.forEach(item => {
-    if (!item.checked && cartState.has(item._id)) {
-      cartState.delete(item._id);
-    }
+    if (item.checked && !cartState.has(item._id)) cartState.set(item._id, createCartEntry(item));
+    if (!item.checked) cartState.delete(item._id);
   });
   updateCartBar();
 
@@ -162,6 +166,32 @@ function renderStoreSummary(items) {
 // Instant check-off; price exceptions are handled at Done Shopping
 // =============================================================
 
+function createCartEntry(item) {
+  const name = item.itemId?.name || 'Unknown item';
+  const quantity = Number(item.quantity) || 1;
+  const assignedStoreId = item.storeId?._id || item.storeId || null;
+  const priceStoreId = item.bestPrice?.store?._id || null;
+  const canUseKnownPrice = Boolean(
+    item.bestPrice &&
+    priceStoreId &&
+    (!assignedStoreId || assignedStoreId === priceStoreId) &&
+    Number.isFinite(Number(item.bestPrice.pricePerUnit)) &&
+    Number(item.bestPrice.pricePerUnit) >= 0
+  );
+  const suggestedPrice = canUseKnownPrice
+    ? Math.round((Number(item.bestPrice.pricePerUnit) * quantity + Number.EPSILON) * 100) / 100
+    : null;
+
+  return {
+    name,
+    price: suggestedPrice,
+    suggestedPrice,
+    quantity,
+    storeId: assignedStoreId || priceStoreId,
+    needsPrice: suggestedPrice === null
+  };
+}
+
 function handleListItemCheck(id, willBeChecked) {
   if (pendingCheckIds.has(id)) return;
   const item = listState.items.find(i => i._id === id);
@@ -174,99 +204,9 @@ function handleListItemCheck(id, willBeChecked) {
     return;
   }
 
-  // Checking means “Got it.” Use the known price silently and defer exceptions.
-  const name = item.itemId?.name || 'Unknown item';
-  const qty = item.quantity || 1;
-  const knownPrice = item.bestPrice
-    ? (item.bestPrice.finalPrice != null
-        ? item.bestPrice.finalPrice
-        : (item.bestPrice.pricePerUnit || 0) * qty)
-    : null;
-  cartState.set(id, {
-    name,
-    price: knownPrice || 0,
-    quantity: qty,
-    needsPrice: !(knownPrice != null && knownPrice > 0)
-  });
+  // Checking means “Got it.” Use the known line price silently and defer exceptions.
+  cartState.set(id, createCartEntry(item));
   toggleListItem(id, true);
-}
-
-function showPriceConfirmSheet(listItemId, name, qty, unit, knownPrice) {
-  const hasPrice = knownPrice != null && knownPrice > 0;
-  const priceStr = hasPrice ? formatCurrency(knownPrice) : '';
-
-  const bodyHTML = `
-    <div style="text-align:center;padding:0.25rem 0 0.75rem">
-      <div style="font-size:1.125rem;font-weight:700">${escapeHtml(name)}</div>
-      <div class="text-muted text-sm">qty ${qty}${unit ? ' ' + escapeHtml(unit) : ''}</div>
-    </div>
-    ${hasPrice ? `
-      <p style="text-align:center;margin-bottom:1rem">Did you pay <strong>${priceStr}</strong>?</p>
-      <div class="form-actions">
-        <button class="btn btn-outline" id="btn-cart-update-price">Update Price</button>
-        <button class="btn btn-primary" id="btn-cart-confirm">Confirm ${priceStr}</button>
-      </div>
-    ` : `
-      <div class="form-group">
-        <label>What did you pay?</label>
-        <input class="form-control" type="number" id="cart-price-input" step="0.01" min="0"
-          placeholder="0.00" style="font-size:1.25rem;text-align:center" />
-      </div>
-      <div class="form-actions">
-        <button class="btn btn-outline" onclick="closeModal()">Skip</button>
-        <button class="btn btn-primary" id="btn-cart-confirm-new">Add to Cart</button>
-      </div>
-    `}`;
-
-  openModal(`Check off: ${name}`, bodyHTML);
-
-  if (hasPrice) {
-    document.getElementById('btn-cart-confirm').addEventListener('click', () => {
-      cartState.set(listItemId, { name, price: knownPrice, quantity: qty });
-      closeModal();
-      toggleListItem(listItemId, true);
-    });
-
-    document.getElementById('btn-cart-update-price').addEventListener('click', () => {
-      // Clear the close callback first so the dismiss-without-confirm path doesn't fire early
-      window._modalCloseCallback = null;
-      closeModal();
-      const listItem = listState.items.find(i => i._id === listItemId);
-      const prefillItem = listItem?.itemId ? { ...listItem.itemId } : null;
-      if (prefillItem) {
-        openAddPriceModal(prefillItem, (savedPrice) => {
-          const confirmedPrice = savedPrice?.finalPrice ?? knownPrice;
-          cartState.set(listItemId, { name, price: confirmedPrice, quantity: qty });
-          toggleListItem(listItemId, true);
-        });
-      } else {
-        cartState.set(listItemId, { name, price: knownPrice, quantity: qty });
-        toggleListItem(listItemId, true);
-      }
-    });
-  } else {
-    document.getElementById('btn-cart-confirm-new')?.addEventListener('click', () => {
-      const input = document.getElementById('cart-price-input');
-      const price = parseFloat(input?.value) || 0;
-      cartState.set(listItemId, { name, price, quantity: qty });
-      closeModal();
-      toggleListItem(listItemId, true);
-    });
-
-    // Allow skip by pressing enter with empty value
-    document.getElementById('cart-price-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('btn-cart-confirm-new')?.click();
-    });
-  }
-
-  // If user closes modal without confirming, check off without price
-  const originalClose = window._modalCloseCallback;
-  window._modalCloseCallback = () => {
-    if (!cartState.has(listItemId)) {
-      toggleListItem(listItemId, true);
-    }
-    window._modalCloseCallback = originalClose;
-  };
 }
 
 // =============================================================
@@ -280,6 +220,7 @@ function updateCartBar() {
   if (!bar) return;
 
   if (cartState.size === 0) {
+    activeTripKey = null;
     bar.style.display = 'none';
     tab?.classList.remove('has-cart');
     return;
@@ -330,53 +271,173 @@ function openDoneShoppingReview() {
   const checkedItems = listState.items.filter(item => item.checked);
   if (!checkedItems.length) { showToast('No items checked off'); return; }
 
-  let total = 0;
-  const missing = [];
-  cartState.forEach(entry => {
-    total += entry.price || 0;
-    if (entry.needsPrice) missing.push(entry.name);
+  checkedItems.forEach(item => {
+    if (!cartState.has(item._id)) cartState.set(item._id, createCartEntry(item));
   });
+  activeTripKey ||= typeof window.crypto?.randomUUID === 'function'
+    ? window.crypto.randomUUID()
+    : `trip-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  const rows = checkedItems.map(item => {
+    const entry = cartState.get(item._id);
+    const storeOptions = listState.stores.map(store => `
+      <option value="${escapeAttr(store._id)}"${entry.storeId === store._id ? ' selected' : ''}>
+        ${escapeHtml(store.name)}
+      </option>`).join('');
+    const priceValue = entry.price === null ? '' : Number(entry.price).toFixed(2);
+    const suggestedValue = entry.suggestedPrice === null ? '' : entry.suggestedPrice;
+    return `
+      <div class="trip-review-item" data-list-item-id="${escapeAttr(item._id)}">
+        <div class="trip-review-item-heading">
+          <strong>${escapeHtml(entry.name)}</strong>
+          <span class="text-muted text-sm">qty ${entry.quantity}</span>
+        </div>
+        <div class="trip-review-fields">
+          <label>
+            <span>Store</span>
+            <select class="form-control trip-store-select" aria-label="Store for ${escapeAttr(entry.name)}">
+              <option value="">Choose store</option>
+              ${storeOptions}
+            </select>
+          </label>
+          <label>
+            <span>Price paid</span>
+            <input class="form-control trip-price-input" type="number" inputmode="decimal"
+              step="0.01" min="0" placeholder="Add later" value="${escapeAttr(priceValue)}"
+              data-suggested-price="${escapeAttr(suggestedValue)}" aria-label="Price paid for ${escapeAttr(entry.name)}" />
+          </label>
+        </div>
+      </div>`;
+  }).join('');
 
   openModal('Review shopping trip', `
     <div class="trip-review-summary">
-      <strong>${checkedItems.length} item${checkedItems.length === 1 ? '' : 's'} · ${formatCurrency(total)}</strong>
-      <p class="text-muted text-sm">Known prices are applied automatically.</p>
+      <strong id="trip-review-total"></strong>
+      <p class="text-muted text-sm" id="trip-review-detail">Known prices are prefilled. Edit only the exceptions.</p>
     </div>
-    ${missing.length ? `
-      <div class="trip-review-warning">
-        <strong>${missing.length} item${missing.length === 1 ? '' : 's'} need${missing.length === 1 ? 's' : ''} prices</strong>
-        <p>${missing.slice(0, 4).map(escapeHtml).join(', ')}${missing.length > 4 ? `, +${missing.length - 4} more` : ''}</p>
-      </div>` : '<p class="trip-review-ready">All item prices are accounted for.</p>'}
+    <div id="trip-review-status"></div>
+    <div class="trip-review-items">${rows}</div>
+    <label class="trip-pantry-option">
+      <input type="checkbox" id="trip-add-to-pantry" checked />
+      <span><strong>Update Pantry</strong><small>Add purchased quantities and recalculate low stock.</small></span>
+    </label>
     <div class="form-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()">Keep shopping</button>
       <button type="button" class="btn btn-primary" id="btn-finish-trip">Finish trip</button>
     </div>`);
 
+  document.querySelectorAll('.trip-price-input, .trip-store-select').forEach(field => {
+    field.addEventListener('input', updateTripReviewSummary);
+    field.addEventListener('change', updateTripReviewSummary);
+  });
+  updateTripReviewSummary();
   document.getElementById('btn-finish-trip')?.addEventListener('click', finishShoppingTrip);
+  registerDirtyForm(finishShoppingTrip);
+}
+
+function updateTripReviewSummary() {
+  const rows = [...document.querySelectorAll('.trip-review-item')];
+  let total = 0;
+  let missingPrices = 0;
+  let changedPrices = 0;
+  let missingStores = 0;
+
+  rows.forEach(row => {
+    const input = row.querySelector('.trip-price-input');
+    const select = row.querySelector('.trip-store-select');
+    const rawPrice = input.value.trim();
+    const price = rawPrice === '' ? null : Number(rawPrice);
+    const suggestedRaw = input.dataset.suggestedPrice;
+    const suggested = suggestedRaw === '' ? null : Number(suggestedRaw);
+    if (price === null || !Number.isFinite(price)) {
+      missingPrices++;
+    } else {
+      total += price;
+      if (!select.value) missingStores++;
+      if (suggested !== null && Math.abs(price - suggested) >= 0.005) changedPrices++;
+    }
+
+    const entry = cartState.get(row.dataset.listItemId);
+    if (entry) {
+      entry.price = price !== null && Number.isFinite(price) ? price : null;
+      entry.storeId = select.value || null;
+      entry.needsPrice = entry.price === null;
+    }
+  });
+
+  const totalEl = document.getElementById('trip-review-total');
+  if (totalEl) totalEl.textContent = `${rows.length} item${rows.length === 1 ? '' : 's'} · ${formatCurrency(total)}`;
+  const detailParts = [];
+  if (missingPrices) detailParts.push(`${missingPrices} need price${missingPrices === 1 ? '' : 's'}`);
+  if (changedPrices) detailParts.push(`${changedPrices} price${changedPrices === 1 ? '' : 's'} changed`);
+  if (missingStores) detailParts.push(`${missingStores} need store${missingStores === 1 ? '' : 's'}`);
+  const detailEl = document.getElementById('trip-review-detail');
+  if (detailEl) {
+    detailEl.textContent = detailParts.length
+      ? detailParts.join(' · ')
+      : 'Known prices are prefilled. Edit only the exceptions.';
+  }
+
+  const status = document.getElementById('trip-review-status');
+  if (!status) return;
+  if (missingPrices) {
+    status.className = 'trip-review-warning';
+    status.innerHTML = `<strong>${missingPrices} item${missingPrices === 1 ? '' : 's'} need${missingPrices === 1 ? 's' : ''} prices</strong>
+      <p>You can add them now or finish and record them later.</p>`;
+  } else if (missingStores) {
+    status.className = 'trip-review-warning';
+    status.innerHTML = `<strong>${missingStores} priced item${missingStores === 1 ? '' : 's'} need${missingStores === 1 ? 's' : ''} a store</strong>
+      <p>Choose a store so Provista can update price history.</p>`;
+  } else {
+    status.className = 'trip-review-ready';
+    status.textContent = 'All item prices are accounted for.';
+  }
 }
 
 async function finishShoppingTrip() {
   const button = document.getElementById('btn-finish-trip');
   if (button) { button.disabled = true; button.textContent = 'Finishing…'; }
   const checkedItems = listState.items.filter(item => item.checked);
-  let total = 0;
-  let missingPrices = 0;
-  cartState.forEach(entry => {
-    total += entry.price || 0;
-    if (entry.needsPrice) missingPrices++;
-  });
-  const count = checkedItems.length;
-  const review = missingPrices
-    ? ` · ${missingPrices} item${missingPrices === 1 ? '' : 's'} still need${missingPrices === 1 ? 's' : ''} a price`
-    : '';
-  const msg = `Trip complete! ${count} item${count !== 1 ? 's' : ''} — ${formatCurrency(total)} total${review}`;
+  const purchases = [];
+
+  for (const item of checkedItems) {
+    const row = document.querySelector(`.trip-review-item[data-list-item-id="${CSS.escape(item._id)}"]`);
+    if (!row) continue;
+    const input = row.querySelector('.trip-price-input');
+    const storeId = row.querySelector('.trip-store-select').value || null;
+    const rawPrice = input.value.trim();
+    const price = rawPrice === '' ? null : Number(rawPrice);
+    if (price !== null && (!Number.isFinite(price) || price < 0)) {
+      showToast(`Enter a valid price for ${cartState.get(item._id)?.name || 'this item'}`);
+      input.focus();
+      if (button) { button.disabled = false; button.textContent = 'Finish trip'; }
+      return;
+    }
+    if (price !== null && !storeId) {
+      showToast(`Choose a store for ${cartState.get(item._id)?.name || 'this item'}`);
+      row.querySelector('.trip-store-select').focus();
+      if (button) { button.disabled = false; button.textContent = 'Finish trip'; }
+      return;
+    }
+    purchases.push({ listItemId: item._id, price, storeId });
+  }
 
   try {
-    await api.shoppingList.clear(true);
+    const result = await api.shoppingList.complete({
+      idempotencyKey: activeTripKey,
+      purchases,
+      addToPantry: document.getElementById('trip-add-to-pantry')?.checked !== false
+    });
     checkedItems.forEach(item => cartState.delete(item._id));
+    activeTripKey = null;
     closeModal();
     await loadShoppingListTab();
-    showToast(msg, 5000);
+    const details = [];
+    if (result.pantryUpdated) details.push('Pantry updated');
+    if (result.pendingPriceCount) details.push(`${result.pendingPriceCount} price${result.pendingPriceCount === 1 ? '' : 's'} pending review`);
+    if (result.missingPriceCount) details.push(`${result.missingPriceCount} still need${result.missingPriceCount === 1 ? 's' : ''} a price`);
+    const suffix = details.length ? ` · ${details.join(' · ')}` : '';
+    showToast(`Trip complete! ${result.itemCount} item${result.itemCount === 1 ? '' : 's'} · ${formatCurrency(result.total)} added to Spend${suffix}`, 6000);
   } catch (err) {
     handleError(err, 'Failed to finish shopping trip');
     if (button) { button.disabled = false; button.textContent = 'Finish trip'; }

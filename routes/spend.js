@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PriceEntry = require('../models/PriceEntry');
+const ShoppingTrip = require('../models/ShoppingTrip');
 const { requireAuth } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -14,16 +15,28 @@ router.get('/summary', requireAuth, async (req, res) => {
     sixMonthsAgo.setDate(1);
     sixMonthsAgo.setHours(0, 0, 0, 0);
 
-    const results = await PriceEntry.aggregate([
-      { $match: { householdId: req.user.householdId, status: 'approved', date: { $gte: sixMonthsAgo } } },
-      { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$finalPrice' } } },
-      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    const [priceResults, tripResults] = await Promise.all([
+      PriceEntry.aggregate([
+        { $match: { householdId: req.user.householdId, status: 'approved', shoppingTripId: null, date: { $gte: sixMonthsAgo } } },
+        { $group: { _id: { year: { $year: '$date' }, month: { $month: '$date' } }, total: { $sum: '$finalPrice' } } },
+        { $sort: { '_id.year': 1, '_id.month': 1 } }
+      ]),
+      ShoppingTrip.aggregate([
+        { $match: { householdId: req.user.householdId, status: 'completed', completedAt: { $gte: sixMonthsAgo } } },
+        { $group: { _id: { year: { $year: '$completedAt' }, month: { $month: '$completedAt' } }, total: { $sum: '$total' } } },
+        { $sort: { '_id.year': 1, '_id.month': 1 } }
+      ])
     ]);
 
-    res.json(results.map(r => ({
-      month: `${r._id.year}-${String(r._id.month).padStart(2, '0')}`,
-      total: Math.round(r.total * 100) / 100
-    })));
+    const totalsByMonth = new Map();
+    for (const result of [...priceResults, ...tripResults]) {
+      const month = `${result._id.year}-${String(result._id.month).padStart(2, '0')}`;
+      totalsByMonth.set(month, (totalsByMonth.get(month) || 0) + result.total);
+    }
+
+    res.json([...totalsByMonth.entries()]
+      .sort(([monthA], [monthB]) => monthA.localeCompare(monthB))
+      .map(([month, total]) => ({ month, total: Math.round(total * 100) / 100 })));
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
   }
@@ -37,13 +50,21 @@ router.get('/', requireAuth, async (req, res) => {
     const start = new Date(year, month - 1, 1);
     const end = new Date(year, month, 1);
 
-    const entries = await PriceEntry.find({
-      householdId: req.user.householdId,
-      status: 'approved',
-      date: { $gte: start, $lt: end }
-    })
-      .populate('itemId', 'name brand category size')
-      .populate('storeId', 'name');
+    const [entries, trips] = await Promise.all([
+      PriceEntry.find({
+        householdId: req.user.householdId,
+        status: 'approved',
+        shoppingTripId: null,
+        date: { $gte: start, $lt: end }
+      })
+        .populate('itemId', 'name brand category size')
+        .populate('storeId', 'name'),
+      ShoppingTrip.find({
+        householdId: req.user.householdId,
+        status: 'completed',
+        completedAt: { $gte: start, $lt: end }
+      }).lean()
+    ]);
 
     let total = 0;
     const byCategory = {};
@@ -55,6 +76,17 @@ router.get('/', requireAuth, async (req, res) => {
       const store = e.storeId?.name || 'Unknown';
       byCategory[cat] = (byCategory[cat] || 0) + e.finalPrice;
       byStore[store] = (byStore[store] || 0) + e.finalPrice;
+    }
+
+    for (const trip of trips) {
+      total += trip.total;
+      for (const item of trip.items) {
+        if (item.price === null || item.price === undefined) continue;
+        const cat = item.category || 'Unknown';
+        const store = item.storeName || 'Unknown';
+        byCategory[cat] = (byCategory[cat] || 0) + item.price;
+        byStore[store] = (byStore[store] || 0) + item.price;
+      }
     }
 
     const round = v => Math.round(v * 100) / 100;

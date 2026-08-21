@@ -2,10 +2,10 @@
 
 // Returns true only for simple top-level CRUD paths (e.g. /items, /items/123).
 // Sub-resource actions like /items/123/merge and combined-write actions like
-// /grocery/log are not safe to queue offline.
+// /grocery/log or /shopping-list/complete are not safe to queue offline.
 function _isSimpleCrudPath(method, path) {
   if (method === 'GET') return true;
-  if (path.split('?')[0] === '/grocery/log') return false;
+  if (['/grocery/log', '/shopping-list/complete'].includes(path.split('?')[0])) return false;
   const segments = path.split('?')[0].split('/').filter(Boolean);
   return segments.length <= 2;
 }
@@ -156,6 +156,7 @@ const api = {
     add: (data) => api.post('/shopping-list', data),
     update: (id, data) => api.put(`/shopping-list/${id}`, data),
     delete: (id) => api.delete(`/shopping-list/${id}`),
+    complete: (data) => api.post('/shopping-list/complete', data),
     clear: (checkedOnly = false) => api.delete(`/shopping-list${checkedOnly ? '?checkedOnly=true' : ''}`)
   },
   spend: {

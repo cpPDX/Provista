@@ -6,6 +6,7 @@ const inventoryItemSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, default: 0 },
   unit: { type: String, trim: true },
   lastUpdatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  lastPurchaseTripId: { type: mongoose.Schema.Types.ObjectId, ref: 'ShoppingTrip', default: null },
   lastUpdated: { type: Date, default: Date.now },
   notes: { type: String, trim: true },
   lowStockThreshold: { type: Number, default: null },
