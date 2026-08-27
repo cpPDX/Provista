@@ -96,7 +96,9 @@ test.describe('Pantry household workflows', () => {
 
     await page.click('[data-tab="home"]');
     await page.click('[data-tab="inventory"]');
-    await expect(page.locator('.pantry-card').first()).toHaveAttribute('data-inv-id', targetId);
+    const stableCards = page.locator('.pantry-card').filter({ hasText: new RegExp(`Stable (First|Second) ${suffix}`) });
+    await expect(stableCards).toHaveCount(2);
+    await expect(stableCards.first()).toHaveAttribute('data-inv-id', targetId);
   });
 
   test('lets exact quantity be tapped repeatedly without collapsing or moving the control', async ({ page, baseURL }) => {
