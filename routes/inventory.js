@@ -20,8 +20,6 @@ function parseNonNegative(value, field) {
 }
 
 function effectiveTrackingMode(item) {
-  // Existing Pantry rows predate trackingMode. A saved threshold is strong evidence
-  // that the household was already using exact tracking, so preserve that behavior.
   if (item?.trackingMode === 'exact') return 'exact';
   if (item?.lowStockThreshold != null) return 'exact';
   return 'simple';
@@ -86,7 +84,6 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// Routine Pantry changes are household collaboration, not administration.
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { itemId, unit, notes, lowStockThreshold } = req.body;
@@ -100,10 +97,12 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'stockStatus must be have, low, or out' });
     }
 
-    const inferredMode = req.body.trackingMode === undefined && lowStockThreshold !== undefined
-      ? 'exact'
-      : 'simple';
-    const trackingMode = parseTrackingMode(req.body.trackingMode, inferredMode);
+    // Backward compatibility: older clients represented exact tracking by
+    // sending quantity/threshold without a stockStatus or trackingMode.
+    const legacyExactIntent = req.body.trackingMode === undefined &&
+      requestedStatus === undefined &&
+      (req.body.quantity !== undefined || lowStockThreshold !== undefined);
+    const trackingMode = parseTrackingMode(req.body.trackingMode, legacyExactIntent ? 'exact' : 'simple');
     const threshold = lowStockThreshold === undefined || lowStockThreshold === null || lowStockThreshold === ''
       ? null
       : parseNonNegative(lowStockThreshold, 'lowStockThreshold');
@@ -113,14 +112,15 @@ router.post('/', requireAuth, async (req, res) => {
     let savedThreshold = threshold;
 
     if (trackingMode === 'exact') {
+      if (requestedStatus !== undefined) {
+        return res.status(400).json({ error: 'Exact tracking derives stock status from quantity and the low-stock threshold' });
+      }
       stockStatus = quantity <= 0
         ? 'out'
         : (threshold != null && quantity <= threshold ? 'low' : 'have');
     } else {
       stockStatus = requestedStatus || 'have';
       savedThreshold = null;
-      // Quantity is an implementation detail in simple mode. Keep only a minimal
-      // compatible value so shopping-trip replenishment can operate safely.
       quantity = stockStatus === 'out' ? 0 : Math.max(quantity || 1, 1);
     }
 
@@ -161,14 +161,17 @@ router.put('/:id', requireAuth, async (req, res) => {
     }
 
     const currentMode = effectiveTrackingMode(inv);
-    const trackingMode = parseTrackingMode(req.body.trackingMode, currentMode);
+    const legacyExactIntent = req.body.trackingMode === undefined &&
+      requestedStatus === undefined &&
+      (req.body.quantity !== undefined || req.body.lowStockThreshold !== undefined);
+    const trackingMode = parseTrackingMode(req.body.trackingMode, legacyExactIntent ? 'exact' : currentMode);
     const switchingToSimple = currentMode !== 'simple' && trackingMode === 'simple';
 
     if (req.body.unit !== undefined) inv.unit = String(req.body.unit || '').trim();
     if (req.body.notes !== undefined) inv.notes = String(req.body.notes || '').trim();
 
     if (trackingMode === 'exact') {
-      if (requestedStatus !== undefined && req.body.trackingMode !== 'exact') {
+      if (requestedStatus !== undefined) {
         return res.status(400).json({ error: 'Exact tracking derives stock status from quantity and the low-stock threshold' });
       }
       if (req.body.quantity !== undefined) inv.quantity = parseNonNegative(req.body.quantity, 'quantity');
@@ -186,7 +189,6 @@ router.put('/:id', requireAuth, async (req, res) => {
       inv.trackingMode = 'simple';
       inv.stockStatus = nextStatus;
       inv.lowStockThreshold = null;
-      // Exact quantity is no longer user-maintained in simple mode.
       inv.quantity = nextStatus === 'out' ? 0 : Math.max(Number(inv.quantity) || 1, 1);
     }
 
@@ -200,7 +202,6 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Removing the Pantry record entirely remains an administrative catalog action.
 router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const inv = await InventoryItem.findOneAndDelete({ _id: req.params.id, householdId: req.user.householdId });
