@@ -163,6 +163,39 @@ test.describe('Mobile accessibility foundation', () => {
     expect(motion.transitionDuration).toBeLessThanOrEqual(0.00001);
   });
 
+  test('keeps Plan form controls at iOS-safe text size without horizontal overflow', async ({ page }) => {
+    await page.click('[data-tab="meal-plan"]');
+    await page.waitForSelector('.meal-day');
+
+    const layout = await page.evaluate(() => {
+      const panel = document.querySelector('.tab-panel.active');
+      const controls = [...panel.querySelectorAll('input, select, textarea')]
+        .filter(element => element.offsetParent !== null)
+        .map(element => ({
+          id: element.id || element.className,
+          fontSize: parseFloat(getComputedStyle(element).fontSize)
+        }));
+      return {
+        controls,
+        panelOverflow: panel.scrollWidth - panel.clientWidth,
+        documentOverflow: document.documentElement.scrollWidth - window.innerWidth,
+        viewportWidth: window.visualViewport?.width || window.innerWidth,
+        windowWidth: window.innerWidth
+      };
+    });
+
+    expect(layout.controls.length).toBeGreaterThan(0);
+    expect(layout.controls.every(control => control.fontSize >= 16)).toBe(true);
+    expect(layout.panelOverflow).toBeLessThanOrEqual(1);
+    expect(layout.documentOverflow).toBeLessThanOrEqual(1);
+    expect(layout.viewportWidth).toBeLessThanOrEqual(layout.windowWidth + 1);
+
+    const notes = page.locator('.meal-notes-input').filter({ visible: true }).first();
+    await notes.focus();
+    const focusedFontSize = await notes.evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+    expect(focusedFontSize).toBeGreaterThanOrEqual(16);
+  });
+
   test('reflows at 200% text and reserves the iPhone safe-area navigation boundary', async ({ page }) => {
     const viewport = await page.locator('meta[name="viewport"]').getAttribute('content');
     expect(viewport).toContain('viewport-fit=cover');
