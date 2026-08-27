@@ -1,7 +1,6 @@
 // Main app: auth check, tab navigation, initialization
 
 let rapidShoppingCaptureLoadPromise = null;
-let parentExperienceLoadPromise = null;
 
 async function ensureRapidShoppingCapture() {
   if (typeof initRapidShoppingCapture === 'function') {
@@ -29,38 +28,6 @@ async function ensureRapidShoppingCapture() {
   } catch (err) {
     rapidShoppingCaptureLoadPromise = null;
     console.error('Rapid shopping capture failed to load', err);
-  }
-}
-
-async function ensureParentExperience() {
-  if (!document.querySelector('link[data-parent-experience]')) {
-    const stylesheet = document.createElement('link');
-    stylesheet.rel = 'stylesheet';
-    stylesheet.href = '/css/parentExperience.css';
-    stylesheet.dataset.parentExperience = 'true';
-    document.head.appendChild(stylesheet);
-  }
-
-  if (document.querySelector('script[data-parent-experience]')) return;
-  if (!parentExperienceLoadPromise) {
-    parentExperienceLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = '/js/parentExperience.js';
-      script.dataset.parentExperience = 'true';
-      script.onload = resolve;
-      script.onerror = () => {
-        script.remove();
-        reject(new Error('Failed to load parent experience'));
-      };
-      document.head.appendChild(script);
-    });
-  }
-
-  try {
-    await parentExperienceLoadPromise;
-  } catch (err) {
-    parentExperienceLoadPromise = null;
-    console.error('Parent experience failed to load', err);
   }
 }
 
@@ -97,30 +64,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Show admin-only items in More menu
   if (window.appAuth.isAdmin()) {
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
-    // Check pending count on load
     try {
       const pending = await api.prices.pending();
       updatePendingBadge(pending.length);
     } catch (_) {}
   }
 
-  // Load the parent-first interaction layer before attaching handlers so its
-  // refined shopping/home functions are the ones handlers bind to.
-  await ensureParentExperience();
-
-  // Logout
   document.getElementById('btn-logout').addEventListener('click', async () => {
-    if (confirm('Sign out?')) await window.appAuth.logout();
+    const confirmed = await confirmAction({
+      title: 'Sign out?',
+      message: 'You’ll return to the sign-in screen. Your household data stays saved.',
+      confirmLabel: 'Sign out',
+      danger: false
+    });
+    if (confirmed) await window.appAuth.logout();
   });
 
   // Attach event handlers immediately so the UI is interactive while offline
-  // support initializes in the background
+  // support initializes in the background.
   initNavigation();
   initModal();
   initPricesTab();
   initShoppingListTab();
   initSpendTab();
-  initMoreTab();
+  initMoreTabV2();
   initHomeTab();
 
   // Load default tab
@@ -134,11 +101,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Setup wizard for new household owners
   const resumeBtn = document.getElementById('btn-resume-setup');
   if (shouldShowSetupWizard()) {
-    // First login after household creation — auto-start and show resume button
     if (resumeBtn) resumeBtn.style.display = '';
     setTimeout(() => startSetupWizard(), 500);
   } else if (shouldShowResumeButton()) {
-    // Wizard not done but not a fresh creation — just show resume button
     if (resumeBtn) resumeBtn.style.display = '';
   }
 });
@@ -148,20 +113,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============================================================
 
 async function initOfflineSupport() {
-  // Register service worker
   if ('serviceWorker' in navigator) {
     try {
       await navigator.serviceWorker.register('/sw.js');
     } catch {}
   }
 
-  // Initialize offline manager (online/offline detection)
   offlineManager.init();
-
-  // Initialize IndexedDB and bootstrap data
   await offlineBootstrap.init();
 
-  // Initialize iOS install prompt
   if (typeof initInstallPrompt === 'function') {
     initInstallPrompt();
   }
@@ -212,12 +172,12 @@ async function switchTab(tabId) {
       await loadShoppingListTab();
       break;
     case 'spend': await loadSpendTab(); break;
-    case 'inventory': await loadInventory(); break;
+    case 'inventory': await Pantry.load(); break;
     case 'meal-plan':
       if (!window._mealPlanInit) { initMealPlanSection(); window._mealPlanInit = true; }
       await loadMealPlan();
       break;
-    case 'more': break; // More tab content is already in the DOM, sub-sections load on demand
+    case 'more': break;
   }
 }
 
@@ -235,7 +195,6 @@ function initModal() {
     if (e.target === document.getElementById('modal-overlay')) tryCloseModal();
   });
 
-  // Escape key closes the modal (respects unsaved-changes guard)
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
