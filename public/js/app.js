@@ -169,6 +169,10 @@ async function switchTab(tabId) {
     case 'prices': await loadPricesTab(); break;
     case 'list':
       await ensureRapidShoppingCapture();
+      // Stores can change from More or another household member while the app
+      // stays open. Clear the List cache on navigation so checkout never offers
+      // stale store choices or loses the active-stop label.
+      if (typeof listState !== 'undefined') listState.stores = [];
       await loadShoppingListTab();
       break;
     case 'spend': await loadSpendTab(); break;
