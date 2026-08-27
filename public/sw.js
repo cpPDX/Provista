@@ -91,6 +91,14 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(cacheFirstWithNetworkFallback(request));
 });
 
+function cacheNameForRequest(request) {
+  const url = new URL(request.url);
+  if (request.mode === 'navigate' || url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
+    return SHELL_CACHE;
+  }
+  return API_CACHE;
+}
+
 // Cache-first: serve from cache immediately, fall back to network
 async function cacheFirstWithNetworkFallback(request) {
   const cached = await caches.match(request);
@@ -116,11 +124,12 @@ async function cacheFirstWithNetworkFallback(request) {
 
 // Network-first: try network, fall back to cache, then structured error
 async function networkFirstWithCacheFallback(request) {
+  const cacheName = cacheNameForRequest(request);
   try {
     const response = await fetch(request);
-    // Cache successful GET responses
+    // Cache successful GET responses in the cache that owns that resource.
     if (response.ok && request.method === 'GET') {
-      const cache = await caches.open(request.mode === 'navigate' ? SHELL_CACHE : API_CACHE);
+      const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
       if (request.mode === 'navigate') {
         cache.put('/index.html', response.clone()).catch(() => {});
@@ -128,12 +137,13 @@ async function networkFirstWithCacheFallback(request) {
     }
     return response;
   } catch {
-    // Network failed — try exact cached request first.
+    // Network failed — prefer the owning cache before searching all caches.
     if (request.method === 'GET') {
-      const cached = await caches.match(request);
+      const cache = await caches.open(cacheName);
+      const cached = await cache.match(request);
       if (cached) return cached;
       if (request.mode === 'navigate') {
-        const cachedIndex = await caches.match('/index.html');
+        const cachedIndex = await cache.match('/index.html');
         if (cachedIndex) return cachedIndex;
       }
     }
