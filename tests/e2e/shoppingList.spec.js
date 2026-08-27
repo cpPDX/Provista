@@ -16,7 +16,13 @@ async function createListItem(page, name, quantity = 1) {
 
 async function reloadList(page) {
   await page.click('[data-tab="home"]');
+  const listLoaded = page.waitForResponse(response =>
+    response.url().includes('/api/shopping-list') &&
+    response.request().method() === 'GET' &&
+    response.ok()
+  );
   await page.click('[data-tab="list"]');
+  await listLoaded;
   await page.waitForSelector('.list-item, .empty-state');
 }
 
@@ -40,7 +46,7 @@ test.describe('Shopping List critical flows', () => {
     await page.fill('#list-new-category', 'Pantry');
     await page.fill('#list-new-unit', 'each');
     await page.fill('#list-qty', '2');
-    await page.getByRole('button', { name: 'Add to List' }).click();
+    await page.getByRole('button', { name: 'Add to List', exact: true }).click();
 
     await expect(page.locator('#modal-overlay')).toBeHidden();
     await expect(page.locator('.list-item', { hasText: name })).toContainText('qty 2');
