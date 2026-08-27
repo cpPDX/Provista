@@ -163,10 +163,11 @@ function pantryProjection(inventory, requestedQuantity) {
   const projectedQuantity = Math.max(0, projectedRaw);
   const runsOut = projectedRaw <= 0;
   const crossesThreshold = Number.isFinite(threshold) && projectedRaw <= threshold;
+  const currentLow = Number.isFinite(threshold) && quantity <= threshold;
 
   return {
     pantryTrackingMode: 'exact',
-    pantryStatus: quantity <= 0 ? 'out' : (crossesThreshold ? 'low' : 'have'),
+    pantryStatus: quantity <= 0 ? 'out' : (currentLow ? 'low' : 'have'),
     pantryQuantity: quantity,
     projectedQuantity,
     lowStockThreshold: Number.isFinite(threshold) ? threshold : null,
