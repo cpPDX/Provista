@@ -43,21 +43,27 @@ jobs:
           node --check public/js/home.js
           node --check public/js/onboarding.js
           node --check public/js/shoppingList.js
+          node --check public/js/parentExperience.js
           node --check public/js/rapidShoppingCapture.js
           node --check models/FavoriteMeal.js
           node --check models/Household.js
           node --check models/InventoryItem.js
-          node --check models/User.js
+          node --check models/PriceObservation.js
           node --check models/ShoppingTrip.js
+          node --check models/User.js
           node --check services/completeShoppingTrip.js
+          node --check services/externalPricing/providerRegistry.js
+          node --check services/externalPricing/openPricesProvider.js
           node --check services/passwordResetEmail.js
           node --check utils/mealShopping.js
           node --check routes/mealPlan.js
           node --check routes/auth.js
+          node --check routes/externalPrices.js
           node --check routes/household.js
           node --check routes/inventory.js
           node --check routes/items.js
           node --check routes/shoppingList.js
+          node --check routes/shoppingTrips.js
           node --check routes/spend.js
           node --check routes/stores.js
           node --check tests/e2e/prices.spec.js
