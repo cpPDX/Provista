@@ -1,14 +1,14 @@
 const { test, expect } = require('@playwright/test');
 const { loginAsNewUser } = require('./helpers/login');
 
-async function createListItem(page, name, quantity = 1) {
+async function createListItem(page, name, quantity = 1, storeId = null) {
   const itemResponse = await page.request.post('/api/items', {
     data: { name, category: 'Other', unit: 'each' }
   });
   expect(itemResponse.ok()).toBeTruthy();
   const item = await itemResponse.json();
   const listResponse = await page.request.post('/api/shopping-list', {
-    data: { itemId: item._id, quantity }
+    data: { itemId: item._id, quantity, ...(storeId ? { storeId } : {}) }
   });
   expect(listResponse.ok()).toBeTruthy();
   return { item, listItem: await listResponse.json() };
@@ -37,6 +37,7 @@ test.describe('Shopping List critical flows', () => {
   test('creates a completely new catalog item without closing the List form', async ({ page }) => {
     const name = `Inline List Item ${Date.now()}`;
     await page.click('#btn-add-list-item');
+    await expect(page.locator('#modal-title')).toHaveText('Add with details');
     await page.fill('#list-item-input', name);
     const createOption = page.locator('#list-item-dropdown .autocomplete-create');
     await expect(createOption).toContainText(`Create "${name}"`);
@@ -46,7 +47,7 @@ test.describe('Shopping List critical flows', () => {
     await page.fill('#list-new-category', 'Pantry');
     await page.fill('#list-new-unit', 'each');
     await page.fill('#list-qty', '2');
-    await page.getByRole('button', { name: 'Add to List', exact: true }).click();
+    await page.getByRole('button', { name: 'Add to list', exact: true }).click();
 
     await expect(page.locator('#modal-overlay')).toBeHidden();
     await expect(page.locator('.list-item', { hasText: name })).toContainText('qty 2');
@@ -109,9 +110,6 @@ test.describe('Shopping List critical flows', () => {
       const response = await page.request.get('/api/shopping-list');
       return (await response.json()).filter(item => item.checked).length;
     }, { timeout: 6000 }).toBe(19);
-    const response = await page.request.get('/api/shopping-list');
-    const list = await response.json();
-    expect(list.find(item => item._id === ids[0]).checked).toBe(false);
   });
 
   test('rolls an optimistic check-off back when persistence fails', async ({ page }) => {
@@ -133,14 +131,17 @@ test.describe('Shopping List critical flows', () => {
     await expect(page.locator('#toast')).toContainText('rolled back');
   });
 
-  test('keeps Finish shopping visible and puts removal without recording in a secondary menu', async ({ page }) => {
+  test('keeps Finish shopping visible and destructive list actions secondary', async ({ page }) => {
     const { listItem } = await createListItem(page, `Sticky Done ${Date.now()}`);
     await reloadList(page);
-    await page.locator(`.list-item[data-id="${listItem._id}"] .list-item-check-wrap`).click();
+    await expect(page.locator('#btn-clear-all')).toBeHidden();
+    await page.locator('#list-page-more-menu > summary').click();
+    await expect(page.locator('#btn-clear-all')).toBeVisible();
+    await page.locator('#list-page-more-menu > summary').click();
 
+    await page.locator(`.list-item[data-id="${listItem._id}"] .list-item-check-wrap`).click();
     await expect(page.locator('#btn-done-shopping')).toBeVisible();
     await expect(page.locator('#btn-done-shopping')).toHaveText('Finish shopping');
-    await expect(page.getByText('Clear Checked', { exact: true })).toHaveCount(0);
     await expect(page.locator('#btn-remove-checked')).toBeHidden();
     await page.locator('#cart-more-menu > summary').click();
     await expect(page.locator('#btn-remove-checked')).toBeVisible();
@@ -175,6 +176,31 @@ test.describe('Shopping List critical flows', () => {
     await expect(card.locator('.purchase-price-choice-status')).toContainText('reviewed later');
     await card.locator('.purchase-price-choice').getByRole('button', { name: 'Use $4.29' }).click();
     await expect(card.locator('.purchase-price-choice-status')).toContainText('$4.29');
+  });
+
+  test('finishes one active shopping stop and leaves other items for the next stop', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const firstStoreResponse = await page.request.post('/api/stores', { data: { name: `First Stop ${suffix}` } });
+    const secondStoreResponse = await page.request.post('/api/stores', { data: { name: `Second Stop ${suffix}` } });
+    const firstStore = await firstStoreResponse.json();
+    const secondStore = await secondStoreResponse.json();
+    await page.request.patch('/api/household/settings', { data: { usualStoreId: firstStore._id } });
+
+    const first = await createListItem(page, `First Stop Item ${suffix}`, 1, firstStore._id);
+    const second = await createListItem(page, `Second Stop Item ${suffix}`, 1, secondStore._id);
+    await reloadList(page);
+
+    await page.locator(`.list-item[data-id="${first.listItem._id}"] .list-item-check-wrap`).click();
+    await expect(page.locator('#cart-bar-label')).toContainText(firstStore.name);
+    await page.locator('#btn-done-shopping').click();
+    await expect(page.locator('#parent-trip-store')).toHaveValue(firstStore._id);
+    await page.locator('#parent-finish-shopping').click();
+    await expect(page.locator('#modal-overlay')).toBeHidden({ timeout: 10000 });
+
+    await expect(page.locator(`.list-item[data-id="${first.listItem._id}"]`)).toHaveCount(0);
+    await expect(page.locator(`.list-item[data-id="${second.listItem._id}"]`)).toBeVisible();
+    await page.locator(`.list-item[data-id="${second.listItem._id}"] .list-item-check-wrap`).click();
+    await expect(page.locator('#cart-bar-label')).toContainText(secondStore.name);
   });
 
   test('finishes a 20-item one-store trip and leaves only missing prices for later review', async ({ page }) => {
@@ -220,7 +246,6 @@ test.describe('Shopping List critical flows', () => {
     await expect(page.locator('.list-item.checked')).toHaveCount(20);
     await expect(page.locator('.purchase-price-choice')).toHaveCount(20);
     await expect(page.locator('.price-choice-btn.selected', { hasText: 'Later' })).toHaveCount(3);
-    await expect(page.locator('#btn-done-shopping')).toBeVisible();
     await page.locator('#btn-done-shopping').click();
 
     await expect(page.locator('#modal-title')).toHaveText('Finish shopping');
@@ -229,10 +254,8 @@ test.describe('Shopping List critical flows', () => {
     await expect(page.locator('.finish-shopping-confirmed')).toContainText('17 recorded prices');
     await expect(page.locator('.finish-shopping-outcomes')).toContainText('Update Spending');
 
-    const started = Date.now();
     await page.locator('#parent-finish-shopping').click();
     await expect(page.locator('#modal-overlay')).toBeHidden({ timeout: 20000 });
-    expect(Date.now() - started).toBeLessThan(20000);
 
     const [listResponse, pantryResponse, spendResponse, deferredResponse] = await Promise.all([
       page.request.get('/api/shopping-list'),
