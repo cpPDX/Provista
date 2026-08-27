@@ -75,15 +75,13 @@ function renderSpendMonth(data) {
   renderBreakdown('spend-by-store', data.byStore, 'store');
 }
 
-function openSpendingDrilldown(item, type) {
-  const range = monthDateRange(spendState.currentMonth);
+async function openSpendingDrilldown(item, type) {
+  const month = spendState.currentMonth;
+  const range = monthDateRange(month);
   const baseFilter = {
     categories: [],
     stores: [],
     dateRange: 'all',
-    dateStart: range.startDate,
-    dateEnd: range.endDate,
-    dateLabel: range.label,
     organicOnly: false,
     saleOnly: false,
     sortBy: 'date'
@@ -98,24 +96,44 @@ function openSpendingDrilldown(item, type) {
   } else if (item.storeId) {
     baseFilter.stores = [String(item.storeId)];
   } else {
-    // Historical rows without a store id still get the exact month boundary;
-    // name search is only a fallback for those legacy records.
+    // Legacy spending rows can lack store ids. Keep the exact month and only
+    // fall back to store-name search for those historical records.
     pricesState.searchQuery = item.name;
     if (searchEl) searchEl.value = item.name;
   }
 
   pricesState.filter = baseFilter;
-  pricesState.returnToSpendMonth = spendState.currentMonth;
-  pricesState.drilldown = {
-    month: spendState.currentMonth,
-    startDate: range.startDate,
-    endDate: range.endDate,
-    storeId: type === 'store' ? (item.storeId || null) : null,
-    category: type === 'category' ? item.name : null
+  pricesState.returnToSpendMonth = month;
+  pricesState.spendingDrilldown = {
+    month,
+    label: range.label,
+    type,
+    name: item.name
   };
 
-  switchTab('prices');
-  showToast(`Showing ${range.label}: ${item.name}`);
+  await switchTab('prices');
+
+  try {
+    const params = { startDate: range.startDate, endDate: range.endDate };
+    if (type === 'store' && item.storeId) params.storeId = item.storeId;
+    pricesState.entries = await api.prices.list(params);
+    window.pricesState = pricesState;
+    applyPricesFilter();
+
+    // Keep the calendar period visible even though the Price History filter
+    // component only exposes rolling ranges. The underlying result set is
+    // already constrained to this exact calendar month by the API request.
+    const countBar = document.getElementById('prices-filter-count');
+    if (countBar) {
+      const resultCount = pricesState.clusters?.length || 0;
+      countBar.textContent = `${range.label} · ${resultCount} product${resultCount === 1 ? '' : 's'} shown`;
+      countBar.style.display = '';
+    }
+    document.getElementById('prices-filter-dot')?.style.removeProperty('display');
+    showToast(`Showing ${range.label}: ${item.name}`);
+  } catch (err) {
+    handleError(err, `Could not load ${range.label} purchase history`);
+  }
 }
 
 function renderBreakdown(containerId, items, drillType) {
@@ -138,7 +156,7 @@ function renderBreakdown(containerId, items, drillType) {
   container.querySelectorAll('.breakdown-item[data-drill-index]').forEach(el => {
     el.addEventListener('click', () => {
       const item = items[Number(el.dataset.drillIndex)];
-      if (item) openSpendingDrilldown(item, el.dataset.drillType);
+      if (item) void openSpendingDrilldown(item, el.dataset.drillType);
     });
   });
 }
