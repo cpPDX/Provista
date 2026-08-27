@@ -33,14 +33,26 @@ async function getJson(path, params = {}) {
   }
 }
 
+function storeLocationHint(store) {
+  return normalizeText([
+    store.address?.street,
+    store.address?.city,
+    store.address?.state,
+    store.address?.postalCode,
+    store.location
+  ].filter(Boolean).join(' '));
+}
+
 function scoreLocation(store, location) {
   const storeName = normalizeText(store.name);
   const locationName = normalizeText(location.osm_name);
   const locationBrand = normalizeText(location.osm_brand);
-  const storeCity = normalizeText(store.address?.city || store.location);
+  const storeCity = normalizeText(store.address?.city);
   const locationCity = normalizeText(location.osm_address_city);
   const storePostal = normalizeText(store.address?.postalCode);
   const locationPostal = normalizeText(location.osm_address_postcode);
+  const locationHint = storeLocationHint(store);
+  const displayName = normalizeText(location.osm_display_name);
 
   let score = 0;
   const exactName = storeName && (locationName === storeName || locationBrand === storeName);
@@ -55,28 +67,50 @@ function scoreLocation(store, location) {
 
   if (storePostal && locationPostal === storePostal) score += 35;
   if (storeCity && locationCity === storeCity) score += 25;
-  else if (storeCity && normalizeText(location.osm_display_name).includes(storeCity)) score += 15;
+  if (locationHint && displayName.includes(locationHint)) score += 20;
+  else if (store.location && displayName.includes(normalizeText(store.location))) score += 15;
   if (normalizeText(location.osm_address_country_code) === 'us') score += 5;
 
   return score;
 }
 
-async function resolveLocation(store) {
-  const cached = store.externalIds?.get?.('open-prices') || store.externalIds?.['open-prices'];
-  if (cached) return { id: String(cached), confidence: 1, source: 'cached' };
+function rankLocations(store, candidates) {
+  return candidates
+    .map(location => ({ location, score: scoreLocation(store, location) }))
+    .filter(candidate => candidate.score > 0)
+    .sort((a, b) => b.score - a.score);
+}
 
-  const city = store.address?.city || store.location || '';
+async function queryLocations(store, city) {
   const data = await getJson('/api/v1/locations', {
     osm_name__like: store.name,
     osm_address_city__like: city || undefined,
     price_count__gte: 1,
     size: 25
   });
-  const candidates = Array.isArray(data?.items) ? data.items : [];
-  const scored = candidates
-    .map(location => ({ location, score: scoreLocation(store, location) }))
-    .filter(candidate => candidate.score > 0)
-    .sort((a, b) => b.score - a.score);
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
+async function resolveLocation(store) {
+  const cached = store.externalIds?.get?.('open-prices') || store.externalIds?.['open-prices'];
+  if (cached) return { id: String(cached), confidence: 1, source: 'cached' };
+
+  // Newer stores can supply a structured city. Older Provista stores only have
+  // a free-form `location`, which may be a street, neighborhood, or city. Use
+  // the structured city as a narrowing filter when available, then fall back
+  // to a name-only search and conservative display-name scoring so existing
+  // stores do not need a migration just to try Open Prices.
+  const structuredCity = store.address?.city || '';
+  let candidates = await queryLocations(store, structuredCity);
+  let scored = rankLocations(store, candidates);
+
+  if ((!scored.length || scored[0].score < 75) && (structuredCity || store.location)) {
+    const broadCandidates = await queryLocations(store, '');
+    const byId = new Map(candidates.map(location => [String(location.id), location]));
+    broadCandidates.forEach(location => byId.set(String(location.id), location));
+    candidates = [...byId.values()];
+    scored = rankLocations(store, candidates);
+  }
 
   if (!scored.length || scored[0].score < 75) return null;
   if (scored[1] && scored[1].score === scored[0].score) return null;
