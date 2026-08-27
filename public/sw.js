@@ -1,13 +1,14 @@
 // Provista Service Worker
-// Cache-first for static assets (images, fonts), network-first for JS/CSS and API data
+// Network-first for navigations, JS/CSS, and API data; cache-first for static assets.
 
-const SHELL_CACHE = 'provista-shell-v6';
+const SHELL_CACHE = 'provista-shell-v7';
 const API_CACHE = 'provista-api-v5';
 
 const SHELL_ASSETS = [
   '/',
   '/index.html',
   '/css/style.css',
+  '/css/parentExperience.css',
   '/css/rapidShoppingCapture.css',
   '/js/auth.js',
   '/js/api.js',
@@ -19,7 +20,10 @@ const SHELL_ASSETS = [
   '/js/csvImport.js',
   '/js/spend.js',
   '/js/more.js',
+  '/js/moreInit.js',
+  '/js/pantry.js',
   '/js/mealPlan.js',
+  '/js/home.js',
   '/js/onboarding.js',
   '/js/scan.js',
   '/js/scanner.js',
@@ -63,6 +67,13 @@ self.addEventListener('fetch', (event) => {
 
   // Only handle same-origin requests
   if (url.origin !== self.location.origin) return;
+
+  // Navigations should pick up the latest deployed shell when online, while
+  // still falling back to the cached app when the household is offline.
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirstWithCacheFallback(request));
+    return;
+  }
 
   // API requests: network-first with cache fallback
   if (url.pathname.startsWith('/api/')) {
@@ -109,15 +120,22 @@ async function networkFirstWithCacheFallback(request) {
     const response = await fetch(request);
     // Cache successful GET responses
     if (response.ok && request.method === 'GET') {
-      const cache = await caches.open(API_CACHE);
+      const cache = await caches.open(request.mode === 'navigate' ? SHELL_CACHE : API_CACHE);
       cache.put(request, response.clone());
+      if (request.mode === 'navigate') {
+        cache.put('/index.html', response.clone()).catch(() => {});
+      }
     }
     return response;
   } catch {
-    // Network failed — try cache
+    // Network failed — try exact cached request first.
     if (request.method === 'GET') {
       const cached = await caches.match(request);
       if (cached) return cached;
+      if (request.mode === 'navigate') {
+        const cachedIndex = await caches.match('/index.html');
+        if (cachedIndex) return cachedIndex;
+      }
     }
 
     // No cache available — return structured offline error
