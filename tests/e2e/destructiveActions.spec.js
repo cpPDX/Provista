@@ -21,9 +21,10 @@ test.describe('Outcome-focused confirmations', () => {
 
     const card = page.locator('.list-item', { hasText: item.name });
     await card.locator('.list-item-remove').click();
-    await expect(page.locator('#modal-title')).toHaveText('Remove from list?');
-    await expect(page.getByRole('button', { name: 'Remove from list', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Remove from list?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove from list', exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(card).toBeVisible();
   });
 
@@ -34,9 +35,10 @@ test.describe('Outcome-focused confirmations', () => {
 
     await page.locator('#list-page-more-menu > summary').click();
     await page.locator('#btn-clear-all').click();
-    await expect(page.locator('#modal-title')).toHaveText('Empty the shopping list?');
-    await expect(page.locator('#modal-body')).toContainText('Pantry, Spending, and price history will not change');
-    await expect(page.getByRole('button', { name: 'Empty list', exact: true })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Empty the shopping list?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('Pantry, Spending, and price history will not change');
+    await expect(dialog.getByRole('button', { name: 'Empty list', exact: true })).toBeVisible();
   });
 
   test('Pantry removal uses the same confirmation contract', async ({ page }) => {
@@ -49,28 +51,32 @@ test.describe('Outcome-focused confirmations', () => {
 
     const card = page.locator('.pantry-card', { hasText: item.name });
     await card.getByRole('button', { name: 'Remove', exact: true }).click();
-    await expect(page.locator('#modal-title')).toHaveText('Remove from Pantry?');
-    await expect(page.getByRole('button', { name: 'Remove from Pantry', exact: true })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Remove from Pantry?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove from Pantry', exact: true })).toBeVisible();
   });
 
   test('Sign Out uses the same modal pattern instead of browser confirm', async ({ page }) => {
     await page.click('[data-tab="more"]');
     await page.locator('#btn-logout').click();
-    await expect(page.locator('#modal-title')).toHaveText('Sign out?');
-    await expect(page.locator('#modal-body')).toContainText('household data stays saved');
-    await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Sign out?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('household data stays saved');
+    await expect(dialog.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
   });
 
   test('separate meal removal uses the shared confirmation modal', async ({ page }) => {
     await page.click('[data-tab="meal-plan"]');
-    const dinnerSection = page.locator('.meal-type-section[data-meal-type="dinner"]').first();
+    const dinnerSection = page.locator('.meal-type-section[data-meal-type="dinner"]:visible').first();
+    await expect(dinnerSection).toBeVisible();
     await dinnerSection.locator('.meal-add-row').click();
     const removableRow = dinnerSection.locator('.meal-row').last();
     await removableRow.locator('.meal-row-remove').click();
 
-    await expect(page.locator('#modal-title')).toHaveText('Remove separate meal?');
-    await expect(page.getByRole('button', { name: 'Remove meal', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Remove separate meal?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Remove meal', exact: true })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(removableRow).toBeVisible();
   });
 });
