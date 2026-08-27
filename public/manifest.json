@@ -1,7 +1,7 @@
 {
   "name": "Provista",
   "short_name": "Provista",
-  "description": "Smart grocery price tracking and household spend management",
+  "description": "Household meal planning, grocery shopping, Pantry, and spending assistant",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1A1C20",
