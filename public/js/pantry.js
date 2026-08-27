@@ -43,7 +43,6 @@ const Pantry = (() => {
     const mode = normalizedMode(inv);
     const status = mode === 'exact' ? exactStatus(inv) : (inv.stockStatus || 'have');
     const name = itemName(inv);
-    const unit = unitFor(inv);
     return `
       <div class="card pantry-card pantry-${status}" data-inv-id="${escapeAttr(inv._id)}" data-tracking-mode="${mode}">
         <div class="card-body">
@@ -55,7 +54,6 @@ const Pantry = (() => {
           ${inv.notes ? `<div class="text-muted text-sm">${escapeHtml(inv.notes)}</div>` : ''}
 
           ${mode === 'simple' ? `
-            <p class="pantry-mode-help">Running low and Out items appear on Home and can be added to your shopping list.</p>
             <div class="pantry-status-actions" role="group" aria-label="Stock status for ${escapeAttr(name)}">
               ${['have', 'low', 'out'].map(value => `
                 <button type="button" class="pantry-status-option${status === value ? ' active' : ''}"
@@ -63,7 +61,6 @@ const Pantry = (() => {
                   ${statusLabels[value]}
                 </button>`).join('')}
             </div>
-            <button type="button" class="btn-link pantry-mode-switch" onclick="Pantry.openEdit('${escapeAttr(inv._id)}', 'exact')">Track an exact quantity instead</button>
           ` : `
             <p class="pantry-mode-help">${escapeHtml(exactSummary(inv))}</p>
             <div class="qty-controls pantry-qty-controls" aria-label="Exact quantity for ${escapeAttr(name)}">
@@ -90,12 +87,25 @@ const Pantry = (() => {
       .some(value => String(value || '').toLowerCase().includes(query)));
   }
 
+  function ensurePageHelper() {
+    const container = document.getElementById('inventory-list');
+    if (!container || document.getElementById('pantry-page-help')) return;
+    const helper = document.createElement('p');
+    helper.id = 'pantry-page-help';
+    helper.className = 'pantry-page-help';
+    helper.textContent = 'Mark staples Running low or Out and Provista will surface them on Home and in List review.';
+    container.before(helper);
+  }
+
   function render() {
     const container = document.getElementById('inventory-list');
     if (!container) return;
+    ensurePageHelper();
     const items = visibleItems();
     if (!items.length) {
-      container.innerHTML = emptyState('🧺', state.search ? 'No Pantry items match that search.' : 'No Pantry items yet.');
+      container.innerHTML = emptyState('🧺', state.search
+        ? 'No Pantry items match that search.'
+        : 'Nothing tracked yet. Track staples you want Provista to surface when they’re low.');
       return;
     }
     // Preserve the server-provided priority order while the user is on the screen.
