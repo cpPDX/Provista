@@ -32,12 +32,14 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check public/js/api.js
+          node --check public/js/app.js
           node --check public/js/autocomplete.js
           node --check public/js/offline.js
           node --check public/js/ui.js
           node --check public/js/confirmAction.js
           node --check public/js/more.js
           node --check public/js/moreInit.js
+          node --check public/js/catalog.js
           node --check public/js/pantry.js
           node --check public/js/householdPeople.js
           node --check public/js/groceryEntry.js
@@ -45,6 +47,8 @@ jobs:
           node --check public/js/mealPlan.js
           node --check public/js/home.js
           node --check public/js/onboarding.js
+          node --check public/js/prices.js
+          node --check public/js/spend.js
           node --check public/js/shoppingList.js
           node --check public/js/rapidShoppingCapture.js
           node --check models/FavoriteMeal.js
@@ -68,6 +72,7 @@ jobs:
           node --check routes/shoppingTrips.js
           node --check routes/spend.js
           node --check routes/stores.js
+          node --check tests/api/uxBatch1.test.js
           node --check tests/e2e/prices.spec.js
           node --check tests/e2e/mealPlan.spec.js
           node --check tests/e2e/home.spec.js
@@ -78,6 +83,7 @@ jobs:
           node --check tests/e2e/destructiveActions.spec.js
           node --check tests/e2e/auth.spec.js
           node --check tests/e2e/accessibility.spec.js
+          node --check tests/e2e/uxBatch1.spec.js
 
       - name: Run API test suite
         run: npm run test:api
@@ -116,4 +122,4 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
 
       - name: Run critical household, latency, and mobile accessibility tests
-        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/accessibility.spec.js
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js
