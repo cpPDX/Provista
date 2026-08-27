@@ -10,10 +10,29 @@ function initMoreTabV2() {
   });
 
   document.querySelectorAll('[data-insight-tab]').forEach(btn => {
-    btn.addEventListener('click', () => switchTab(btn.dataset.insightTab));
+    btn.addEventListener('click', () => {
+      if (btn.dataset.insightTab === 'prices' && typeof pricesState !== 'undefined') {
+        pricesState.returnToSpendMonth = null;
+        pricesState.spendingDrilldown = null;
+      }
+      switchTab(btn.dataset.insightTab);
+    });
   });
   document.querySelectorAll('.insights-back').forEach(btn => {
     btn.addEventListener('click', async () => {
+      const fromPrices = Boolean(btn.closest('#tab-prices'));
+      const spendMonth = fromPrices && typeof pricesState !== 'undefined'
+        ? pricesState.returnToSpendMonth
+        : null;
+
+      if (spendMonth && typeof spendState !== 'undefined') {
+        spendState.currentMonth = spendMonth;
+        pricesState.returnToSpendMonth = null;
+        pricesState.spendingDrilldown = null;
+        await switchTab('spend');
+        return;
+      }
+
       await switchTab('more');
       showMoreSection('insights');
     });
