@@ -49,6 +49,7 @@ router.get('/deferred-prices', requireAuth, async (req, res) => {
 
 router.patch('/:tripId/items/:shoppingListItemId/price', requireAuth, async (req, res) => {
   let priceEntry = null;
+  let tripUpdated = false;
   try {
     const { tripId, shoppingListItemId } = req.params;
     if (!mongoose.isValidObjectId(tripId) || !mongoose.isValidObjectId(shoppingListItemId)) {
@@ -97,7 +98,7 @@ router.patch('/:tripId/items/:shoppingListItemId/price', requireAuth, async (req
       couponCode: null,
       finalPrice: price,
       quantity,
-      pricePerUnit: roundCurrency(price / quantity),
+      pricePerUnit: price / quantity,
       date: trip.completedAt || now,
       source: 'shopping-trip',
       shoppingTripId: trip._id,
@@ -146,6 +147,7 @@ router.patch('/:tripId/items/:shoppingListItemId/price', requireAuth, async (req
       priceEntry = null;
       return res.status(409).json({ error: 'That price was already updated. Refresh and try again.' });
     }
+    tripUpdated = true;
 
     const updatedTrip = await ShoppingTrip.findById(trip._id)
       .select('total pricedItemCount missingPriceCount approvedPriceCount pendingPriceCount')
@@ -160,7 +162,11 @@ router.patch('/:tripId/items/:shoppingListItemId/price', requireAuth, async (req
       trip: updatedTrip
     });
   } catch (err) {
-    if (priceEntry?._id) await PriceEntry.deleteOne({ _id: priceEntry._id }).catch(() => {});
+    // Only compensate while the trip is still unchanged. Once the conditional
+    // trip update succeeds, the PriceEntry is part of the durable trip record.
+    if (!tripUpdated && priceEntry?._id) {
+      await PriceEntry.deleteOne({ _id: priceEntry._id }).catch(() => {});
+    }
     res.status(500).json({ error: serverErr(err) });
   }
 });
