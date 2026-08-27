@@ -118,7 +118,64 @@ function scoreCatalogItem(query, item) {
   return coverage >= 0.66 ? Math.round(70 + coverage * 10) : 0;
 }
 
-function publicItem(item, context) {
+function effectiveTrackingMode(inventory) {
+  if (!inventory) return null;
+  if (inventory.trackingMode === 'exact' || inventory.lowStockThreshold != null) return 'exact';
+  return 'simple';
+}
+
+function pantryProjection(inventory, requestedQuantity) {
+  const requested = Number(requestedQuantity) || 1;
+  if (!inventory) {
+    return {
+      pantryTrackingMode: null,
+      pantryStatus: 'not-tracked',
+      pantryQuantity: 0,
+      projectedQuantity: null,
+      lowStockThreshold: null,
+      shoppingNeeded: true,
+      shoppingReason: 'not-tracked'
+    };
+  }
+
+  const mode = effectiveTrackingMode(inventory);
+  const quantity = Math.max(0, Number(inventory.quantity) || 0);
+
+  if (mode === 'simple') {
+    const status = ['have', 'low', 'out'].includes(inventory.stockStatus)
+      ? inventory.stockStatus
+      : (quantity <= 0 ? 'out' : 'have');
+    return {
+      pantryTrackingMode: 'simple',
+      pantryStatus: status,
+      pantryQuantity: quantity,
+      projectedQuantity: null,
+      lowStockThreshold: null,
+      shoppingNeeded: status !== 'have',
+      shoppingReason: status === 'have' ? 'covered' : status
+    };
+  }
+
+  const threshold = inventory.lowStockThreshold == null
+    ? null
+    : Number(inventory.lowStockThreshold);
+  const projectedRaw = quantity - requested;
+  const projectedQuantity = Math.max(0, projectedRaw);
+  const runsOut = projectedRaw <= 0;
+  const crossesThreshold = Number.isFinite(threshold) && projectedRaw <= threshold;
+
+  return {
+    pantryTrackingMode: 'exact',
+    pantryStatus: quantity <= 0 ? 'out' : (crossesThreshold ? 'low' : 'have'),
+    pantryQuantity: quantity,
+    projectedQuantity,
+    lowStockThreshold: Number.isFinite(threshold) ? threshold : null,
+    shoppingNeeded: runsOut || crossesThreshold,
+    shoppingReason: runsOut ? 'runs-out' : (crossesThreshold ? 'threshold' : 'covered')
+  };
+}
+
+function publicItem(item, context, requestedQuantity) {
   const id = String(item._id);
   return {
     _id: id,
@@ -127,7 +184,7 @@ function publicItem(item, context) {
     category: item.category,
     unit: item.unit,
     onList: context.onListIds.has(id),
-    pantryQuantity: context.pantryByItemId.get(id) || 0
+    ...pantryProjection(context.inventoryByItemId.get(id), requestedQuantity)
   };
 }
 
@@ -151,7 +208,7 @@ function chooseCatalogMatch(parsed, items, context) {
     exactMatches.length === 1 ||
     first.score - second.score >= 12 ||
     (first.usage > 0 && first.usage > second.usage && first.score >= second.score);
-  const candidates = ranked.map(candidate => publicItem(candidate.item, context));
+  const candidates = ranked.map(candidate => publicItem(candidate.item, context, parsed.quantity));
 
   return {
     matchStatus: hasClearWinner ? 'matched' : 'ambiguous',
@@ -163,10 +220,11 @@ function chooseCatalogMatch(parsed, items, context) {
 function buildMealShoppingSuggestions({ notes, items, listItems = [], inventoryItems = [], usageByItemId = new Map() }) {
   const parsedItems = parseMealShoppingNotes(notes);
   const onListIds = new Set(listItems.map(entry => String(entry.itemId?._id || entry.itemId)));
-  const pantryByItemId = new Map(inventoryItems
-    .filter(entry => Number(entry.quantity) > 0)
-    .map(entry => [String(entry.itemId?._id || entry.itemId), Number(entry.quantity)]));
-  const context = { onListIds, pantryByItemId, usageByItemId };
+  const inventoryByItemId = new Map(inventoryItems.map(entry => [
+    String(entry.itemId?._id || entry.itemId),
+    entry
+  ]));
+  const context = { onListIds, inventoryByItemId, usageByItemId };
   const resolvedIds = new Set();
 
   const suggestions = parsedItems.map(parsed => {
@@ -181,6 +239,9 @@ function buildMealShoppingSuggestions({ notes, items, listItems = [], inventoryI
     matchedCount: suggestions.filter(suggestion => suggestion.matchStatus === 'matched').length,
     ambiguousCount: suggestions.filter(suggestion => suggestion.matchStatus === 'ambiguous').length,
     unmatchedCount: suggestions.filter(suggestion => suggestion.matchStatus === 'unmatched').length,
+    shoppingNeededCount: suggestions.filter(suggestion =>
+      suggestion.matchStatus === 'matched' && suggestion.item?.shoppingNeeded && !suggestion.item?.onList
+    ).length,
     suggestions
   };
 }
@@ -191,5 +252,6 @@ module.exports = {
   buildMealShoppingSuggestions,
   normalizeShoppingText,
   parseMealShoppingNotes,
+  pantryProjection,
   scoreCatalogItem
 };
