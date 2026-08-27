@@ -63,7 +63,7 @@ test.describe('Mobile accessibility foundation', () => {
     await check.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByRole('button', { name: `Uncheck ${item.name}` })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('button', { name: /Done shopping with 1 item/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Finish shopping with 1 item/ })).toBeVisible();
     await expect(page.locator('#cart-bar-summary')).toHaveAttribute('aria-expanded', 'false');
     await page.locator('#cart-bar-summary').press('Enter');
     await expect(page.locator('#cart-bar-summary')).toHaveAttribute('aria-expanded', 'true');
@@ -74,6 +74,7 @@ test.describe('Mobile accessibility foundation', () => {
         '#btn-list-filter',
         '.list-item-check-wrap',
         '.list-item-remove',
+        '.price-choice-btn',
         '#cart-bar-summary',
         '#btn-done-shopping',
         '#cart-more-menu > summary',
@@ -96,13 +97,13 @@ test.describe('Mobile accessibility foundation', () => {
     await trigger.focus();
     await page.keyboard.press('Enter');
 
-    const dialog = page.getByRole('dialog', { name: 'Add to Shopping List' });
+    const dialog = page.getByRole('dialog', { name: 'Add with details' });
     await expect(dialog).toBeVisible();
     await expect(page.locator('#modal-overlay')).toHaveAttribute('aria-hidden', 'false');
     await expect(page.locator('#app')).toHaveAttribute('inert', '');
     await expect(page.locator('#list-item-input')).toBeFocused();
 
-    const submit = page.getByRole('button', { name: 'Add to List' });
+    const submit = dialog.getByRole('button', { name: 'Add to list', exact: true });
     await submit.focus();
     await page.keyboard.press('Tab');
     await expect(page.locator('#modal-close')).toBeFocused();
