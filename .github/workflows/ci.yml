@@ -35,7 +35,10 @@ jobs:
           node --check public/js/autocomplete.js
           node --check public/js/offline.js
           node --check public/js/ui.js
+          node --check public/js/confirmAction.js
           node --check public/js/more.js
+          node --check public/js/moreInit.js
+          node --check public/js/pantry.js
           node --check public/js/householdPeople.js
           node --check public/js/groceryEntry.js
           node --check public/js/csvImportUnified.js
@@ -43,7 +46,6 @@ jobs:
           node --check public/js/home.js
           node --check public/js/onboarding.js
           node --check public/js/shoppingList.js
-          node --check public/js/parentExperience.js
           node --check public/js/rapidShoppingCapture.js
           node --check models/FavoriteMeal.js
           node --check models/Household.js
