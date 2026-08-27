@@ -1,6 +1,22 @@
 const { test, expect } = require('@playwright/test');
 const { loginAsNewUser } = require('./helpers/login');
 
+function monthKey(offset = 0) {
+  const now = new Date();
+  const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
+  return date.toISOString().slice(0, 7);
+}
+
+function monthLabel(month) {
+  return new Date(`${month}-01T00:00:00.000Z`).toLocaleString('en-US', {
+    month: 'long', year: 'numeric', timeZone: 'UTC'
+  });
+}
+
+function midMonthDate(month) {
+  return `${month}-15T12:00:00.000Z`;
+}
+
 async function createItem(page, name, category = 'Other') {
   const response = await page.request.post('/api/items', {
     data: { name, category, unit: 'each' }
@@ -104,7 +120,8 @@ test.describe('UX Batch 1 correctness journeys', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.locator('#edit-inv-notes')).toHaveValue('Keep this note');
 
-    await page.route(`**/api/inventory/${inventory._id}`, async route => {
+    const inventoryRoute = `**/api/inventory/${inventory._id}`;
+    await page.route(inventoryRoute, async route => {
       if (route.request().method() === 'PUT') {
         await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Forced save failure' }) });
       } else {
@@ -119,7 +136,7 @@ test.describe('UX Batch 1 correctness journeys', () => {
     await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
     expect(await page.evaluate(() => window._dirtyForm?.isDirty)).toBe(true);
 
-    await page.unroute(`**/api/inventory/${inventory._id}`);
+    await page.unroute(inventoryRoute);
     await page.click('[data-tab="home"]');
     await prompt.getByRole('button', { name: 'Save & leave' }).click();
     await expect(page.locator('#modal-overlay')).toBeHidden();
@@ -131,33 +148,36 @@ test.describe('UX Batch 1 correctness journeys', () => {
 
   test('Spending drill-down preserves the selected calendar month and back navigation', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const currentMonth = monthKey(0);
+    const selectedMonth = monthKey(-1);
+    const earlierMonth = monthKey(-2);
     const store = await createStore(page, `Month Store ${suffix}`);
-    const june = await createItem(page, `June Dairy ${suffix}`, 'Dairy');
-    const july = await createItem(page, `July Dairy ${suffix}`, 'Dairy');
-    const august = await createItem(page, `August Dairy ${suffix}`, 'Dairy');
-    await recordPrice(page, june._id, store._id, '2026-06-15T12:00:00.000Z', 2.15);
-    await recordPrice(page, july._id, store._id, '2026-07-15T12:00:00.000Z', 3.15);
-    await recordPrice(page, august._id, store._id, '2026-08-15T12:00:00.000Z', 4.15);
+    const earlier = await createItem(page, `Earlier Dairy ${suffix}`, 'Dairy');
+    const selected = await createItem(page, `Selected Dairy ${suffix}`, 'Dairy');
+    const current = await createItem(page, `Current Dairy ${suffix}`, 'Dairy');
+    await recordPrice(page, earlier._id, store._id, midMonthDate(earlierMonth), 2.15);
+    await recordPrice(page, selected._id, store._id, midMonthDate(selectedMonth), 3.15);
+    await recordPrice(page, current._id, store._id, midMonthDate(currentMonth), 4.15);
 
     await page.click('[data-tab="more"]');
     await page.getByRole('button', { name: /Insights/ }).click();
     await page.locator('[data-insight-tab="spend"]').click();
-    await expect(page.locator('#spend-month-label')).toHaveText('August 2026');
+    await expect(page.locator('#spend-month-label')).toHaveText(monthLabel(currentMonth));
     await expect(page.locator('#btn-next-month')).toBeDisabled();
 
     await page.locator('#btn-prev-month').click();
-    await expect(page.locator('#spend-month-label')).toHaveText('July 2026');
+    await expect(page.locator('#spend-month-label')).toHaveText(monthLabel(selectedMonth));
     await page.locator('#spend-by-category .breakdown-item', { hasText: 'Dairy' }).click();
 
     await expect(page.locator('#tab-prices')).toHaveClass(/active/);
-    await expect(page.locator('#prices-filter-count')).toContainText('July 2026');
-    await expect(page.getByText(july.name, { exact: true })).toBeVisible();
-    await expect(page.getByText(june.name, { exact: true })).toHaveCount(0);
-    await expect(page.getByText(august.name, { exact: true })).toHaveCount(0);
+    await expect(page.locator('#prices-filter-count')).toContainText(monthLabel(selectedMonth));
+    await expect(page.getByText(selected.name, { exact: true })).toBeVisible();
+    await expect(page.getByText(earlier.name, { exact: true })).toHaveCount(0);
+    await expect(page.getByText(current.name, { exact: true })).toHaveCount(0);
 
     await page.locator('#tab-prices .insights-back').click();
     await expect(page.locator('#tab-spend')).toHaveClass(/active/);
-    await expect(page.locator('#spend-month-label')).toHaveText('July 2026');
+    await expect(page.locator('#spend-month-label')).toHaveText(monthLabel(selectedMonth));
   });
 
   test('Manage Products sorts Last purchased correctly on a fresh session', async ({ page }) => {
@@ -166,13 +186,13 @@ test.describe('UX Batch 1 correctness journeys', () => {
     const older = await createItem(page, `Older Product ${suffix}`);
     const newer = await createItem(page, `Newer Product ${suffix}`);
     const never = await createItem(page, `Never Product ${suffix}`);
-    await recordPrice(page, older._id, store._id, '2026-05-10T12:00:00.000Z', 2.1);
-    await recordPrice(page, newer._id, store._id, '2026-08-10T12:00:00.000Z', 3.1);
+    await recordPrice(page, older._id, store._id, midMonthDate(monthKey(-2)), 2.1);
+    await recordPrice(page, newer._id, store._id, midMonthDate(monthKey(0)), 3.1);
 
     // Do not visit Price History before opening Manage Products.
     await page.click('[data-tab="more"]');
     await page.locator('.more-item[data-section="items"]').click();
-    await expect(page.locator('#catalog-list .card')).toHaveCount(await page.locator('#catalog-list .card').count());
+    await expect(page.getByText(newer.name, { exact: true })).toBeVisible();
     await page.locator('#btn-catalog-filter').click();
     await page.locator('#catalog-sort-chips [data-sort="lastPurchased"]').click();
     await page.locator('#filter-sheet-done').click();
