@@ -15,6 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/parentExperience.css" />
 </head>
 <body>
   <div id="app">
@@ -35,10 +36,10 @@
     <!-- Tab: Prices -->
     <section class="tab-panel" id="tab-prices">
       <header class="page-header">
-        <div><button class="btn-link insights-back" aria-label="Back to Insights">← Insights</button><h1>Product Prices</h1></div>
+        <div><button class="btn-link insights-back" aria-label="Back to Insights">← Insights</button><h1>Price history</h1></div>
         <div class="price-add-actions">
           <button class="btn btn-outline btn-sm" id="btn-prices-filter" style="position:relative" aria-label="Filter and sort prices">Filter<span id="prices-filter-dot" class="filter-active-dot" style="display:none"></span></button>
-          <button class="btn btn-primary btn-sm" id="btn-add-price">+ Log Price</button>
+          <button class="btn btn-primary btn-sm" id="btn-add-price">+ Record price</button>
           <button class="btn btn-outline btn-sm" id="btn-open-csv-import">📂 Import</button>
         </div>
       </header>
@@ -47,12 +48,10 @@
         <input type="text" id="price-search" placeholder="Search items..." autocomplete="off" />
       </div>
       <div id="prices-list" class="card-list"></div>
-      <!-- Pending Review section (admin+ only) -->
       <div id="scan-pending-section" class="admin-only" style="display:none; padding: 0 0 1rem;">
         <h2 class="section-title">Pending Review</h2>
         <div id="scan-pending-list" class="card-list"></div>
       </div>
-      <!-- Note: scan-pending-section is kept for pending price entry reviews; receipt scanning removed -->
     </section>
 
     <!-- Tab: Shopping List -->
@@ -61,20 +60,22 @@
         <h1>Shopping List</h1>
         <div class="page-header-actions">
           <button class="btn btn-sm btn-outline" id="btn-low-stock" style="display:none">
-            🔴 Low Stock <span id="low-stock-count" class="badge-num"></span>
+            Review low stock <span id="low-stock-count" class="badge-num"></span>
           </button>
           <button class="btn btn-outline btn-sm" id="btn-list-filter" style="position:relative" aria-label="Filter shopping list">Filter<span id="list-filter-dot" class="filter-active-dot" style="display:none"></span></button>
-          <button class="btn btn-primary btn-sm" id="btn-add-list-item">+ Add</button>
-          <button class="btn btn-outline btn-sm" id="btn-scan-list-item" aria-label="Scan barcode to add item">Scan</button>
+          <button class="btn btn-outline btn-sm" id="btn-add-list-item">Add with details</button>
+          <button class="btn btn-outline btn-sm" id="btn-scan-list-item" aria-label="Scan barcode to add item">Scan item</button>
+          <details class="cart-more-menu admin-only" id="list-page-more-menu" style="display:none">
+            <summary aria-label="More list actions">•••</summary>
+            <div class="cart-more-actions">
+              <button type="button" class="text-danger" id="btn-clear-all">Empty list</button>
+            </div>
+          </details>
         </div>
       </header>
       <div id="list-summary" class="store-summary"></div>
       <div id="shopping-list" class="card-list"></div>
-      <div class="list-actions">
-        <button class="btn btn-danger btn-sm admin-only" id="btn-clear-all">Clear All</button>
-      </div>
     </section>
-
 
     <!-- Tab: Spend -->
     <section class="tab-panel" id="tab-spend">
@@ -104,7 +105,7 @@
       <header class="page-header">
         <h1>Pantry</h1>
         <div class="page-header-actions">
-          <button class="btn btn-primary btn-sm" id="btn-add-inventory">+ Add</button>
+          <button class="btn btn-primary btn-sm" id="btn-add-inventory">+ Track item</button>
         </div>
       </header>
       <div class="search-bar pantry-search-bar">
@@ -122,7 +123,7 @@
       <div id="meal-plan-content" style="padding:0 0 1rem"></div>
     </section>
 
-    <!-- Tab: More (user/settings panel — opened via hamburger) -->
+    <!-- Tab: More -->
     <section class="tab-panel" id="tab-more">
       <header class="page-header">
         <h1>Menu</h1>
@@ -149,7 +150,7 @@
         </button>
         <button class="more-item admin-only" data-section="items">
           <span class="more-icon">🏷️</span>
-          <span>Product Catalog</span>
+          <span>Manage products</span>
           <span class="chevron">›</span>
         </button>
         <button class="more-item admin-only" data-section="stores">
@@ -199,11 +200,11 @@
         </div>
       </div>
 
-      <!-- Product Catalog sub-section (admin+) -->
+      <!-- Product management sub-section (admin+) -->
       <div id="section-items" class="sub-section" style="display:none">
         <div class="sub-header">
           <button class="btn btn-icon back-btn" aria-label="Back to menu">‹</button>
-          <h2>Product Catalog</h2>
+          <h2>Manage products</h2>
           <div style="display:flex;gap:0.375rem;align-items:center">
             <button class="btn btn-icon" id="btn-catalog-filter" style="position:relative" aria-label="Filter and sort catalog">⚙<span id="catalog-filter-dot" class="filter-active-dot" style="display:none"></span></button>
             <button class="btn btn-primary btn-sm" id="btn-add-item-catalog">+ Add Item</button>
@@ -257,7 +258,6 @@
         </div>
         <div id="about-content" style="padding:1rem"></div>
       </div>
-
     </section>
   </div>
 
@@ -298,28 +298,27 @@
     </div>
   </div>
 
-  <!-- Cart Running Total Bar (shown above nav when items are checked off) -->
+  <!-- Cart Running Total Bar -->
   <div id="cart-bar" class="cart-bar" style="display:none">
     <button type="button" class="cart-bar-summary" id="cart-bar-summary" aria-expanded="false" aria-controls="cart-bar-detail">
-      <span id="cart-bar-label">In cart: $0.00 (0 items)</span>
+      <span id="cart-bar-label">0 bought</span>
       <span class="cart-bar-chevron" aria-hidden="true">›</span>
     </button>
-    <button type="button" class="btn btn-primary cart-done-button" id="btn-done-shopping">Done shopping</button>
+    <button type="button" class="btn btn-primary cart-done-button" id="btn-done-shopping">Finish shopping</button>
     <details class="cart-more-menu" id="cart-more-menu">
       <summary aria-label="More shopping actions">•••</summary>
       <div class="cart-more-actions">
         <button type="button" id="btn-deselect-all">Uncheck all</button>
-        <button type="button" id="btn-remove-checked">Remove checked without recording</button>
+        <button type="button" id="btn-remove-checked">Remove without recording</button>
       </div>
     </details>
-    <div id="cart-bar-detail" class="cart-bar-detail" style="display:none">
-    </div>
+    <div id="cart-bar-detail" class="cart-bar-detail" style="display:none"></div>
   </div>
 
   <!-- Offline status indicator -->
   <div id="offline-indicator" class="offline-indicator" style="display:none"></div>
 
-  <!-- Sync failure badge (tappable) -->
+  <!-- Sync failure badge -->
   <button type="button" id="sync-failure-badge" class="sync-failure-badge" style="display:none" onclick="openSyncFailureSheet()" aria-label="Review unsaved offline changes"></button>
 
   <!-- Toast -->
@@ -347,7 +346,6 @@
     </div>
   </div>
 
-  <!-- Scripts -->
   <!-- Unsaved changes prompt -->
   <div id="unsaved-prompt" class="unsaved-prompt" style="display:none">
     <p class="unsaved-prompt-msg">You have unsaved changes.</p>
@@ -382,7 +380,7 @@
     </div>
   </div>
 
-  <!-- Filter sheet (shared by prices + catalog) -->
+  <!-- Filter sheet -->
   <div id="filter-sheet-overlay" class="filter-sheet-overlay" style="display:none" aria-hidden="true">
     <div class="filter-sheet" id="filter-sheet" role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title" tabindex="-1">
       <div class="filter-sheet-header">
@@ -401,12 +399,15 @@
   <script src="/js/offline.js"></script>
   <script src="/js/api.js"></script>
   <script src="/js/ui.js"></script>
+  <script src="/js/confirmAction.js"></script>
   <script src="/js/autocomplete.js"></script>
   <script src="/js/prices.js"></script>
   <script src="/js/shoppingList.js"></script>
   <script src="/js/csvImport.js"></script>
   <script src="/js/spend.js"></script>
   <script src="/js/more.js"></script>
+  <script src="/js/pantry.js"></script>
+  <script src="/js/moreInit.js"></script>
   <script src="/js/householdPeople.js"></script>
   <script src="/js/mealPlan.js"></script>
   <script src="/js/home.js"></script>
