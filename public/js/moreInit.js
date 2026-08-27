@@ -1,8 +1,47 @@
-// More-tab wiring kept separate from feature implementations so Pantry can own
-// Pantry behavior without relying on legacy functions that still live in more.js.
+// More-tab wiring kept separate from feature implementations so Pantry and
+// Manage Products can own their behavior without relying on legacy functions
+// that still live in more.js during incremental decomposition.
+let catalogModuleLoadPromise = null;
+
+async function ensureCatalogModule() {
+  if (window.Catalog) return window.Catalog;
+  if (!catalogModuleLoadPromise) {
+    catalogModuleLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = '/js/catalog.js';
+      script.dataset.catalogModule = 'true';
+      script.onload = () => resolve(window.Catalog);
+      script.onerror = () => {
+        script.remove();
+        reject(new Error('Failed to load Manage Products'));
+      };
+      document.head.appendChild(script);
+    });
+  }
+  try {
+    return await catalogModuleLoadPromise;
+  } catch (err) {
+    catalogModuleLoadPromise = null;
+    throw err;
+  }
+}
+
 function initMoreTabV2() {
   document.querySelectorAll('.more-item[data-section]').forEach(btn => {
-    btn.addEventListener('click', () => handleMoreSectionNav(btn.dataset.section));
+    btn.addEventListener('click', async () => {
+      const section = btn.dataset.section;
+      if (section === 'items') {
+        showMoreSection(section);
+        try {
+          const catalog = await ensureCatalogModule();
+          await catalog.load();
+        } catch (err) {
+          handleError(err, 'Failed to load products');
+        }
+        return;
+      }
+      await handleMoreSectionNav(section);
+    });
   });
 
   document.querySelectorAll('.back-btn').forEach(btn => {
@@ -43,10 +82,31 @@ function initMoreTabV2() {
     Pantry.setSearch(event.target.value);
   });
 
-  document.getElementById('btn-add-item-catalog')?.addEventListener('click', openAddCatalogItemModal);
+  document.getElementById('btn-add-item-catalog')?.addEventListener('click', async () => {
+    try {
+      const catalog = await ensureCatalogModule();
+      promptCreateItem('', async () => {
+        await catalog.load();
+        showToast('Product created');
+      });
+    } catch (err) {
+      handleError(err, 'Failed to open Add product');
+    }
+  });
   const scanCatalogBtn = document.getElementById('btn-scan-catalog');
   if (scanCatalogBtn) {
-    scanCatalogBtn.addEventListener('click', openScanCatalogItemModal);
+    scanCatalogBtn.addEventListener('click', async () => {
+      if (!window.BarcodeScanner) return showToast('Scanner unavailable. Try reloading the page.', 3000);
+      let catalog;
+      try { catalog = await ensureCatalogModule(); } catch (err) { return handleError(err, 'Failed to load products'); }
+      BarcodeScanner.open(async upc => {
+        if (!upc) return;
+        await handleBarcodeResult(upc, async () => {
+          await catalog.load();
+          showToast('Product added via barcode scan');
+        });
+      });
+    });
     if (!window.appAuth?.features?.barcodeScanning) scanCatalogBtn.style.display = 'none';
   }
   document.getElementById('btn-add-store')?.addEventListener('click', () => {
@@ -56,8 +116,12 @@ function initMoreTabV2() {
     });
   });
 
-  document.getElementById('catalog-search')?.addEventListener('input', applyCatalogFilter);
-  document.getElementById('btn-catalog-filter')?.addEventListener('click', openCatalogFilterSheet);
+  document.getElementById('catalog-search')?.addEventListener('input', async () => {
+    try { (await ensureCatalogModule()).applyFilter(); } catch (err) { handleError(err, 'Failed to filter products'); }
+  });
+  document.getElementById('btn-catalog-filter')?.addEventListener('click', async () => {
+    try { (await ensureCatalogModule()).openFilterSheet(); } catch (err) { handleError(err, 'Failed to open product filters'); }
+  });
 
   document.getElementById('btn-app-tour')?.addEventListener('click', startAppTour);
   document.getElementById('btn-more-csv-import')?.addEventListener('click', openCsvImportModal);
