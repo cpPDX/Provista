@@ -81,7 +81,7 @@ async function fetchSettings() {
   return res.json();
 }
 
-// ===== Meal notes → shopping needs =====
+// ===== Meal shopping needs =====
 
 function countMealShoppingFragments(notes) {
   const seen = new Set();
@@ -107,7 +107,7 @@ function refreshMealShoppingAction(row) {
 }
 
 function suggestionStatusHtml(item, duplicateInNotes = false) {
-  if (duplicateInNotes) return '<span class="badge badge-no-data">Duplicate note</span>';
+  if (duplicateInNotes) return '<span class="badge badge-no-data">Duplicate need</span>';
   if (item?.onList) return '<span class="badge badge-no-data">Already on List</span>';
 
   if (!item?.pantryTrackingMode) {
@@ -147,7 +147,7 @@ function renderMealSuggestionRow(suggestion, index) {
   if (suggestion.matchStatus === 'unmatched') {
     return `<div class="meal-suggestion-row" data-suggestion-index="${index}">
       <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}</div>
-      <div class="meal-suggestion-unmatched">No catalog match. Edit the note or add this item from List.</div>
+      <div class="meal-suggestion-unmatched">No catalog match. Edit the shopping need or add this item from List.</div>
     </div>`;
   }
 
@@ -342,25 +342,6 @@ function applyMealValue(row, meal) {
   refreshMealRowActions(row);
 }
 
-function refreshMealRowActions(row) {
-  const hasMeal = Boolean(row.querySelector('.meal-name-input')?.value.trim());
-  const repeatButton = row.querySelector('.meal-repeat-btn');
-  if (repeatButton) repeatButton.disabled = !hasMeal;
-}
-
-function expandMealTypeSection(section) {
-  const content = section?.querySelector('.meal-type-rows');
-  const toggle = section?.querySelector('.meal-type-header[data-collapsed]');
-  if (!content || !toggle) return;
-  toggle.dataset.collapsed = 'false';
-  toggle.setAttribute('aria-expanded', 'true');
-  toggle.textContent = `− ${section.dataset.mealLabel || ''}`;
-  content.style.display = '';
-  if (section.dataset.mealType === 'special') {
-    section.closest('.meal-day').dataset.specialCollapsed = 'false';
-  }
-}
-
 function repeatMeal(row) {
   const meal = mealRowValue(row);
   if (!meal.name) return;
@@ -388,6 +369,25 @@ function repeatMeal(row) {
   showToast('No open day remains this week for that meal');
 }
 
+function refreshMealRowActions(row) {
+  const hasMeal = Boolean(row.querySelector('.meal-name-input')?.value.trim());
+  const repeatButton = row.querySelector('.meal-repeat-btn');
+  if (repeatButton) repeatButton.disabled = !hasMeal;
+}
+
+function expandMealTypeSection(section) {
+  const content = section?.querySelector('.meal-type-rows');
+  const toggle = section?.querySelector('.meal-type-header[data-collapsed]');
+  if (!content || !toggle) return;
+  toggle.dataset.collapsed = 'false';
+  toggle.setAttribute('aria-expanded', 'true');
+  toggle.textContent = `− ${section.dataset.mealLabel || ''}`;
+  content.style.display = '';
+  if (section.dataset.mealType === 'special') {
+    section.closest('.meal-day').dataset.specialCollapsed = 'false';
+  }
+}
+
 function setMealAsLeftovers(row) {
   const nameInput = row.querySelector('.meal-name-input');
   if (!nameInput) return;
@@ -399,7 +399,7 @@ function setMealAsLeftovers(row) {
   refreshMealShoppingAction(row);
   refreshMealRowActions(row);
   scheduleSave();
-  showToast('Leftovers planned');
+  showToast('This meal is now Leftovers');
 }
 
 async function loadMealFavorites(force = false) {
@@ -410,13 +410,13 @@ async function loadMealFavorites(force = false) {
 
 function favoriteMealCards(favorites) {
   if (!favorites.length) {
-    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Save the current meal to reuse its notes next week.</p></div>';
+    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Save the current meal to reuse its shopping needs next week.</p></div>';
   }
   return favorites.map(favorite => `
     <div class="meal-favorite-card" data-favorite-id="${escapeAttr(favorite._id)}">
       <div class="meal-favorite-copy">
         <strong>${escapeHtml(favorite.name)}</strong>
-        ${favorite.notes ? `<small>${escapeHtml(favorite.notes)}</small>` : '<small>No saved shopping notes</small>'}
+        ${favorite.notes ? `<small>${escapeHtml(favorite.notes)}</small>` : '<small>No saved shopping needs</small>'}
       </div>
       <div class="meal-favorite-actions">
         <button type="button" class="btn btn-primary btn-sm meal-favorite-use">Use</button>
@@ -504,7 +504,15 @@ async function openFavoritePicker(row) {
 }
 
 async function copyLastWeek() {
-  if (!confirm('Replace this week with last week’s meal plan?')) return;
+  const confirmed = await confirmAction({
+    title: 'Replace this week with last week?',
+    message: 'Meals and weekly notes from last week will be copied into this week. Existing entries in this week will be replaced.',
+    confirmLabel: 'Copy last week',
+    cancelLabel: 'Cancel',
+    danger: false
+  });
+  if (!confirmed) return;
+
   const button = document.getElementById('mp-copy-last-week');
   if (button) { button.disabled = true; button.textContent = 'Copying…'; }
   if (mealPlanState.saveTimer) {
@@ -577,7 +585,9 @@ function refreshAudienceUI(row) {
   const button = row.querySelector('.meal-audience-toggle');
   if (!button) return;
   const label = getAudienceLabel(row);
-  button.textContent = label === 'Everyone' ? 'Change who' : label;
+  button.textContent = `${label} · Change`;
+  button.title = `${label} — change who this meal is for`;
+  button.setAttribute('aria-label', `${label}. Change who this meal is for`);
   button.classList.toggle('meal-audience-default', label === 'Everyone');
 }
 
@@ -630,8 +640,10 @@ function collectPlanFromDOM() {
   return {
     weekStart: mealPlanState.weekStart,
     days,
-    produceNotes: document.getElementById('mp-produce-notes')?.value || '',
-    shoppingNotes: document.getElementById('mp-shopping-notes')?.value || ''
+    produceNotes: document.getElementById('mp-produce-notes')?.value ?? mealPlanState.plan?.produceNotes ?? '',
+    // Weekly Shopping notes are no longer primary UI, but legacy content stays
+    // round-trippable until a deliberate migration/removal decision is made.
+    shoppingNotes: document.getElementById('mp-shopping-notes')?.value ?? mealPlanState.plan?.shoppingNotes ?? ''
   };
 }
 
@@ -752,12 +764,17 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   });
   row.appendChild(picker);
 
+  const needsLabel = document.createElement('div');
+  needsLabel.className = 'meal-needs-label';
+  needsLabel.textContent = 'Need for this meal';
+  row.appendChild(needsLabel);
+
   const notesInput = document.createElement('textarea');
   notesInput.className = 'meal-notes-input meal-notes-area';
   notesInput.value = meal.notes;
-  notesInput.placeholder = 'Items needed or notes (optional)…';
+  notesInput.placeholder = 'e.g. tortillas, salsa, cilantro';
+  notesInput.setAttribute('aria-label', 'Need for this meal');
   notesInput.rows = 1;
-  notesInput.style.marginTop = '0.5rem';
 
   const suggestionButton = document.createElement('button');
   suggestionButton.type = 'button';
@@ -777,14 +794,15 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   const repeatButton = document.createElement('button');
   repeatButton.type = 'button';
   repeatButton.className = 'meal-repeat-btn meal-row-action btn-link';
-  repeatButton.textContent = 'Repeat this meal';
+  const repeatTarget = mealType === 'special' ? 'special occasion' : mealType;
+  repeatButton.textContent = `Repeat next ${repeatTarget}`;
   repeatButton.addEventListener('click', () => repeatMeal(row));
   quickActions.appendChild(repeatButton);
 
   const leftoversButton = document.createElement('button');
   leftoversButton.type = 'button';
   leftoversButton.className = 'meal-leftovers-btn meal-row-action btn-link';
-  leftoversButton.textContent = 'Leftovers';
+  leftoversButton.textContent = 'Make this leftovers';
   leftoversButton.addEventListener('click', () => setMealAsLeftovers(row));
   quickActions.appendChild(leftoversButton);
 
@@ -920,14 +938,9 @@ function renderMealPlan(plan) {
 
       <div id="mp-days-container"></div>
 
-      <div class="shopping-notes-section">
-        <div class="section-label">🛒 Shopping notes</div>
-        <textarea class="meal-notes-area" id="mp-shopping-notes" placeholder="e.g. check pantry for pasta, need olive oil..." rows="2">${escHtml(plan.shoppingNotes || '')}</textarea>
-      </div>
-
       <div class="meal-plan-actions">
         <span class="meal-save-status" id="mp-save-status" role="status" aria-live="polite" data-state="saved">Saved ✓</span>
-        <button class="btn btn-outline" id="mp-export-btn">Export Week</button>
+        <button class="btn btn-outline" id="mp-export-btn">Export to calendar</button>
         ${isAdmin ? `
           <button class="btn btn-outline btn-sm" id="mp-settings-btn" style="margin-left:auto;font-size:0.8125rem">Plan settings</button>
         ` : ''}
@@ -951,10 +964,7 @@ function renderMealPlan(plan) {
     daysContainer.appendChild(renderDayCard(day, di, expandedIndexes.has(di)));
   });
 
-  ['mp-produce-notes', 'mp-shopping-notes'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', scheduleSave);
-  });
+  document.getElementById('mp-produce-notes')?.addEventListener('input', scheduleSave);
 
   document.getElementById('mp-prev-week')?.addEventListener('click', () => {
     mealPlanState.weekStart = addWeeks(mealPlanState.weekStart, -1);
