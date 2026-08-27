@@ -96,6 +96,19 @@ test.describe('Home / Today', () => {
     await expect(next).not.toContainText('You’re caught up');
     await next.getByRole('button', { name: 'Review prices →' }).click();
     await expect(page.getByRole('dialog', { name: 'Review prices' })).toBeVisible();
+    await page.getByRole('button', { name: 'Done for now' }).click();
+
+    // This spec reuses one household per worker. Resolve the deferred price so
+    // later Home tests do not inherit this test's intentionally unfinished work.
+    await page.evaluate(async () => {
+      const deferred = homeState.deferredPrices[0];
+      if (!deferred) return;
+      await api.shoppingTrips.resolvePrice(deferred.tripId, deferred.shoppingListItemId, {
+        price: 1,
+        storeId: deferred.storeId
+      });
+      await loadDeferredPrices();
+    });
   });
 
   test('keeps the other Home cards useful when one endpoint fails', async ({ page }) => {
