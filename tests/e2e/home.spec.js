@@ -45,12 +45,20 @@ test.describe('Home / Today', () => {
         .filter(key => key.includes('provista_home_') && key.endsWith('_lowStock'))
         .forEach(key => localStorage.removeItem(key));
     });
-    await page.route('**/api/inventory/low-stock', route => route.fulfill({
-      status: 503,
-      contentType: 'application/json',
-      body: JSON.stringify({ error: 'Temporarily unavailable' })
-    }));
+
+    let releaseLowStockRequest;
+    const lowStockRequestSeen = new Promise(resolve => { releaseLowStockRequest = resolve; });
+    await page.route('**/api/inventory/low-stock', async route => {
+      releaseLowStockRequest();
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Temporarily unavailable' })
+      });
+    });
+
     await page.reload();
+    await lowStockRequestSeen;
 
     await expect(page.locator('.home-card')).toHaveCount(4);
     await expect(page.locator('.home-card', { hasText: 'Couldn’t load this update' })).toHaveCount(1);
