@@ -31,6 +31,7 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
+          node --check public/sw.js
           node --check public/js/api.js
           node --check public/js/autocomplete.js
           node --check public/js/offline.js
@@ -68,6 +69,7 @@ jobs:
           node --check routes/shoppingTrips.js
           node --check routes/spend.js
           node --check routes/stores.js
+          node --check tests/api/mealShopping.test.js
           node --check tests/e2e/prices.spec.js
           node --check tests/e2e/mealPlan.spec.js
           node --check tests/e2e/home.spec.js
