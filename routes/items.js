@@ -20,6 +20,30 @@ router.get('/', requireAuth, async (req, res) => {
       query.$or = [{ name: re }, { brand: re }];
     }
     const items = await Item.find(query).sort({ name: 1 }).limit(search ? 8 : 0).lean();
+
+    // Durable catalog sorting must not depend on whether Price History happened
+    // to be opened earlier in the session. Include the most recent approved
+    // household price date on the full catalog payload so Manage Products owns
+    // its own "Last purchased" sort data.
+    if (!search && items.length) {
+      const itemIds = items.map(item => item._id);
+      const latest = await PriceEntry.aggregate([
+        {
+          $match: {
+            householdId: req.user.householdId,
+            itemId: { $in: itemIds },
+            status: 'approved'
+          }
+        },
+        { $group: { _id: '$itemId', lastPurchasedAt: { $max: '$date' } } }
+      ]);
+      const lastPurchasedByItem = new Map(latest.map(entry => [String(entry._id), entry.lastPurchasedAt]));
+      return res.json(items.map(item => ({
+        ...item,
+        lastPurchasedAt: lastPurchasedByItem.get(String(item._id)) || null
+      })));
+    }
+
     res.json(items);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
