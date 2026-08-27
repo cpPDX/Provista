@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Item = require('../models/Item');
 const PriceEntry = require('../models/PriceEntry');
+const ShoppingTrip = require('../models/ShoppingTrip');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const InventoryItem = require('../models/InventoryItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
@@ -21,23 +22,45 @@ router.get('/', requireAuth, async (req, res) => {
     }
     const items = await Item.find(query).sort({ name: 1 }).limit(search ? 8 : 0).lean();
 
-    // Durable catalog sorting must not depend on whether Price History happened
-    // to be opened earlier in the session. Include the most recent approved
-    // household price date on the full catalog payload so Manage Products owns
-    // its own "Last purchased" sort data.
+    // Manage Products owns a durable last-purchased date. Use both approved
+    // manual/price history and completed shopping trips so a purchase still
+    // counts when its price was deferred.
     if (!search && items.length) {
       const itemIds = items.map(item => item._id);
-      const latest = await PriceEntry.aggregate([
-        {
-          $match: {
-            householdId: req.user.householdId,
-            itemId: { $in: itemIds },
-            status: 'approved'
-          }
-        },
-        { $group: { _id: '$itemId', lastPurchasedAt: { $max: '$date' } } }
+      const [latestPrices, latestTrips] = await Promise.all([
+        PriceEntry.aggregate([
+          {
+            $match: {
+              householdId: req.user.householdId,
+              itemId: { $in: itemIds },
+              status: 'approved'
+            }
+          },
+          { $group: { _id: '$itemId', lastPurchasedAt: { $max: '$date' } } }
+        ]),
+        ShoppingTrip.aggregate([
+          {
+            $match: {
+              householdId: req.user.householdId,
+              status: 'completed',
+              'items.itemId': { $in: itemIds }
+            }
+          },
+          { $unwind: '$items' },
+          { $match: { 'items.itemId': { $in: itemIds } } },
+          { $group: { _id: '$items.itemId', lastPurchasedAt: { $max: '$completedAt' } } }
+        ])
       ]);
-      const lastPurchasedByItem = new Map(latest.map(entry => [String(entry._id), entry.lastPurchasedAt]));
+
+      const lastPurchasedByItem = new Map();
+      for (const entry of [...latestPrices, ...latestTrips]) {
+        const id = String(entry._id);
+        const current = lastPurchasedByItem.get(id);
+        if (!current || new Date(entry.lastPurchasedAt) > new Date(current)) {
+          lastPurchasedByItem.set(id, entry.lastPurchasedAt);
+        }
+      }
+
       return res.json(items.map(item => ({
         ...item,
         lastPurchasedAt: lastPurchasedByItem.get(String(item._id)) || null
