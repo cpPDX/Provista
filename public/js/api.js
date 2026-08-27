@@ -12,7 +12,8 @@ function _isSimpleCrudPath(method, path) {
     '/meal-plan/copy-previous',
     '/meal-plan/shopping-suggestions',
     '/shopping-list/complete',
-    '/shopping-list/from-meal'
+    '/shopping-list/from-meal',
+    '/external-prices/refresh-shopping-list'
   ].includes(cleanPath)) return false;
   const segments = cleanPath.split('/').filter(Boolean);
   return segments.length <= 2;
@@ -150,6 +151,11 @@ const api = {
     delete: (id) => api.delete(`/prices/${id}`),
     lastPurchased: (itemId) => api.get(`/prices/last-purchased/${itemId}`)
   },
+  externalPrices: {
+    providers: () => api.get('/external-prices/providers'),
+    refreshShoppingList: () => api.post('/external-prices/refresh-shopping-list', {}),
+    item: (itemId) => api.get(`/external-prices/item/${itemId}`)
+  },
   grocery: {
     log: (data) => api.post('/grocery/log', data)
   },
@@ -166,6 +172,11 @@ const api = {
     delete: (id) => api.delete(`/shopping-list/${id}`),
     complete: (data) => api.post('/shopping-list/complete', data),
     clear: (checkedOnly = false) => api.delete(`/shopping-list${checkedOnly ? '?checkedOnly=true' : ''}`)
+  },
+  shoppingTrips: {
+    deferredPrices: () => api.get('/shopping-trips/deferred-prices'),
+    resolvePrice: (tripId, shoppingListItemId, data) =>
+      api.patch(`/shopping-trips/${tripId}/items/${shoppingListItemId}/price`, data)
   },
   mealPlan: {
     shoppingSuggestions: (notes) => api.post('/meal-plan/shopping-suggestions', { notes }),
