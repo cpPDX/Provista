@@ -111,7 +111,8 @@ function createCartEntry(item) {
     suggestedPrice: null,
     price: null,
     needsPrice: true,
-    priceDecision: 'later'
+    priceDecision: 'later',
+    priceControlsExpanded: false
   };
   const known = knownLinePriceForStore(entry, actualStoreId);
   if (known !== null) {
@@ -140,28 +141,37 @@ function ensurePriceDecision(item, entry) {
   }
 }
 
-function decisionCopy(entry) {
-  if (entry.priceDecision === 'updated') return `Using updated price ${formatCurrency(entry.price)}`;
-  if (entry.priceDecision === 'later') return 'Price will be reviewed later';
+function compactPriceDecisionCopy(entry) {
+  if (entry.priceDecision === 'updated') return `Bought · ${formatCurrency(entry.price)} recorded`;
+  if (entry.priceDecision === 'later') return 'Bought · price later';
   if (entry.suggestedPrice !== null && entry.suggestedPrice !== undefined) {
-    return `Using recent price ${formatCurrency(entry.suggestedPrice)}`;
+    return `Bought · using recent ${formatCurrency(entry.suggestedPrice)}`;
   }
-  return 'Price not recorded yet';
+  return 'Bought · price later';
 }
 
 function priceDecisionMarkup(item, entry) {
   if (!entry) return '';
   ensurePriceDecision(item, entry);
+  const hasKnown = entry.suggestedPrice !== null && entry.suggestedPrice !== undefined;
+  const isLater = entry.priceDecision === 'later';
+  const compactAction = isLater && !hasKnown
+    ? `setPurchasePriceDecision('${escapeAttr(item._id)}', 'update')`
+    : `togglePurchasePriceControls('${escapeAttr(item._id)}')`;
   return `
-    <div class="purchase-price-choice">
-      <div class="purchase-price-choice-status">${escapeHtml(decisionCopy(entry))}</div>
-      <div class="purchase-price-choice-actions" role="group" aria-label="Price choice for ${escapeAttr(entry.name)}">
-        ${entry.suggestedPrice !== null && entry.suggestedPrice !== undefined
-          ? `<button type="button" class="price-choice-btn ${entry.priceDecision === 'existing' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'existing')">Use ${escapeHtml(formatCurrency(entry.suggestedPrice))}</button>`
-          : ''}
-        <button type="button" class="price-choice-btn ${entry.priceDecision === 'updated' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'update')">Update price</button>
-        <button type="button" class="price-choice-btn ${entry.priceDecision === 'later' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'later')">Later</button>
+    <div class="purchase-price-choice${isLater ? ' purchase-price-attention' : ''}">
+      <div class="purchase-price-compact">
+        <div class="purchase-price-choice-status">${escapeHtml(compactPriceDecisionCopy(entry))}</div>
+        <button type="button" class="price-choice-link" onclick="${compactAction}">${isLater ? 'Add price' : 'Change'}</button>
       </div>
+      ${entry.priceControlsExpanded ? `
+        <div class="purchase-price-choice-actions" role="group" aria-label="Price choice for ${escapeAttr(entry.name)}">
+          ${hasKnown
+            ? `<button type="button" class="price-choice-btn ${entry.priceDecision === 'existing' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'existing')">Use recent ${escapeHtml(formatCurrency(entry.suggestedPrice))}</button>`
+            : ''}
+          <button type="button" class="price-choice-btn ${entry.priceDecision === 'updated' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'update')">Update price</button>
+          <button type="button" class="price-choice-btn ${entry.priceDecision === 'later' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'later')">Later</button>
+        </div>` : ''}
     </div>`;
 }
 
@@ -177,12 +187,8 @@ function externalPriceMarkup(item) {
 }
 
 function householdPriceMarkup(item, cartEntry) {
+  if (cartEntry) return '';
   const unit = item.itemId?.unit || '';
-  if (cartEntry) {
-    return cartEntry.price === null
-      ? '<div class="card-subtitle">Bought · price not recorded yet</div>'
-      : `<div class="card-subtitle text-success">Bought · ${escapeHtml(formatCurrency(cartEntry.price))} recorded</div>`;
-  }
   if (item.tripPrice) {
     const price = Number(item.tripPrice.pricePerUnit);
     return `<div class="card-subtitle">Last paid ${escapeHtml(formatCurrency(price))}${unit ? `/${escapeHtml(unit)}` : ''} at ${escapeHtml(item.tripPrice.store?.name || 'a store')} · ${escapeHtml(formatPriceAge(item.tripPrice.date, true))}</div>`;
@@ -296,6 +302,16 @@ async function refreshExternalShoppingPrices() {
   return externalRefreshPromise;
 }
 
+function togglePurchasePriceControls(itemId) {
+  const entry = cartState.get(itemId);
+  if (!entry) return;
+  entry.priceControlsExpanded = !entry.priceControlsExpanded;
+  renderShoppingList();
+  if (entry.priceControlsExpanded) {
+    document.querySelector(`.list-item[data-id="${CSS.escape(itemId)}"] .purchase-price-choice-actions .price-choice-btn`)?.focus({ preventScroll: true });
+  }
+}
+
 function setPurchasePriceDecision(itemId, decision) {
   const item = listState.items.find(candidate => candidate._id === itemId);
   const entry = cartState.get(itemId);
@@ -308,6 +324,7 @@ function setPurchasePriceDecision(itemId, decision) {
     entry.price = known;
     entry.needsPrice = false;
     entry.priceDecision = 'existing';
+    entry.priceControlsExpanded = false;
     renderShoppingList();
     return;
   }
@@ -315,6 +332,7 @@ function setPurchasePriceDecision(itemId, decision) {
     entry.price = null;
     entry.needsPrice = true;
     entry.priceDecision = 'later';
+    entry.priceControlsExpanded = false;
     renderShoppingList();
     return;
   }
@@ -346,6 +364,7 @@ function openInlinePriceEditor(item, entry) {
     entry.price = Math.round((value + Number.EPSILON) * 100) / 100;
     entry.needsPrice = false;
     entry.priceDecision = 'updated';
+    entry.priceControlsExpanded = false;
     closeModal();
     renderShoppingList();
   });
@@ -497,6 +516,7 @@ function applyTripStore(storeId) {
       entry.price = null;
       entry.needsPrice = true;
       entry.priceDecision = 'later';
+      entry.priceControlsExpanded = false;
     } else {
       entry.price = known;
       entry.needsPrice = false;
@@ -548,10 +568,10 @@ function openDoneShoppingReview() {
     <div class="finish-shopping-outcomes">
       <strong>Finishing this stop will:</strong>
       <ul>
-        <li>Add purchased items to Pantry</li>
         <li>Record the prices you confirmed</li>
         <li>Update Spending</li>
         <li>Remove purchased items from this list</li>
+        <li>Update Pantry if selected below</li>
       </ul>
       <p class="text-muted text-sm">Finish before moving to another store. Store preferences on the list are planning hints; this records where these items were actually purchased.</p>
     </div>
