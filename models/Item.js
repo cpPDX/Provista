@@ -11,6 +11,9 @@ const itemSchema = new mongoose.Schema({
   upc: { type: String, trim: true, default: null },
   upcSource: { type: String, enum: ['scan', 'backfill', 'manual'], default: null },
   upcPendingLookup: { type: Boolean, default: false },
+  // Provider-specific product identifiers. UPC remains the preferred shared
+  // identifier, but providers can cache their own IDs here when needed.
+  externalIds: { type: Map, of: String, default: {} },
   isOrganic: { type: Boolean, default: false },
   isSeeded: { type: Boolean, default: false },
   lastConflict: {

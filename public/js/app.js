@@ -64,26 +64,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Show admin-only items in More menu
   if (window.appAuth.isAdmin()) {
     document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
-    // Check pending count on load
     try {
       const pending = await api.prices.pending();
       updatePendingBadge(pending.length);
     } catch (_) {}
   }
 
-  // Logout
   document.getElementById('btn-logout').addEventListener('click', async () => {
-    if (confirm('Sign out?')) await window.appAuth.logout();
+    const confirmed = await confirmAction({
+      title: 'Sign out?',
+      message: 'You’ll return to the sign-in screen. Your household data stays saved.',
+      confirmLabel: 'Sign out',
+      danger: false
+    });
+    if (confirmed) await window.appAuth.logout();
   });
 
   // Attach event handlers immediately so the UI is interactive while offline
-  // support initializes in the background
+  // support initializes in the background.
   initNavigation();
   initModal();
   initPricesTab();
   initShoppingListTab();
   initSpendTab();
-  initMoreTab();
+  initMoreTabV2();
   initHomeTab();
 
   // Load default tab
@@ -97,11 +101,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Setup wizard for new household owners
   const resumeBtn = document.getElementById('btn-resume-setup');
   if (shouldShowSetupWizard()) {
-    // First login after household creation — auto-start and show resume button
     if (resumeBtn) resumeBtn.style.display = '';
     setTimeout(() => startSetupWizard(), 500);
   } else if (shouldShowResumeButton()) {
-    // Wizard not done but not a fresh creation — just show resume button
     if (resumeBtn) resumeBtn.style.display = '';
   }
 });
@@ -111,20 +113,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ============================================================
 
 async function initOfflineSupport() {
-  // Register service worker
   if ('serviceWorker' in navigator) {
     try {
       await navigator.serviceWorker.register('/sw.js');
     } catch {}
   }
 
-  // Initialize offline manager (online/offline detection)
   offlineManager.init();
-
-  // Initialize IndexedDB and bootstrap data
   await offlineBootstrap.init();
 
-  // Initialize iOS install prompt
   if (typeof initInstallPrompt === 'function') {
     initInstallPrompt();
   }
@@ -172,15 +169,19 @@ async function switchTab(tabId) {
     case 'prices': await loadPricesTab(); break;
     case 'list':
       await ensureRapidShoppingCapture();
+      // Stores can change from More or another household member while the app
+      // stays open. Clear the List cache on navigation so checkout never offers
+      // stale store choices or loses the active-stop label.
+      if (typeof listState !== 'undefined') listState.stores = [];
       await loadShoppingListTab();
       break;
     case 'spend': await loadSpendTab(); break;
-    case 'inventory': await loadInventory(); break;
+    case 'inventory': await Pantry.load(); break;
     case 'meal-plan':
       if (!window._mealPlanInit) { initMealPlanSection(); window._mealPlanInit = true; }
       await loadMealPlan();
       break;
-    case 'more': break; // More tab content is already in the DOM, sub-sections load on demand
+    case 'more': break;
   }
 }
 
@@ -198,7 +199,6 @@ function initModal() {
     if (e.target === document.getElementById('modal-overlay')) tryCloseModal();
   });
 
-  // Escape key closes the modal (respects unsaved-changes guard)
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';

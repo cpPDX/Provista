@@ -10,7 +10,9 @@ const shoppingTripItemSchema = new mongoose.Schema({
   storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
   storeName: { type: String, trim: true, default: '' },
   price: { type: Number, min: 0, default: null },
-  priceEntryId: { type: mongoose.Schema.Types.ObjectId, ref: 'PriceEntry', default: null }
+  priceEntryId: { type: mongoose.Schema.Types.ObjectId, ref: 'PriceEntry', default: null },
+  priceResolvedAt: { type: Date, default: null },
+  priceResolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { _id: false });
 
 const shoppingTripSchema = new mongoose.Schema({
@@ -33,5 +35,6 @@ const shoppingTripSchema = new mongoose.Schema({
 
 shoppingTripSchema.index({ householdId: 1, idempotencyKey: 1 }, { unique: true });
 shoppingTripSchema.index({ householdId: 1, status: 1, completedAt: -1 });
+shoppingTripSchema.index({ householdId: 1, 'items.price': 1, completedAt: -1 });
 
 module.exports = mongoose.model('ShoppingTrip', shoppingTripSchema);

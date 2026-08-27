@@ -1,0 +1,269 @@
+.purchase-price-choice {
+  margin-top: 0.65rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+
+.purchase-price-choice-status {
+  margin-bottom: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.purchase-price-choice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.price-choice-btn {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.42rem 0.65rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.price-choice-btn.selected {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.external-price-signal {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 0.55rem;
+  background: var(--surface-alt, rgba(127, 127, 127, 0.08));
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.external-price-signal span {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.parent-trip-suggestion {
+  padding: 0.75rem;
+}
+
+.finish-shopping-outcomes {
+  margin-bottom: 1rem;
+  padding: 0.8rem;
+  border-radius: 0.7rem;
+  background: var(--surface-alt, rgba(127, 127, 127, 0.08));
+}
+
+.finish-shopping-outcomes ul {
+  margin: 0.45rem 0 0 1.1rem;
+  padding: 0;
+}
+
+.finish-shopping-outcomes li + li {
+  margin-top: 0.25rem;
+}
+
+.finish-shopping-total {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.finish-shopping-total span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.finish-shopping-deferred,
+.finish-shopping-confirmed {
+  margin-bottom: 0.75rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+}
+
+.finish-shopping-deferred {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.finish-shopping-deferred span,
+.finish-shopping-confirmed div {
+  font-size: 0.82rem;
+}
+
+.finish-shopping-confirmed summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.finish-shopping-confirmed div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.35rem;
+}
+
+.home-price-review-card {
+  border-color: var(--primary);
+}
+
+.deferred-price-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.deferred-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+}
+
+.deferred-price-row > span:first-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.deferred-price-row small {
+  margin-top: 0.15rem;
+  color: var(--text-muted);
+}
+
+.deferred-price-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 7.5rem;
+  flex: 0 0 auto;
+}
+
+.deferred-price-input-wrap .form-control {
+  min-width: 0;
+}
+
+.pantry-mode-help {
+  margin: 0.5rem 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.pantry-status-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.pantry-status-option {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pantry-status-option.active {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.pantry-mode-switch {
+  min-height: 44px;
+  margin-top: 0.35rem;
+}
+
+.pantry-secondary-actions,
+.pantry-qty-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.pantry-qty-controls .qty-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.pantry-qty-controls .qty-val {
+  min-width: 2.5rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.pantry-tracking-choice {
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.pantry-tracking-choice legend {
+  margin-bottom: 0.45rem;
+  font-weight: 700;
+}
+
+.pantry-tracking-option {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.65rem 0;
+}
+
+.pantry-tracking-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pantry-tracking-option small {
+  color: var(--text-muted);
+}
+
+.low-stock-on-list {
+  align-self: center;
+  margin-right: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.confirmation-message {
+  line-height: 1.5;
+}
+
+@media (max-width: 430px) {
+  .deferred-price-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .deferred-price-input-wrap {
+    width: 100%;
+  }
+
+  .pantry-status-actions {
+    grid-template-columns: 1fr;
+  }
+}

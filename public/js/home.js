@@ -6,6 +6,7 @@ const homeState = {
   lowStock: null,
   plan: null,
   settings: null,
+  deferredPrices: [],
   status: { shoppingList: 'loading', lowStock: 'loading', plan: 'loading' }
 };
 
@@ -84,6 +85,18 @@ function homeCard({ question, title, detail, items = [], emptyText, action, tab,
     </article>`;
 }
 
+function deferredPriceCard() {
+  const count = homeState.deferredPrices.length;
+  if (!count) return '';
+  return `
+    <article class="home-card home-price-review-card" id="home-price-review-card">
+      <p class="home-question">Anything to finish?</p>
+      <h2>${count} price${count === 1 ? '' : 's'} to review</h2>
+      <p class="home-card-detail">These are prices you chose to update later. Saving them updates Spending automatically.</p>
+      <button class="home-card-action" id="home-review-prices">Review prices →</button>
+    </article>`;
+}
+
 function renderHome() {
   const container = document.getElementById('home-content');
   if (!container) return;
@@ -113,7 +126,8 @@ function renderHome() {
   const nextStatus = Object.values(homeState.status).every(status => status === 'loading')
     ? 'loading'
     : (Object.values(homeState.status).some(status => status === 'stale') ? 'stale' : 'fresh');
-  container.innerHTML = [
+
+  const cards = [
     homeCard({
       question: 'What’s for dinner?',
       title: dinners.length ? dinners.map(meal => meal.name).join(' · ') : 'Dinner isn’t planned yet',
@@ -129,7 +143,8 @@ function renderHome() {
       items: needed,
       emptyText: 'Add an item whenever it comes to mind.',
       action: needed.length ? 'Open list' : 'Quick add',
-      tab: 'list',
+      tab: needed.length ? 'list' : undefined,
+      actionType: needed.length ? undefined : 'quick-add',
       status: homeState.status.shoppingList
     }),
     homeCard({
@@ -141,6 +156,7 @@ function renderHome() {
       tab: 'inventory',
       status: homeState.status.lowStock
     }),
+    deferredPriceCard(),
     homeCard({
       question: 'What should I do next?',
       ...next,
@@ -148,7 +164,9 @@ function renderHome() {
       tone: 'home-card-next',
       status: nextStatus
     })
-  ].join('');
+  ].filter(Boolean);
+
+  container.innerHTML = cards.join('');
 
   container.querySelectorAll('[data-home-tab]').forEach(button => {
     button.addEventListener('click', () => switchTab(button.dataset.homeTab));
@@ -156,9 +174,16 @@ function renderHome() {
   container.querySelectorAll('[data-home-action="plan-dinner"]').forEach(button => {
     button.addEventListener('click', openTodaysDinner);
   });
+  container.querySelectorAll('[data-home-action="quick-add"]').forEach(button => {
+    button.addEventListener('click', openHomeQuickAdd);
+  });
   container.querySelectorAll('[data-home-retry]').forEach(button => {
     button.addEventListener('click', loadHomeTab, { once: true });
   });
+  document.getElementById('home-review-prices')?.addEventListener('click', openDeferredPriceReview);
+
+  const dot = document.getElementById('nav-pending-dot');
+  if (dot) dot.style.display = homeState.deferredPrices.length ? '' : 'none';
 }
 
 function restoreHomeCache() {
@@ -169,6 +194,7 @@ function restoreHomeCache() {
       if (source !== 'settings') homeState.status[source] = 'stale';
     } else if (source !== 'settings') {
       homeState.status[source] = 'loading';
+      homeState[source] = null;
     }
   });
 }
@@ -183,6 +209,16 @@ async function loadHomeSource(source, request) {
     homeState.status[source] = homeState[source] === null ? 'error' : 'stale';
   }
   renderHome();
+}
+
+async function loadDeferredPrices() {
+  try {
+    homeState.deferredPrices = await api.shoppingTrips.deferredPrices();
+  } catch (_) {
+    homeState.deferredPrices = [];
+  }
+  renderHome();
+  return homeState.deferredPrices;
 }
 
 async function loadHomeTab() {
@@ -213,7 +249,8 @@ async function loadHomeTab() {
     const weekStart = homeWeekStart(new Date(), settings.weekStartDay ?? 6);
     return api.get(`/meal-plan?weekStart=${encodeURIComponent(weekStart)}`);
   });
-  await Promise.allSettled([shoppingPromise, lowStockPromise, planPromise]);
+  const deferredPromise = loadDeferredPrices();
+  await Promise.allSettled([shoppingPromise, lowStockPromise, planPromise, deferredPromise]);
 }
 
 async function openTodaysDinner() {
@@ -221,10 +258,65 @@ async function openTodaysDinner() {
   if (typeof focusTodaysDinner === 'function') focusTodaysDinner();
 }
 
+async function openHomeQuickAdd() {
+  await switchTab('list');
+  document.getElementById('btn-add-list-item')?.click();
+}
+
+async function openDeferredPriceReview() {
+  await loadDeferredPrices();
+  if (!homeState.deferredPrices.length) return showToast('No prices need review');
+
+  openModal('Review prices', `
+    <p class="text-muted text-sm">Add only the prices you know now. Anything left blank stays here for later.</p>
+    <div class="deferred-price-list">
+      ${homeState.deferredPrices.map((item, index) => `
+        <label class="deferred-price-row">
+          <span><strong>${escapeHtml(item.itemName)}</strong><small>${escapeHtml(item.storeName || 'Store')} · ${escapeHtml(new Date(item.completedAt).toLocaleDateString())}</small></span>
+          <span class="deferred-price-input-wrap"><span>$</span><input class="form-control deferred-price-input" type="number" min="0" step="0.01" inputmode="decimal" data-index="${index}" placeholder="0.00" /></span>
+        </label>`).join('')}
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Done for now</button>
+      <button type="button" class="btn btn-primary" id="save-deferred-prices">Save entered prices</button>
+    </div>`);
+
+  document.getElementById('save-deferred-prices')?.addEventListener('click', saveDeferredPrices);
+}
+
+async function saveDeferredPrices() {
+  const button = document.getElementById('save-deferred-prices');
+  const updates = [...document.querySelectorAll('.deferred-price-input')]
+    .map(input => ({ input, item: homeState.deferredPrices[Number(input.dataset.index)], raw: input.value.trim() }))
+    .filter(entry => entry.raw !== '');
+  if (!updates.length) return showToast('Enter at least one price, or choose Done for now');
+
+  for (const update of updates) {
+    const value = Number(update.raw);
+    if (!Number.isFinite(value) || value < 0) {
+      showToast(`Enter a valid price for ${update.item.itemName}`);
+      update.input.focus();
+      return;
+    }
+  }
+
+  if (button) { button.disabled = true; button.textContent = 'Saving…'; }
+  const results = await Promise.allSettled(updates.map(update => api.shoppingTrips.resolvePrice(
+    update.item.tripId,
+    update.item.shoppingListItemId,
+    { price: Number(update.raw), storeId: update.item.storeId }
+  )));
+  const saved = results.filter(result => result.status === 'fulfilled').length;
+  const failed = results.length - saved;
+
+  closeModal();
+  await loadDeferredPrices();
+  showToast(failed
+    ? `${saved} price${saved === 1 ? '' : 's'} saved · ${failed} could not be updated`
+    : `${saved} price${saved === 1 ? '' : 's'} saved · Spending updated`, 5000);
+}
+
 function initHomeTab() {
-  document.getElementById('home-quick-add')?.addEventListener('click', async () => {
-    await switchTab('list');
-    document.getElementById('btn-add-list-item')?.click();
-  });
+  document.getElementById('home-quick-add')?.addEventListener('click', openHomeQuickAdd);
   document.getElementById('home-plan-dinner')?.addEventListener('click', openTodaysDinner);
 }

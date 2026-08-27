@@ -1,10 +1,11 @@
 // Rapid multi-item shopping-list capture.
-// This intentionally reuses the current catalog/list APIs instead of introducing
-// a parallel shopping workflow.
+// This is the default list-entry path; unresolved entries flow directly into
+// the guided Add with details interaction.
 
 (function () {
   const MAX_CAPTURE_ITEMS = 25;
   const MAX_QUANTITY = 99;
+  let pendingReviewTokens = [];
 
   function normalizeRapidName(value) {
     return String(value || '')
@@ -70,11 +71,46 @@
     return candidates.length === 1 ? candidates[0] : null;
   }
 
+  function updateReviewButton() {
+    const button = document.getElementById('rapid-review-details');
+    if (!button) return;
+    button.hidden = pendingReviewTokens.length === 0;
+    button.textContent = pendingReviewTokens.length === 1
+      ? 'Review 1 item with details'
+      : `Review ${pendingReviewTokens.length} items with details`;
+  }
+
   function setRapidCaptureStatus(message, state = '') {
     const status = document.getElementById('rapid-list-status');
     if (!status) return;
     status.textContent = message;
     status.dataset.state = state;
+    updateReviewButton();
+  }
+
+  function syncPendingInput() {
+    const input = document.getElementById('rapid-list-input');
+    if (input) input.value = pendingReviewTokens.map(serializeRapidToken).join(', ');
+    updateReviewButton();
+  }
+
+  function reviewNextRapidItem() {
+    const token = pendingReviewTokens[0];
+    if (!token) return;
+    openAddListItemModal(token.name, {
+      onAdded: () => {
+        pendingReviewTokens.shift();
+        syncPendingInput();
+        if (pendingReviewTokens.length) {
+          setRapidCaptureStatus(`${pendingReviewTokens.length} ${pendingReviewTokens.length === 1 ? 'item still needs' : 'items still need'} details.`, 'warning');
+        } else {
+          setRapidCaptureStatus('All items added.', 'success');
+          document.getElementById('rapid-list-input')?.focus({ preventScroll: true });
+        }
+      }
+    });
+    const quantityInput = document.getElementById('list-qty');
+    if (quantityInput && token.quantity > 1) quantityInput.value = String(token.quantity);
   }
 
   async function submitRapidShoppingCapture(event) {
@@ -85,6 +121,7 @@
     const parsed = parseRapidShoppingTokens(input?.value);
 
     if (parsed.error) {
+      pendingReviewTokens = [];
       setRapidCaptureStatus(parsed.error, 'warning');
       return;
     }
@@ -159,16 +196,16 @@
 
       if (addedCount) await loadShoppingListTab();
 
-      const needsReview = [...unresolved, ...failed];
-      if (input) input.value = needsReview.map(serializeRapidToken).join(', ');
+      pendingReviewTokens = [...unresolved, ...failed];
+      syncPendingInput();
 
-      if (needsReview.length) {
+      if (pendingReviewTokens.length) {
         const addedText = addedCount ? `Added ${addedCount}. ` : '';
         setRapidCaptureStatus(
-          `${addedText}${needsReview.length} ${needsReview.length === 1 ? 'item needs' : 'items need'} review. Use + Add for new or ambiguous products.`,
+          `${addedText}${pendingReviewTokens.length} ${pendingReviewTokens.length === 1 ? 'item needs' : 'items need'} details before it can be added.`,
           'warning'
         );
-        if (addedCount) showToast(`Added ${addedCount} item${addedCount === 1 ? '' : 's'}; ${needsReview.length} need review`, 4000);
+        if (addedCount) showToast(`Added ${addedCount} item${addedCount === 1 ? '' : 's'}; ${pendingReviewTokens.length} need details`, 4000);
       } else {
         setRapidCaptureStatus(`Added ${addedCount} item${addedCount === 1 ? '' : 's'}.`, 'success');
         showToast(`Added ${addedCount} item${addedCount === 1 ? '' : 's'} to the list`);
@@ -180,7 +217,7 @@
       handleError(err, 'Failed to add shopping items');
     } finally {
       submit.disabled = false;
-      submit.textContent = 'Add';
+      submit.textContent = 'Add to list';
     }
   }
 
@@ -204,19 +241,21 @@
     form.id = 'rapid-list-capture';
     form.className = 'rapid-list-capture';
     form.innerHTML = `
-      <label class="sr-only" for="rapid-list-input">Quick add shopping items</label>
+      <label class="rapid-list-label" for="rapid-list-input">Add groceries</label>
       <div class="rapid-list-row">
         <textarea id="rapid-list-input" class="form-control" rows="1" autocomplete="off"
           placeholder="Milk, eggs, bananas x2…" aria-describedby="rapid-list-hint rapid-list-status"></textarea>
-        <button type="submit" class="btn btn-primary">Add</button>
+        <button type="submit" class="btn btn-primary">Add to list</button>
       </div>
       <div class="rapid-list-meta">
-        <span id="rapid-list-hint">Separate items with commas. Add x2 for quantity.</span>
+        <span id="rapid-list-hint">Type several items at once. Separate with commas; use x2 for quantity.</span>
         <span id="rapid-list-status" role="status" aria-live="polite"></span>
+        <button type="button" class="btn-link" id="rapid-review-details" hidden>Review details</button>
       </div>`;
 
     summary.before(form);
     form.addEventListener('submit', submitRapidShoppingCapture);
+    document.getElementById('rapid-review-details')?.addEventListener('click', reviewNextRapidItem);
 
     const input = document.getElementById('rapid-list-input');
     input.addEventListener('keydown', event => {

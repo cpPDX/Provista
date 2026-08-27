@@ -1,18 +1,46 @@
 // Shopping List tab logic
 
 let listState = { items: [], stores: [], filter: { storeId: null, category: null } };
-
-// Cart state: inferred prices while shopping. Missing-price exceptions are reviewed at the end.
 const cartState = new Map();
-let activeTripKey = null;
-
-// Per-item persistence queues let the UI respond immediately while preserving
-// the user's latest intent if they check and then undo before the first request returns.
 const checkSyncState = new Map();
+const externalPricesByItemId = new Map();
+let activeTripKey = null;
+let activeShoppingStoreId = null;
+let externalRefreshPromise = null;
 
-// =============================================================
-// Loading & Rendering
-// =============================================================
+function stringId(value) {
+  return value === null || value === undefined ? '' : String(value?._id || value);
+}
+
+function itemObjectId(item) {
+  return stringId(item?.itemId);
+}
+
+function plannedStoreId(item) {
+  return stringId(item?.storeId || item?.tripStore) || null;
+}
+
+function usualStoreId() {
+  const context = listState.items.find(item => item.priceContext)?.priceContext;
+  return stringId(context?.usualStore) || null;
+}
+
+function storeName(storeId) {
+  return listState.stores.find(store => stringId(store) === String(storeId || ''))?.name || '';
+}
+
+function inferActiveShoppingStore(items = listState.items.filter(item => item.checked)) {
+  if (activeShoppingStoreId && listState.stores.some(store => stringId(store) === String(activeShoppingStoreId))) {
+    return activeShoppingStoreId;
+  }
+  const counts = new Map();
+  items.forEach(item => {
+    const id = plannedStoreId(item);
+    if (id) counts.set(id, (counts.get(id) || 0) + 1);
+  });
+  activeShoppingStoreId = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || usualStoreId() || null;
+  return activeShoppingStoreId;
+}
 
 async function loadShoppingListTab() {
   try {
@@ -25,19 +53,149 @@ async function loadShoppingListTab() {
       return pending ? { ...item, checked: pending.desiredChecked } : item;
     });
     listState.stores = stores;
+
+    if (listState.items.some(item => item.checked)) inferActiveShoppingStore();
+    else if (!cartState.size) activeShoppingStoreId = null;
+
     renderShoppingList();
     loadLowStockBadge();
+    void refreshExternalShoppingPrices();
   } catch (err) {
     handleError(err, 'Failed to load shopping list');
   }
 }
 
+function renderStoreSummary(items) {
+  const container = document.getElementById('list-summary');
+  if (!container) return;
+  const context = items.find(item => item.priceContext)?.priceContext;
+  const savings = Number(context?.estimatedAdditionalStopSavings || 0);
+  const threshold = Number(context?.savingsThreshold || 0);
+  const additionalName = context?.additionalStore?.name;
+  if (!additionalName || savings < threshold) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = `
+    <div class="store-summary-recommendation parent-trip-suggestion">
+      <strong>Worth another stop?</strong>
+      ${escapeHtml(additionalName)} saves about <strong>${escapeHtml(formatCurrency(savings))}</strong> across this list.
+      <div class="text-muted text-sm">Store suggestions are planning hints. Provista records where you actually shop when you finish each stop.</div>
+    </div>`;
+}
+
+function knownLinePriceForStore(entry, storeId) {
+  if (!entry || !storeId) return null;
+  const option = (entry.priceOptions || []).find(price =>
+    !price.isStale && stringId(price.store) === String(storeId) &&
+    Number.isFinite(Number(price.pricePerUnit)) && Number(price.pricePerUnit) >= 0
+  );
+  if (!option) return null;
+  return Math.round((Number(option.pricePerUnit) * entry.quantity + Number.EPSILON) * 100) / 100;
+}
+
+function createCartEntry(item) {
+  const quantity = Number(item.quantity) || 1;
+  const planningStoreId = plannedStoreId(item);
+  const actualStoreId = activeShoppingStoreId || planningStoreId || null;
+  const entry = {
+    name: item.itemId?.name || 'Unknown item',
+    quantity,
+    storeId: actualStoreId,
+    plannedStoreId: planningStoreId,
+    priceOptions: item.priceOptions || [],
+    suggestedPrice: null,
+    price: null,
+    needsPrice: true,
+    priceDecision: 'later'
+  };
+  const known = knownLinePriceForStore(entry, actualStoreId);
+  if (known !== null) {
+    entry.suggestedPrice = known;
+    entry.price = known;
+    entry.needsPrice = false;
+    entry.priceDecision = 'existing';
+  }
+  return entry;
+}
+
+function ensurePriceDecision(item, entry) {
+  if (!entry) return;
+  if (!entry.storeId) entry.storeId = activeShoppingStoreId || plannedStoreId(item) || null;
+  if (entry.priceDecision === 'updated' || entry.priceDecision === 'later') return;
+  const known = knownLinePriceForStore(entry, entry.storeId);
+  entry.suggestedPrice = known;
+  if (known === null) {
+    entry.price = null;
+    entry.needsPrice = true;
+    entry.priceDecision = 'later';
+  } else {
+    entry.price = known;
+    entry.needsPrice = false;
+    entry.priceDecision = 'existing';
+  }
+}
+
+function decisionCopy(entry) {
+  if (entry.priceDecision === 'updated') return `Using updated price ${formatCurrency(entry.price)}`;
+  if (entry.priceDecision === 'later') return 'Price will be reviewed later';
+  if (entry.suggestedPrice !== null && entry.suggestedPrice !== undefined) {
+    return `Using recent price ${formatCurrency(entry.suggestedPrice)}`;
+  }
+  return 'Price not recorded yet';
+}
+
+function priceDecisionMarkup(item, entry) {
+  if (!entry) return '';
+  ensurePriceDecision(item, entry);
+  return `
+    <div class="purchase-price-choice">
+      <div class="purchase-price-choice-status">${escapeHtml(decisionCopy(entry))}</div>
+      <div class="purchase-price-choice-actions" role="group" aria-label="Price choice for ${escapeAttr(entry.name)}">
+        ${entry.suggestedPrice !== null && entry.suggestedPrice !== undefined
+          ? `<button type="button" class="price-choice-btn ${entry.priceDecision === 'existing' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'existing')">Use ${escapeHtml(formatCurrency(entry.suggestedPrice))}</button>`
+          : ''}
+        <button type="button" class="price-choice-btn ${entry.priceDecision === 'updated' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'update')">Update price</button>
+        <button type="button" class="price-choice-btn ${entry.priceDecision === 'later' ? 'selected' : ''}" onclick="setPurchasePriceDecision('${escapeAttr(item._id)}', 'later')">Later</button>
+      </div>
+    </div>`;
+}
+
+function externalPriceMarkup(item) {
+  const signal = externalPricesByItemId.get(itemObjectId(item));
+  if (!signal?.observation) return '';
+  const observation = signal.observation;
+  const age = formatPriceAge(observation.observedAt, true);
+  return `<div class="external-price-signal">
+    <strong>Open Prices:</strong> ${escapeHtml(formatCurrency(observation.price))} at ${escapeHtml(signal.storeName || 'this store')} · ${escapeHtml(age)}
+    <span>Community-observed price - not what your household paid.</span>
+  </div>`;
+}
+
+function householdPriceMarkup(item, cartEntry) {
+  const unit = item.itemId?.unit || '';
+  if (cartEntry) {
+    return cartEntry.price === null
+      ? '<div class="card-subtitle">Bought · price not recorded yet</div>'
+      : `<div class="card-subtitle text-success">Bought · ${escapeHtml(formatCurrency(cartEntry.price))} recorded</div>`;
+  }
+  if (item.tripPrice) {
+    const price = Number(item.tripPrice.pricePerUnit);
+    return `<div class="card-subtitle">Last paid ${escapeHtml(formatCurrency(price))}${unit ? `/${escapeHtml(unit)}` : ''} at ${escapeHtml(item.tripPrice.store?.name || 'a store')} · ${escapeHtml(formatPriceAge(item.tripPrice.date, true))}</div>`;
+  }
+  if (item.latestSeenPrice) {
+    const latest = item.latestSeenPrice;
+    const price = Number(latest.pricePerUnit);
+    return `<div class="card-subtitle">Last paid ${escapeHtml(formatCurrency(price))}${unit ? `/${escapeHtml(unit)}` : ''} at ${escapeHtml(latest.store?.name || 'a store')} · Price may have changed</div>`;
+  }
+  return '<div class="card-subtitle">No recent household price</div>';
+}
+
 function renderShoppingList() {
   const items = listState.items;
   const filter = listState.filter;
-
   const visibleItems = items.filter(item => {
-    if (filter.storeId && (item.storeId?._id || item.storeId) !== filter.storeId) return false;
+    if (filter.storeId && stringId(item.storeId) !== filter.storeId) return false;
     if (filter.category && item.itemId?.category !== filter.category) return false;
     return true;
   });
@@ -46,34 +204,34 @@ function renderShoppingList() {
   renderStoreSummary(items);
   updateListFilterDot();
 
-  // Keep cart state recoverable after reloads and in sync with server check-off state.
   const currentIds = new Set(items.map(item => item._id));
   [...cartState.keys()].forEach(id => {
     if (!currentIds.has(id)) cartState.delete(id);
   });
-  items.forEach(item => {
-    if (item.checked && !cartState.has(item._id)) cartState.set(item._id, createCartEntry(item));
-    if (!item.checked) cartState.delete(item._id);
+  const checkedItems = items.filter(item => item.checked);
+  if (checkedItems.length && !activeShoppingStoreId) inferActiveShoppingStore(checkedItems);
+  checkedItems.forEach(item => {
+    if (!cartState.has(item._id)) cartState.set(item._id, createCartEntry(item));
   });
+  items.filter(item => !item.checked).forEach(item => cartState.delete(item._id));
+  if (!cartState.size) activeShoppingStoreId = null;
   updateCartBar();
 
   const container = document.getElementById('shopping-list');
-
-  // Show/hide list-wide actions based on total state (not filtered view).
   const hasItems = items.length > 0;
-  const hasChecked = items.some(i => i.checked);
+  const hasChecked = checkedItems.length > 0;
   const clearAllBtn = document.getElementById('btn-clear-all');
   const deselectAllBtn = document.getElementById('btn-deselect-all');
   if (clearAllBtn) clearAllBtn.style.display = hasItems ? '' : 'none';
   if (deselectAllBtn) deselectAllBtn.style.display = hasChecked ? '' : 'none';
 
   if (!items.length) {
-    container.innerHTML = emptyState('📋', 'Your shopping list is empty. Tap "+ Add" to start.');
+    container.innerHTML = emptyState('📋', 'Your list is empty. Type groceries above, or use Add with details for a new product.');
     return;
   }
 
   const filterBar = hiddenCount > 0
-    ? `<div class="list-filter-bar">${hiddenCount} item${hiddenCount !== 1 ? 's' : ''} hidden by filter &mdash; <button onclick="clearListFilter()">Clear filter</button></div>`
+    ? `<div class="list-filter-bar">${hiddenCount} item${hiddenCount !== 1 ? 's' : ''} hidden by filter - <button onclick="clearListFilter()">Clear filter</button></div>`
     : '';
 
   if (!visibleItems.length) {
@@ -83,61 +241,37 @@ function renderShoppingList() {
 
   const itemMarkup = item => {
     const name = item.itemId?.name || 'Unknown item';
-    const unit = item.itemId?.unit || '';
-    const cat = item.itemId?.category || '';
-    const checked = item.checked;
     const cartEntry = cartState.get(item._id);
-    const assignedStore = item.storeId?.name || null;
-
-    let priceInfo = '';
-    if (cartEntry) {
-      priceInfo = cartEntry.needsPrice
-        ? '<div class="card-subtitle" style="color:var(--warning)">In cart · price needed</div>'
-        : `<div class="card-subtitle text-success">In cart: ${formatCurrency(cartEntry.price)}</div>`;
-    } else if (item.tripPrice) {
-      const { store, pricePerUnit, date } = item.tripPrice;
-      priceInfo = `<div class="card-subtitle price-freshness">
-        ${escapeHtml(store?.name || 'Store')} · ${escapeHtml(formatPPU(pricePerUnit, unit))} · ${escapeHtml(formatPriceAge(date))}
-      </div>`;
-    } else if (item.latestSeenPrice) {
-      const latest = item.latestSeenPrice;
-      priceInfo = `<div class="card-subtitle price-stale">
-        Last seen at ${escapeHtml(latest.store?.name || 'a store')} · ${escapeHtml(formatPriceAge(latest.date, true))}
-        ${latest.isStale ? '<span class="badge badge-stale">Stale</span>' : ''}
-      </div>`;
-    } else {
-      priceInfo = `<span class="badge badge-no-data">No price data</span>`;
-    }
-
-    const storeLine = `<button class="list-item-store-btn" onclick="openStorePickerForItem('${item._id}')">${assignedStore ? '🏪 ' + escapeHtml(assignedStore) : '+ Store'}</button>`;
-
+    const explicitStore = item.storeId?.name || null;
+    const metadata = item.itemId ? formatItemMeta(item.itemId) : escapeHtml(item.itemId?.category || '');
     return `
-      <div class="card list-item ${checked ? 'checked' : ''}" data-id="${item._id}">
-        <button type="button" class="list-item-check-wrap" onclick="handleListItemCheck('${item._id}', ${!checked})"
-          aria-label="${checked ? 'Uncheck' : 'Mark as purchased'} ${escapeAttr(name)}" aria-pressed="${checked}">
-          <span class="list-item-check ${checked ? 'checked' : ''}" aria-hidden="true">${checked ? '✓' : ''}</span>
+      <div class="card list-item ${item.checked ? 'checked' : ''}" data-id="${escapeAttr(item._id)}">
+        <button type="button" class="list-item-check-wrap" onclick="handleListItemCheck('${escapeAttr(item._id)}', ${!item.checked})"
+          aria-label="${item.checked ? 'Uncheck' : 'Mark as purchased'} ${escapeAttr(name)}" aria-pressed="${item.checked}">
+          <span class="list-item-check ${item.checked ? 'checked' : ''}" aria-hidden="true">${item.checked ? '✓' : ''}</span>
         </button>
         <div class="card-body">
-          <div class="card-title">${escapeHtml(name)}${item.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(item.itemId.brand) + ')</span>' : ''}</div>
-          <div class="list-item-meta">${item.itemId ? formatItemMeta(item.itemId) : cat} &middot; qty ${item.quantity}</div>
-          ${storeLine}
-          ${priceInfo}
+          <div class="card-title">${escapeHtml(name)}</div>
+          <div class="list-item-meta">${metadata}${metadata ? ' · ' : ''}qty ${escapeHtml(item.quantity)}</div>
+          <button class="list-item-store-btn" onclick="openStorePickerForItem('${escapeAttr(item._id)}')">${explicitStore ? `Preferred: ${escapeHtml(explicitStore)}` : 'Set store preference'}</button>
+          ${householdPriceMarkup(item, cartEntry)}
+          ${item.checked ? priceDecisionMarkup(item, cartEntry) : externalPriceMarkup(item)}
         </div>
-        <button class="btn btn-icon text-danger list-item-remove" onclick="removeListItem('${item._id}')"
+        <button class="btn btn-icon text-danger list-item-remove" onclick="removeListItem('${escapeAttr(item._id)}')"
           aria-label="Remove ${escapeAttr(name)} from the list">✕</button>
       </div>`;
   };
 
   const groups = new Map();
   visibleItems.forEach(item => {
-    const storeName = item.tripStore?.name || item.storeId?.name || 'Choose store at checkout';
-    if (!groups.has(storeName)) groups.set(storeName, []);
-    groups.get(storeName).push(item);
+    const suggestedName = item.tripStore?.name || item.storeId?.name || 'Any store';
+    if (!groups.has(suggestedName)) groups.set(suggestedName, []);
+    groups.get(suggestedName).push(item);
   });
-  const groupedMarkup = [...groups.entries()].map(([storeName, groupItems]) => `
-    <section class="list-store-group" aria-label="${escapeAttr(storeName)}">
+  const groupedMarkup = [...groups.entries()].map(([suggestedName, groupItems]) => `
+    <section class="list-store-group" aria-label="Suggested stop ${escapeAttr(suggestedName)}">
       <div class="list-store-heading">
-        <h2>${escapeHtml(storeName)}</h2>
+        <h2>${suggestedName === 'Any store' ? 'No store preference' : `Suggested: ${escapeHtml(suggestedName)}`}</h2>
         <span>${groupItems.length} item${groupItems.length === 1 ? '' : 's'}</span>
       </div>
       ${groupItems.map(itemMarkup).join('')}
@@ -145,80 +279,93 @@ function renderShoppingList() {
   container.innerHTML = filterBar + groupedMarkup;
 }
 
-function updateListFilterDot() {
-  const f = listState.filter;
-  const active = f.storeId || f.category;
-  const dot = document.getElementById('list-filter-dot');
-  if (dot) dot.style.display = active ? '' : 'none';
+async function refreshExternalShoppingPrices() {
+  if (externalRefreshPromise || !navigator.onLine) return externalRefreshPromise;
+  externalRefreshPromise = api.externalPrices.refreshShoppingList()
+    .then(result => {
+      externalPricesByItemId.clear();
+      (result.observations || []).forEach(signal => externalPricesByItemId.set(String(signal.itemId), signal));
+      if (document.getElementById('tab-list')?.classList.contains('active')) renderShoppingList();
+    })
+    .catch(err => console.info('External price refresh unavailable:', err.message))
+    .finally(() => { externalRefreshPromise = null; });
+  return externalRefreshPromise;
 }
 
-function clearListFilter() {
-  listState.filter = { storeId: null, category: null };
-  renderShoppingList();
+function setPurchasePriceDecision(itemId, decision) {
+  const item = listState.items.find(candidate => candidate._id === itemId);
+  const entry = cartState.get(itemId);
+  if (!item || !entry) return;
+
+  if (decision === 'existing') {
+    const known = knownLinePriceForStore(entry, entry.storeId);
+    if (known === null) return showToast('No recent household price is available for this store.');
+    entry.suggestedPrice = known;
+    entry.price = known;
+    entry.needsPrice = false;
+    entry.priceDecision = 'existing';
+    renderShoppingList();
+    return;
+  }
+  if (decision === 'later') {
+    entry.price = null;
+    entry.needsPrice = true;
+    entry.priceDecision = 'later';
+    renderShoppingList();
+    return;
+  }
+  if (decision === 'update') openInlinePriceEditor(item, entry);
 }
 
-function renderStoreSummary(items) {
-  const container = document.getElementById('list-summary');
-  if (!items.length) { container.innerHTML = ''; return; }
-  const context = items.find(item => item.priceContext)?.priceContext;
-  if (!context) { container.innerHTML = ''; return; }
-  const usualName = context.usualStore?.name;
-  const additionalName = context.additionalStore?.name;
-  const savings = Number(context.estimatedAdditionalStopSavings || 0);
-  const threshold = Number(context.savingsThreshold || 0);
-  const freshnessDays = Number(context.freshnessDays || 30);
-  const tripMessage = usualName
-    ? `Start at <strong>${escapeHtml(usualName)}</strong>.`
-    : 'Choose your usual store in Household settings to build one practical trip.';
-  const savingsMessage = additionalName && savings >= threshold
-    ? `<div class="store-summary-recommendation">A stop at <strong>${escapeHtml(additionalName)}</strong> saves about <strong>${formatCurrency(savings)}</strong> across this list.</div>`
-    : `<div class="text-muted">Another stop appears only when estimated savings reach ${formatCurrency(threshold)}.</div>`;
-  container.innerHTML = `
-    <h3>Your trip plan</h3>
-    <div>${tripMessage}</div>
-    ${savingsMessage}
-    <div class="store-summary-freshness">Prices older than ${freshnessDays} days are marked stale and excluded from recommendations.</div>`;
-}
-
-// =============================================================
-// Instant check-off; price exceptions are handled at Done Shopping
-// =============================================================
-
-function createCartEntry(item) {
-  const name = item.itemId?.name || 'Unknown item';
-  const quantity = Number(item.quantity) || 1;
-  const assignedStoreId = item.tripStore?._id || item.storeId?._id || item.storeId || null;
-  const tripPrice = item.tripPrice && !item.tripPrice.isStale ? item.tripPrice : null;
-  const priceStoreId = tripPrice?.store?._id || null;
-  const canUseKnownPrice = Boolean(tripPrice && priceStoreId &&
-    Number.isFinite(Number(tripPrice.pricePerUnit)) && Number(tripPrice.pricePerUnit) >= 0);
-  const suggestedPrice = canUseKnownPrice
-    ? Math.round((Number(tripPrice.pricePerUnit) * quantity + Number.EPSILON) * 100) / 100
-    : null;
-
-  return {
-    name,
-    price: suggestedPrice,
-    suggestedPrice,
-    quantity,
-    storeId: assignedStoreId || priceStoreId,
-    needsPrice: suggestedPrice === null,
-    priceOptions: item.priceOptions || []
-  };
+function openInlinePriceEditor(item, entry) {
+  const name = item.itemId?.name || entry.name || 'Item';
+  const current = entry.price ?? entry.suggestedPrice;
+  openModal('Update price', `
+    <form id="inline-price-form">
+      <p class="text-muted text-sm">Enter what you paid for <strong>${escapeHtml(name)}</strong>. Saving returns you to the list.</p>
+      <div class="form-group">
+        <label for="inline-price-value">Price paid</label>
+        <input class="form-control" id="inline-price-value" type="number" inputmode="decimal" min="0" step="0.01" required
+          value="${current === null || current === undefined ? '' : escapeAttr(Number(current).toFixed(2))}" />
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Use this price</button>
+      </div>
+    </form>`);
+  const input = document.getElementById('inline-price-value');
+  setTimeout(() => input?.select(), 0);
+  document.getElementById('inline-price-form')?.addEventListener('submit', event => {
+    event.preventDefault();
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || value < 0) return showToast('Enter a valid price');
+    entry.price = Math.round((value + Number.EPSILON) * 100) / 100;
+    entry.needsPrice = false;
+    entry.priceDecision = 'updated';
+    closeModal();
+    renderShoppingList();
+  });
 }
 
 function handleListItemCheck(id, willBeChecked) {
-  const item = listState.items.find(i => i._id === id);
+  const item = listState.items.find(entry => entry._id === id);
   if (!item) return;
   let sync = checkSyncState.get(id);
   if (!sync) {
-    sync = { serverChecked: Boolean(item.checked), desiredChecked: Boolean(item.checked), processing: false };
+    sync = { serverChecked: Boolean(item.checked), desiredChecked: Boolean(item.checked), processing: false, promise: null };
     checkSyncState.set(id, sync);
   }
   sync.desiredChecked = Boolean(willBeChecked);
   item.checked = sync.desiredChecked;
-  if (item.checked) cartState.set(id, createCartEntry(item));
-  else cartState.delete(id);
+
+  if (item.checked) {
+    if (!activeShoppingStoreId) activeShoppingStoreId = plannedStoreId(item) || usualStoreId() || null;
+    cartState.set(id, createCartEntry(item));
+  } else {
+    cartState.delete(id);
+    if (!cartState.size) activeShoppingStoreId = null;
+  }
+
   renderShoppingList();
   document.querySelector(`.list-item[data-id="${CSS.escape(id)}"] .list-item-check-wrap`)?.focus({ preventScroll: true });
   if (!sync.processing) sync.promise = persistListItemCheck(id);
@@ -226,7 +373,7 @@ function handleListItemCheck(id, willBeChecked) {
 
 async function persistListItemCheck(id) {
   const sync = checkSyncState.get(id);
-  if (!sync || sync.processing) return;
+  if (!sync || sync.processing) return true;
   sync.processing = true;
   try {
     while (sync.serverChecked !== sync.desiredChecked) {
@@ -242,6 +389,7 @@ async function persistListItemCheck(id) {
       item.checked = sync.serverChecked;
       if (item.checked) cartState.set(id, createCartEntry(item));
       else cartState.delete(id);
+      if (!cartState.size) activeShoppingStoreId = null;
       renderShoppingList();
     }
     checkSyncState.delete(id);
@@ -260,387 +408,257 @@ async function settlePendingCheckWrites() {
   return results.every(result => result !== false);
 }
 
-// =============================================================
-// Cart bar
-// =============================================================
-
 function updateCartBar() {
   const bar = document.getElementById('cart-bar');
   const label = document.getElementById('cart-bar-label');
   const tab = document.getElementById('tab-list');
   if (!bar) return;
 
-  if (cartState.size === 0) {
+  if (!cartState.size) {
     activeTripKey = null;
+    activeShoppingStoreId = null;
     bar.style.display = 'none';
     tab?.classList.remove('has-cart');
     const detail = document.getElementById('cart-bar-detail');
-    const summary = document.getElementById('cart-bar-summary');
     if (detail) detail.style.display = 'none';
-    summary?.setAttribute('aria-expanded', 'false');
+    document.getElementById('cart-bar-summary')?.setAttribute('aria-expanded', 'false');
     document.getElementById('cart-more-menu')?.removeAttribute('open');
     return;
   }
 
   let total = 0;
-  let missingPrices = 0;
+  let later = 0;
   cartState.forEach(entry => {
-    total += entry.price || 0;
-    if (entry.needsPrice) missingPrices++;
+    if (entry.price !== null && Number.isFinite(Number(entry.price))) total += Number(entry.price);
+    else later++;
   });
-  const count = cartState.size;
-
+  const stop = storeName(activeShoppingStoreId);
   bar.style.display = '';
   tab?.classList.add('has-cart');
-  if (label) {
-    const review = missingPrices ? ` · ${missingPrices} need price${missingPrices === 1 ? '' : 's'}` : '';
-    label.textContent = `In cart: ${formatCurrency(total)} (${count} item${count !== 1 ? 's' : ''})${review}`;
-  }
+  if (label) label.textContent = `${cartState.size} bought · ${formatCurrency(total)} recorded${later ? ` · ${later} to review` : ''}${stop ? ` · ${stop}` : ''}`;
+
   const doneButton = document.getElementById('btn-done-shopping');
   if (doneButton) {
     doneButton.disabled = false;
-    doneButton.setAttribute('aria-label', `Done shopping with ${count} item${count === 1 ? '' : 's'}`);
+    doneButton.setAttribute('aria-label', `Finish shopping with ${cartState.size} item${cartState.size === 1 ? '' : 's'}`);
   }
 
   const detail = document.getElementById('cart-bar-detail');
-  if (detail && detail.style.display !== 'none') {
-    renderCartDetail(detail);
-  }
+  if (detail && detail.style.display !== 'none') renderCartDetail(detail);
 }
 
 function renderCartDetail(container) {
   let total = 0;
   const rows = [];
-  cartState.forEach((entry, id) => {
-    total += entry.price || 0;
-    rows.push(`<div class="cart-detail-row">
-      <span>${entry.name}</span>
-      <span>${entry.needsPrice ? 'Price needed' : formatCurrency(entry.price)}</span>
-    </div>`);
+  cartState.forEach(entry => {
+    if (entry.price !== null && Number.isFinite(Number(entry.price))) total += Number(entry.price);
+    rows.push(`<div class="cart-detail-row"><span>${escapeHtml(entry.name)}</span><span>${entry.price === null ? 'Review later' : escapeHtml(formatCurrency(entry.price))}</span></div>`);
   });
-  rows.push(`<div class="cart-detail-row cart-detail-total">
-    <span>Total</span><span>${formatCurrency(total)}</span>
-  </div>`);
+  rows.push(`<div class="cart-detail-row cart-detail-total"><span>Recorded so far</span><span>${escapeHtml(formatCurrency(total))}</span></div>`);
   container.innerHTML = rows.join('');
+}
+
+function applyTripStore(storeId) {
+  activeShoppingStoreId = storeId || null;
+  cartState.forEach(entry => {
+    entry.storeId = activeShoppingStoreId;
+    if (entry.priceDecision !== 'existing') return;
+    const known = knownLinePriceForStore(entry, activeShoppingStoreId);
+    entry.suggestedPrice = known;
+    if (known === null) {
+      entry.price = null;
+      entry.needsPrice = true;
+      entry.priceDecision = 'later';
+    } else {
+      entry.price = known;
+      entry.needsPrice = false;
+    }
+  });
+}
+
+function renderFinishShoppingSummary() {
+  const container = document.getElementById('parent-trip-price-summary');
+  if (!container) return;
+  let total = 0;
+  const confirmed = [];
+  const deferred = [];
+  cartState.forEach(entry => {
+    if (entry.price === null || !Number.isFinite(Number(entry.price))) deferred.push(entry);
+    else {
+      total += Number(entry.price);
+      confirmed.push(entry);
+    }
+  });
+  container.innerHTML = `
+    <div class="finish-shopping-total"><strong>${cartState.size} item${cartState.size === 1 ? '' : 's'} purchased · ${escapeHtml(formatCurrency(total))} recorded</strong>
+      ${deferred.length ? `<span>${deferred.length} price${deferred.length === 1 ? '' : 's'} will be reviewed later.</span>` : '<span>All prices are recorded.</span>'}
+    </div>
+    ${deferred.length ? `<div class="finish-shopping-deferred"><strong>Review later</strong>${deferred.map(entry => `<span>${escapeHtml(entry.name)}</span>`).join('')}</div>` : ''}
+    ${confirmed.length ? `<details class="finish-shopping-confirmed"><summary>${confirmed.length} recorded price${confirmed.length === 1 ? '' : 's'}</summary>${confirmed.map(entry => `<div><span>${escapeHtml(entry.name)}</span><span>${escapeHtml(formatCurrency(entry.price))}</span></div>`).join('')}</details>` : ''}`;
 }
 
 function openDoneShoppingReview() {
   const checkedItems = listState.items.filter(item => item.checked);
-  if (!checkedItems.length) { showToast('No items checked off'); return; }
-
+  if (!checkedItems.length) return showToast('No purchased items yet');
+  inferActiveShoppingStore(checkedItems);
   checkedItems.forEach(item => {
     if (!cartState.has(item._id)) cartState.set(item._id, createCartEntry(item));
+    ensurePriceDecision(item, cartState.get(item._id));
   });
+
   activeTripKey ||= typeof window.crypto?.randomUUID === 'function'
     ? window.crypto.randomUUID()
     : `trip-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-  const storeCounts = new Map();
-  cartState.forEach(entry => {
-    if (entry.storeId) storeCounts.set(entry.storeId, (storeCounts.get(entry.storeId) || 0) + 1);
-  });
-  const initialStoreId = [...storeCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-  const storeOptions = listState.stores.map(store => `
-    <option value="${escapeAttr(store._id)}"${initialStoreId === store._id ? ' selected' : ''}>${escapeHtml(store.name)}</option>
-  `).join('');
+  const initialStoreId = activeShoppingStoreId || usualStoreId() || '';
+  applyTripStore(initialStoreId);
+  const storeOptions = listState.stores.map(store =>
+    `<option value="${escapeAttr(store._id)}">${escapeHtml(store.name)}</option>`
+  ).join('');
 
-  openModal('Review shopping trip', `
-    <div class="trip-review-summary">
-      <strong id="trip-review-total"></strong>
-      <p class="text-muted text-sm" id="trip-review-detail">Known prices are prefilled. Edit only the exceptions.</p>
+  openModal('Finish shopping', `
+    <div class="finish-shopping-outcomes">
+      <strong>Finishing this stop will:</strong>
+      <ul>
+        <li>Add purchased items to Pantry</li>
+        <li>Record the prices you confirmed</li>
+        <li>Update Spending</li>
+        <li>Remove purchased items from this list</li>
+      </ul>
+      <p class="text-muted text-sm">Finish before moving to another store. Store preferences on the list are planning hints; this records where these items were actually purchased.</p>
     </div>
-    <div class="form-group trip-store-once">
-      <label for="trip-store-select">Where did you shop?</label>
-      <select class="form-control" id="trip-store-select">
-        <option value="">Choose one store for this trip</option>
+    <div class="form-group">
+      <label for="parent-trip-store">Where are you shopping now?</label>
+      <select class="form-control" id="parent-trip-store">
+        <option value="">Choose a store</option>
         ${storeOptions}
       </select>
     </div>
-    <div id="trip-review-status"></div>
-    <section class="trip-exceptions-section" aria-labelledby="trip-exceptions-heading">
-      <h3 id="trip-exceptions-heading">Price exceptions</h3>
-      <p class="text-muted text-sm">Only missing or changed prices need attention.</p>
-      <div id="trip-price-exceptions" class="trip-review-items"></div>
-      <p id="trip-no-exceptions" class="trip-no-exceptions">No price exceptions.</p>
-    </section>
-    <details id="trip-known-prices" class="trip-known-prices">
-      <summary id="trip-known-prices-summary">Known prices</summary>
-      <p class="text-muted text-sm">Open only if a shelf price changed.</p>
-      <div id="trip-known-price-items" class="trip-review-items"></div>
-    </details>
+    <div id="parent-trip-price-summary"></div>
     <label class="trip-pantry-option">
-      <input type="checkbox" id="trip-add-to-pantry" checked />
-      <span><strong>Replenish Pantry</strong><small>Mark purchased items as Have and add any tracked quantities.</small></span>
+      <input type="checkbox" id="parent-trip-add-to-pantry" checked />
+      <span><strong>Update Pantry</strong><small>Purchased items become Have; exact-tracked quantities are replenished.</small></span>
     </label>
     <div class="form-actions">
       <button type="button" class="btn btn-outline" onclick="closeModal()">Keep shopping</button>
-      <button type="button" class="btn btn-primary" id="btn-finish-trip">Finish trip</button>
+      <button type="button" class="btn btn-primary" id="parent-finish-shopping">Finish shopping</button>
     </div>`);
 
-  document.getElementById('trip-store-select')?.addEventListener('change', event => {
-    renderTripPriceRows(checkedItems, event.target.value);
+  const storeSelect = document.getElementById('parent-trip-store');
+  if (storeSelect && initialStoreId) storeSelect.value = String(initialStoreId);
+  renderFinishShoppingSummary();
+  storeSelect?.addEventListener('change', event => {
+    applyTripStore(event.target.value || null);
+    renderFinishShoppingSummary();
+    updateCartBar();
   });
-  renderTripPriceRows(checkedItems, initialStoreId);
-  document.getElementById('btn-finish-trip')?.addEventListener('click', finishShoppingTrip);
-  registerDirtyForm(finishShoppingTrip);
+  document.getElementById('parent-finish-shopping')?.addEventListener('click', finishParentShoppingTrip);
 }
 
-function knownLinePriceForStore(entry, storeId) {
-  if (!storeId) return null;
-  const option = (entry.priceOptions || []).find(price =>
-    !price.isStale && String(price.store?._id) === String(storeId) &&
-    Number.isFinite(Number(price.pricePerUnit)) && Number(price.pricePerUnit) >= 0
-  );
-  if (!option) return null;
-  return Math.round((Number(option.pricePerUnit) * entry.quantity + Number.EPSILON) * 100) / 100;
-}
-
-function tripPriceRow(item, entry, suggestedPrice) {
-  const isKnown = suggestedPrice !== null;
-  return `
-    <div class="trip-review-item" data-list-item-id="${escapeAttr(item._id)}" data-original-known="${isKnown}">
-      <div class="trip-review-item-heading">
-        <strong>${escapeHtml(entry.name)}</strong>
-        <span class="text-muted text-sm">qty ${entry.quantity}</span>
-      </div>
-      <label class="trip-price-field">
-        <span>Price paid</span>
-        <input class="form-control trip-price-input" type="number" inputmode="decimal"
-          step="0.01" min="0" placeholder="Add later"
-          value="${isKnown ? escapeAttr(Number(suggestedPrice).toFixed(2)) : ''}"
-          data-suggested-price="${isKnown ? escapeAttr(suggestedPrice) : ''}"
-          aria-label="Price paid for ${escapeAttr(entry.name)}" />
-      </label>
-      <span class="trip-exception-label" ${isKnown ? 'hidden' : ''}>Missing price</span>
-    </div>`;
-}
-
-function renderTripPriceRows(checkedItems, storeId) {
-  const exceptions = document.getElementById('trip-price-exceptions');
-  const known = document.getElementById('trip-known-price-items');
-  if (!exceptions || !known) return;
-  exceptions.innerHTML = '';
-  known.innerHTML = '';
-  checkedItems.forEach(item => {
-    const entry = cartState.get(item._id);
-    const suggestedPrice = knownLinePriceForStore(entry, storeId);
-    entry.storeId = storeId || null;
-    entry.suggestedPrice = suggestedPrice;
-    entry.price = suggestedPrice;
-    entry.needsPrice = suggestedPrice === null;
-    const template = document.createElement('template');
-    template.innerHTML = tripPriceRow(item, entry, suggestedPrice).trim();
-    const row = template.content.firstElementChild;
-    (suggestedPrice === null ? exceptions : known).appendChild(row);
-  });
-  document.querySelectorAll('.trip-price-input').forEach(input => {
-    input.addEventListener('input', handleTripPriceEdit);
-    input.addEventListener('change', handleTripPriceEdit);
-  });
-  refreshTripPriceSections();
-  updateTripReviewSummary();
-}
-
-function handleTripPriceEdit(event) {
-  const input = event.currentTarget;
-  const row = input.closest('.trip-review-item');
-  const suggested = input.dataset.suggestedPrice === '' ? null : Number(input.dataset.suggestedPrice);
-  const rawPrice = input.value.trim();
-  const price = rawPrice === '' ? null : Number(rawPrice);
-  const changedKnownPrice = row.dataset.originalKnown === 'true' && (
-    price === null || !Number.isFinite(price) || Math.abs(price - suggested) >= 0.005
-  );
-  const label = row.querySelector('.trip-exception-label');
-  if (changedKnownPrice) {
-    label.hidden = false;
-    label.textContent = price === null ? 'Price removed' : 'Changed price';
-    document.getElementById('trip-price-exceptions')?.appendChild(row);
-  } else if (row.dataset.originalKnown === 'true') {
-    label.hidden = true;
-    document.getElementById('trip-known-price-items')?.appendChild(row);
-  }
-  refreshTripPriceSections();
-  updateTripReviewSummary();
-}
-
-function refreshTripPriceSections() {
-  const knownCount = document.getElementById('trip-known-price-items')?.children.length || 0;
-  const exceptionCount = document.getElementById('trip-price-exceptions')?.children.length || 0;
-  const knownDetails = document.getElementById('trip-known-prices');
-  const knownSummary = document.getElementById('trip-known-prices-summary');
-  const noExceptions = document.getElementById('trip-no-exceptions');
-  if (knownDetails) knownDetails.style.display = knownCount ? '' : 'none';
-  if (knownSummary) knownSummary.textContent = `${knownCount} known price${knownCount === 1 ? '' : 's'} · collapsed`;
-  if (noExceptions) noExceptions.style.display = exceptionCount ? 'none' : '';
-}
-
-function updateTripReviewSummary() {
-  const rows = [...document.querySelectorAll('.trip-review-item')];
-  const storeId = document.getElementById('trip-store-select')?.value || null;
-  let total = 0;
-  let missingPrices = 0;
-  let changedPrices = 0;
-  const missingStore = !storeId;
-
-  rows.forEach(row => {
-    const input = row.querySelector('.trip-price-input');
-    const rawPrice = input.value.trim();
-    const price = rawPrice === '' ? null : Number(rawPrice);
-    const suggestedRaw = input.dataset.suggestedPrice;
-    const suggested = suggestedRaw === '' ? null : Number(suggestedRaw);
-    if (price === null || !Number.isFinite(price)) {
-      missingPrices++;
-    } else {
-      total += price;
-      if (suggested !== null && Math.abs(price - suggested) >= 0.005) changedPrices++;
-    }
-
-    const entry = cartState.get(row.dataset.listItemId);
-    if (entry) {
-      entry.price = price !== null && Number.isFinite(price) ? price : null;
-      entry.storeId = storeId;
-      entry.needsPrice = entry.price === null;
-    }
-  });
-
-  const totalEl = document.getElementById('trip-review-total');
-  if (totalEl) totalEl.textContent = `${rows.length} item${rows.length === 1 ? '' : 's'} · ${formatCurrency(total)}`;
-  const detailParts = [];
-  if (missingPrices) detailParts.push(`${missingPrices} need price${missingPrices === 1 ? '' : 's'}`);
-  if (changedPrices) detailParts.push(`${changedPrices} price${changedPrices === 1 ? '' : 's'} changed`);
-  if (missingStore) detailParts.push('choose the trip store');
-  const detailEl = document.getElementById('trip-review-detail');
-  if (detailEl) {
-    detailEl.textContent = detailParts.length
-      ? detailParts.join(' · ')
-      : 'Known prices are prefilled. Edit only the exceptions.';
-  }
-
-  const status = document.getElementById('trip-review-status');
-  if (!status) return;
-  if (missingPrices) {
-    status.className = 'trip-review-warning';
-    status.innerHTML = `<strong>${missingPrices} item${missingPrices === 1 ? '' : 's'} need${missingPrices === 1 ? 's' : ''} prices</strong>
-      <p>You can add them now or finish and record them later.</p>`;
-  } else if (missingStore) {
-    status.className = 'trip-review-warning';
-    status.innerHTML = '<strong>Choose the trip store</strong><p>Provista applies it to every purchased item once.</p>';
-  } else {
-    status.className = 'trip-review-ready';
-    status.textContent = 'All item prices are accounted for.';
-  }
-}
-
-async function finishShoppingTrip() {
-  const button = document.getElementById('btn-finish-trip');
-  if (button) { button.disabled = true; button.textContent = 'Finishing…'; }
-  if (!(await settlePendingCheckWrites())) {
-    if (button) { button.disabled = false; button.textContent = 'Finish trip'; }
-    showToast('One check-off could not be saved. Review the list and try again.');
-    return;
-  }
-  const checkedItems = listState.items.filter(item => item.checked);
-  const purchases = [];
-  const storeSelect = document.getElementById('trip-store-select');
-  const storeId = storeSelect?.value || null;
+async function finishParentShoppingTrip() {
+  const button = document.getElementById('parent-finish-shopping');
+  const storeId = document.getElementById('parent-trip-store')?.value || null;
   if (!storeId) {
-    showToast('Choose the store for this trip');
-    storeSelect?.focus();
-    if (button) { button.disabled = false; button.textContent = 'Finish trip'; }
+    showToast('Choose where you are shopping');
+    document.getElementById('parent-trip-store')?.focus();
     return;
   }
+  if (button) { button.disabled = true; button.textContent = 'Finishing…'; }
 
-  for (const item of checkedItems) {
-    const row = document.querySelector(`.trip-review-item[data-list-item-id="${CSS.escape(item._id)}"]`);
-    if (!row) continue;
-    const input = row.querySelector('.trip-price-input');
-    const rawPrice = input.value.trim();
-    const price = rawPrice === '' ? null : Number(rawPrice);
-    if (price !== null && (!Number.isFinite(price) || price < 0)) {
-      showToast(`Enter a valid price for ${cartState.get(item._id)?.name || 'this item'}`);
-      input.focus();
-      if (button) { button.disabled = false; button.textContent = 'Finish trip'; }
-      return;
-    }
-    purchases.push({ listItemId: item._id, price, storeId });
+  if (!(await settlePendingCheckWrites())) {
+    if (button) { button.disabled = false; button.textContent = 'Finish shopping'; }
+    return showToast('One check-off could not be saved. Review the list and try again.');
   }
+
+  const checkedItems = listState.items.filter(item => item.checked);
+  const purchases = checkedItems.map(item => {
+    const entry = cartState.get(item._id);
+    const rawPrice = entry?.price;
+    const price = rawPrice === null || rawPrice === undefined ? null : Number(rawPrice);
+    return {
+      listItemId: item._id,
+      price: Number.isFinite(price) && price >= 0 ? price : null,
+      storeId
+    };
+  });
 
   try {
     const result = await api.shoppingList.complete({
       idempotencyKey: activeTripKey,
       purchases,
-      addToPantry: document.getElementById('trip-add-to-pantry')?.checked !== false
+      addToPantry: document.getElementById('parent-trip-add-to-pantry')?.checked !== false
     });
     checkedItems.forEach(item => cartState.delete(item._id));
     activeTripKey = null;
+    activeShoppingStoreId = null;
     closeModal();
     await loadShoppingListTab();
-    const details = [];
-    if (result.pantryUpdated) details.push('Pantry updated');
-    if (result.pendingPriceCount) details.push(`${result.pendingPriceCount} price${result.pendingPriceCount === 1 ? '' : 's'} pending review`);
-    if (result.missingPriceCount) details.push(`${result.missingPriceCount} still need${result.missingPriceCount === 1 ? 's' : ''} a price`);
-    const suffix = details.length ? ` · ${details.join(' · ')}` : '';
-    showToast(`Trip complete! ${result.itemCount} item${result.itemCount === 1 ? '' : 's'} · ${formatCurrency(result.total)} added to Spend${suffix}`, 6000);
+    if (typeof loadDeferredPrices === 'function') void loadDeferredPrices();
+
+    const parts = [`${result.itemCount} item${result.itemCount === 1 ? '' : 's'} finished`];
+    if (result.pantryUpdated) parts.push('Pantry updated');
+    if (result.missingPriceCount) parts.push(`${result.missingPriceCount} price${result.missingPriceCount === 1 ? '' : 's'} to review later`);
+    else parts.push(`${formatCurrency(result.total)} added to Spending`);
+    showToast(parts.join(' · '), 6000);
   } catch (err) {
-    handleError(err, 'Failed to finish shopping trip');
-    if (button) { button.disabled = false; button.textContent = 'Finish trip'; }
+    handleError(err, 'Could not finish shopping');
+    if (button) { button.disabled = false; button.textContent = 'Finish shopping'; }
   }
 }
 
-// =============================================================
-// List item CRUD
-// =============================================================
-
 async function removeListItem(id) {
   const item = listState.items.find(entry => entry._id === id);
-  const name = item?.itemId?.name || 'this item';
-  if (!confirm(`Remove ${name} from the shopping list?`)) return;
+  const name = item?.itemId?.name || 'This item';
+  const confirmed = await confirmAction({
+    title: 'Remove from list?',
+    message: `${name} will be removed from this shopping list. Pantry and price history will not change.`,
+    confirmLabel: 'Remove from list'
+  });
+  if (!confirmed) return;
   try {
     await api.shoppingList.delete(id);
     cartState.delete(id);
-    listState.items = listState.items.filter(i => i._id !== id);
+    listState.items = listState.items.filter(entry => entry._id !== id);
+    if (!cartState.size) activeShoppingStoreId = null;
     renderShoppingList();
   } catch (err) {
     handleError(err, 'Failed to remove item');
   }
 }
 
-function openAddListItemModal() {
-  const storeOptions = listState.stores.map(s =>
-    `<option value="${escapeAttr(s._id)}">${escapeHtml(s.name)}</option>`
-  ).join('');
-
+function openAddListItemModal(initialName = '', options = {}) {
+  const storeOptions = listState.stores.map(store => `<option value="${escapeAttr(store._id)}">${escapeHtml(store.name)}</option>`).join('');
   const bodyHTML = `
     <form id="add-list-form">
       <div class="form-group">
-        <label>Item</label>
+        <label for="list-item-input">What do you need?</label>
         <div class="autocomplete-wrap">
-          <input class="form-control" id="list-item-input" placeholder="Search or create item..." autocomplete="off" required />
+          <input class="form-control" id="list-item-input" placeholder="Search or create item…" autocomplete="off" required />
           <div class="autocomplete-dropdown" id="list-item-dropdown"></div>
         </div>
         <input type="hidden" id="list-item-id" />
       </div>
       ${inlineItemCreationFields('list')}
       <div class="form-group">
-        <label>Quantity</label>
+        <label for="list-qty">Quantity</label>
         <input class="form-control" type="number" id="list-qty" value="1" min="1" step="1" required />
       </div>
       ${storeOptions ? `
-      <div class="form-group">
-        <label>Preferred Store <span class="text-muted text-sm">(optional)</span></label>
-        <select class="form-control" id="list-store-select">
-          <option value="">Any store</option>
-          ${storeOptions}
-        </select>
-      </div>` : ''}
+        <div class="form-group">
+          <label for="list-store-select">Store preference <span class="text-muted text-sm">(optional planning hint)</span></label>
+          <select class="form-control" id="list-store-select">
+            <option value="">Any store</option>
+            ${storeOptions}
+          </select>
+          <p class="text-muted text-sm">You’ll record where you actually bought it when you finish shopping.</p>
+        </div>` : ''}
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Add to List</button>
+        <button type="submit" class="btn btn-primary">Add to list</button>
       </div>
     </form>`;
 
-  openModal('Add to Shopping List', bodyHTML);
-
+  openModal('Add with details', bodyHTML);
   const itemInput = document.getElementById('list-item-input');
   const itemDropdown = document.getElementById('list-item-dropdown');
   let selectedItemName = '';
@@ -650,24 +668,27 @@ function openAddListItemModal() {
       document.getElementById('list-item-id').value = item._id;
       clearInlineItemCreation('list');
     },
-    onCreateNew: (name) => {
+    onCreateNew: name => {
       selectedItemName = '';
       startInlineItemCreation('list', name, 'list-item-input', 'list-item-id');
     }
   });
   itemInput.addEventListener('input', () => {
     if (document.getElementById('list-new-item-mode')?.value === 'true') return;
-    if (selectedItemName && itemInput.value !== selectedItemName) {
-      document.getElementById('list-item-id').value = '';
-    }
+    if (selectedItemName && itemInput.value !== selectedItemName) document.getElementById('list-item-id').value = '';
   });
 
-  document.getElementById('add-list-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  if (initialName) {
+    itemInput.value = initialName;
+    itemInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  document.getElementById('add-list-form').addEventListener('submit', async event => {
+    event.preventDefault();
     let itemId = document.getElementById('list-item-id').value;
-    const qty = parseInt(document.getElementById('list-qty').value);
+    const qty = parseInt(document.getElementById('list-qty').value, 10);
     const storeId = document.getElementById('list-store-select')?.value || null;
-    const submit = formSubmitButton(e.target);
+    const submit = formSubmitButton(event.target);
     submit.disabled = true;
     submit.textContent = 'Adding…';
     try {
@@ -678,28 +699,32 @@ function openAddListItemModal() {
         itemId = created._id;
       }
       await api.shoppingList.add({ itemId, quantity: qty, ...(storeId ? { storeId } : {}) });
+      const addedName = itemInput.value.trim();
       closeModal();
-      showToast('Added to list');
+      showToast(`${addedName || 'Item'} added to list`);
       await loadShoppingListTab();
+      options.onAdded?.({ itemId, name: addedName, quantity: qty });
     } catch (err) {
       handleError(err, 'Failed to add item');
       submit.disabled = false;
-      submit.textContent = 'Add to List';
+      submit.textContent = 'Add to list';
     }
   });
 }
 
 function openStorePickerForItem(id) {
-  const item = listState.items.find(i => i._id === id);
+  const item = listState.items.find(entry => entry._id === id);
   if (!item) return;
-  const currentStoreId = item.storeId?._id || item.storeId || '';
-  const options = listState.stores.map(s =>
-    `<option value="${escapeAttr(s._id)}"${s._id === currentStoreId ? ' selected' : ''}>${escapeHtml(s.name)}</option>`
+  const currentStoreId = stringId(item.storeId);
+  const options = listState.stores.map(store =>
+    `<option value="${escapeAttr(store._id)}"${stringId(store) === currentStoreId ? ' selected' : ''}>${escapeHtml(store.name)}</option>`
   ).join('');
 
-  openModal('Preferred Store', `
+  openModal('Store preference', `
     <form id="store-picker-form">
+      <p class="text-muted text-sm">This is a planning hint. Finish shopping records the store where you actually bought the item.</p>
       <div class="form-group">
+        <label for="store-picker-select">Prefer to buy this at</label>
         <select class="form-control" id="store-picker-select">
           <option value="">Any store</option>
           ${options}
@@ -707,43 +732,51 @@ function openStorePickerForItem(id) {
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="submit" class="btn btn-primary">Save preference</button>
       </div>
     </form>`);
 
-  document.getElementById('store-picker-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  document.getElementById('store-picker-form').addEventListener('submit', async event => {
+    event.preventDefault();
     const storeId = document.getElementById('store-picker-select').value || null;
     try {
-      await api.shoppingList.update(id, { storeId: storeId || null });
-      const store = storeId ? listState.stores.find(s => s._id === storeId) : null;
-      item.storeId = store || null;
+      await api.shoppingList.update(id, { storeId });
+      item.storeId = storeId ? listState.stores.find(store => stringId(store) === storeId) : null;
       closeModal();
       renderShoppingList();
     } catch (err) {
-      handleError(err, 'Failed to update store');
+      handleError(err, 'Failed to update store preference');
     }
   });
+}
+
+function updateListFilterDot() {
+  const active = listState.filter.storeId || listState.filter.category;
+  const dot = document.getElementById('list-filter-dot');
+  if (dot) dot.style.display = active ? '' : 'none';
+}
+
+function clearListFilter() {
+  listState.filter = { storeId: null, category: null };
+  renderShoppingList();
 }
 
 function openListFilterSheet() {
   const f = listState.filter;
   const stores = listState.stores;
-  const categories = [...new Set(listState.items.map(i => i.itemId?.category).filter(Boolean))].sort();
-
-  const storeChips = stores.map(s =>
-    `<button class="filter-chip${f.storeId === s._id ? ' selected' : ''}" data-store-id="${escapeAttr(s._id)}" onclick="toggleListFilterStore(this)">${escapeHtml(s.name)}</button>`
+  const categories = [...new Set(listState.items.map(item => item.itemId?.category).filter(Boolean))].sort();
+  const storeChips = stores.map(store =>
+    `<button class="filter-chip${f.storeId === stringId(store) ? ' selected' : ''}" data-store-id="${escapeAttr(store._id)}" onclick="toggleListFilterStore(this)">${escapeHtml(store.name)}</button>`
   ).join('');
-  const catChips = categories.map(c =>
-    `<button class="filter-chip${f.category === c ? ' selected' : ''}" data-cat="${escapeAttr(c)}" onclick="toggleListFilterCat(this)">${escapeHtml(c)}</button>`
+  const catChips = categories.map(category =>
+    `<button class="filter-chip${f.category === category ? ' selected' : ''}" data-cat="${escapeAttr(category)}" onclick="toggleListFilterCat(this)">${escapeHtml(category)}</button>`
   ).join('');
 
   document.getElementById('filter-sheet-title').textContent = 'Filter List';
   document.getElementById('filter-sheet-body').innerHTML = `
-    ${stores.length ? `<div><div class="filter-section-label">Store</div><div class="filter-chips">${storeChips}</div></div>` : ''}
+    ${stores.length ? `<div><div class="filter-section-label">Store preference</div><div class="filter-chips">${storeChips}</div></div>` : ''}
     ${categories.length ? `<div><div class="filter-section-label">Category</div><div class="filter-chips">${catChips}</div></div>` : ''}
-    ${!stores.length && !categories.length ? '<p class="text-muted text-sm">No stores or categories to filter by.</p>' : ''}
-  `;
+    ${!stores.length && !categories.length ? '<p class="text-muted text-sm">No stores or categories to filter by.</p>' : ''}`;
 
   document.getElementById('filter-sheet-clear').onclick = () => {
     listState.filter = { storeId: null, category: null };
@@ -754,12 +787,11 @@ function openListFilterSheet() {
     closeListFilterSheet();
     renderShoppingList();
   };
-
   const overlay = document.getElementById('filter-sheet-overlay');
   const closeAndApply = () => { closeListFilterSheet(); renderShoppingList(); };
   activateDialogSurface(overlay, document.getElementById('filter-sheet'), document.getElementById('filter-sheet-done'), closeAndApply);
-  overlay.onclick = (e) => {
-    if (e.target === overlay) closeAndApply();
+  overlay.onclick = event => {
+    if (event.target === overlay) closeAndApply();
   };
 }
 
@@ -767,131 +799,143 @@ function closeListFilterSheet() {
   deactivateDialogSurface(document.getElementById('filter-sheet-overlay'), document.getElementById('filter-sheet'));
 }
 
-function toggleListFilterStore(btn) {
-  const id = btn.dataset.storeId;
-  const wasSelected = btn.classList.contains('selected');
-  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
+function toggleListFilterStore(button) {
+  const id = button.dataset.storeId;
+  const wasSelected = button.classList.contains('selected');
+  button.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(candidate => candidate.classList.remove('selected'));
   listState.filter.storeId = wasSelected ? null : id;
-  if (!wasSelected) btn.classList.add('selected');
+  if (!wasSelected) button.classList.add('selected');
 }
 
-function toggleListFilterCat(btn) {
-  const cat = btn.dataset.cat;
-  const wasSelected = btn.classList.contains('selected');
-  btn.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(b => b.classList.remove('selected'));
-  listState.filter.category = wasSelected ? null : cat;
-  if (!wasSelected) btn.classList.add('selected');
+function toggleListFilterCat(button) {
+  const category = button.dataset.cat;
+  const wasSelected = button.classList.contains('selected');
+  button.closest('.filter-chips').querySelectorAll('.filter-chip').forEach(candidate => candidate.classList.remove('selected'));
+  listState.filter.category = wasSelected ? null : category;
+  if (!wasSelected) button.classList.add('selected');
 }
-
-// =============================================================
-// Deselect All
-// =============================================================
 
 async function deselectAll() {
-  const checked = listState.items.filter(i => i.checked);
-  if (!checked.length) { showToast('No checked items'); return; }
+  const checked = listState.items.filter(item => item.checked);
+  if (!checked.length) return showToast('No purchased items to uncheck');
   checked.forEach(item => handleListItemCheck(item._id, false));
-  if (await settlePendingCheckWrites()) showToast('All items unchecked');
+  if (await settlePendingCheckWrites()) showToast('Purchased items unchecked');
 }
 
 async function removeCheckedWithoutRecording(event) {
   const count = listState.items.filter(item => item.checked).length;
-  if (!count) { showToast('No checked items'); return; }
-  if (!confirm(`Remove ${count} checked item${count === 1 ? '' : 's'} without updating Pantry, Spend, or price history?`)) return;
+  if (!count) return showToast('No purchased items');
+  const confirmed = await confirmAction({
+    title: 'Remove without recording?',
+    message: `${count} purchased item${count === 1 ? '' : 's'} will leave the list without updating Pantry, Spending, or price history.`,
+    confirmLabel: 'Remove without recording'
+  });
+  if (!confirmed) return;
   const button = event?.currentTarget;
   if (button) button.disabled = true;
   try {
-    if (!(await settlePendingCheckWrites())) {
-      showToast('A check-off could not be saved. Review the list and try again.');
-      return;
-    }
+    if (!(await settlePendingCheckWrites())) return showToast('A check-off could not be saved. Review the list and try again.');
     listState.items.filter(item => item.checked).forEach(item => cartState.delete(item._id));
     await api.shoppingList.clear(true);
+    activeShoppingStoreId = null;
     await loadShoppingListTab();
-    showToast('Checked items removed without recording');
+    showToast('Purchased items removed without recording');
   } catch (err) {
-    handleError(err, 'Failed to remove checked items');
+    handleError(err, 'Failed to remove purchased items');
   } finally {
     if (button) button.disabled = false;
   }
 }
 
-// =============================================================
-// Low Stock Badge & Review Sheet
-// =============================================================
-
-async function loadLowStockBadge() {
-  const btn = document.getElementById('btn-low-stock');
-  const countEl = document.getElementById('low-stock-count');
-  if (!btn) return;
+async function emptyShoppingList(event) {
+  if (!listState.items.length) return showToast('List is already empty');
+  const confirmed = await confirmAction({
+    title: 'Empty the shopping list?',
+    message: 'Every item will be removed from this list. Pantry, Spending, and price history will not change.',
+    confirmLabel: 'Empty list'
+  });
+  if (!confirmed) return;
+  const button = event?.currentTarget;
+  if (button) button.disabled = true;
   try {
-    const items = await api.request('GET', '/inventory/low-stock');
-    const count = items.length;
-    if (count > 0) {
-      btn.style.display = '';
-      if (countEl) countEl.textContent = count;
-    } else {
-      btn.style.display = 'none';
-    }
-    btn._lowStockItems = items;
-  } catch (_) {
-    btn.style.display = 'none';
+    await settlePendingCheckWrites();
+    cartState.clear();
+    activeShoppingStoreId = null;
+    await api.shoppingList.clear(false);
+    await loadShoppingListTab();
+    showToast('Shopping list emptied');
+  } catch (err) {
+    handleError(err, 'Failed to empty list');
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
-function openLowStockReview() {
-  const btn = document.getElementById('btn-low-stock');
-  const items = btn?._lowStockItems || [];
-  if (!items.length) { showToast('No low stock items'); return; }
+async function loadLowStockBadge() {
+  const button = document.getElementById('btn-low-stock');
+  const countElement = document.getElementById('low-stock-count');
+  if (!button) return;
+  try {
+    const items = await api.request('GET', '/inventory/low-stock');
+    if (items.length) {
+      button.style.display = '';
+      if (countElement) countElement.textContent = items.length;
+    } else {
+      button.style.display = 'none';
+    }
+    button._lowStockItems = items;
+  } catch (_) {
+    button.style.display = 'none';
+  }
+}
 
-  // Get IDs already on the shopping list
-  const onListIds = new Set(listState.items.map(i => i.itemId?._id || i.itemId));
+function lowStockDetail(inv) {
+  const status = inv.stockStatus === 'out' ? 'Out' : 'Running low';
+  if (inv.trackingMode !== 'exact') return status;
+  const unit = inv.unit || inv.itemId?.unit || '';
+  const quantity = Number(inv.quantity) || 0;
+  const threshold = inv.lowStockThreshold;
+  if (threshold === null || threshold === undefined) return `${quantity}${unit ? ` ${unit}` : ''} left`;
+  return `${quantity}${unit ? ` ${unit}` : ''} left · low at ${threshold}${unit ? ` ${unit}` : ''}`;
+}
+
+function openLowStockReview() {
+  const items = document.getElementById('btn-low-stock')?._lowStockItems || [];
+  if (!items.length) return showToast('No low-stock items');
+  const onListIds = new Set(listState.items.map(item => stringId(item.itemId)));
 
   const bodyHTML = `
-    <p class="text-muted text-sm" style="margin-bottom:0.75rem">
-      Select items to add to your shopping list.
-    </p>
+    <p class="text-muted text-sm" style="margin-bottom:0.75rem">Choose low or out items to add. Items already on the List stay there.</p>
     <div id="low-stock-list">
       ${items.map(inv => {
-        const itemId = inv.itemId?._id || inv.itemId;
+        const itemId = stringId(inv.itemId);
         const name = inv.itemId?.name || 'Unknown';
-        const unit = inv.unit || inv.itemId?.unit || '';
         const alreadyOn = onListIds.has(itemId);
         return `
           <div class="card" style="margin-bottom:0.5rem">
             <div class="card-body">
-              <div class="card-title">${name}${inv.itemId?.brand ? ' <span class="text-muted text-sm">(' + escapeHtml(inv.itemId.brand) + ')</span>' : ''}</div>
-              <div class="card-subtitle">
-                ${inv.quantity} / ${inv.lowStockThreshold} ${unit} remaining
-                ${alreadyOn ? '<span class="badge badge-no-data">Already on list</span>' : ''}
-              </div>
+              <div class="card-title">${escapeHtml(name)}</div>
+              <div class="card-subtitle">${escapeHtml(lowStockDetail(inv))}</div>
             </div>
-            <label class="low-stock-choice">
-              <input type="checkbox" class="low-stock-check" data-id="${itemId}"
-                ${alreadyOn ? 'checked' : ''} aria-label="Add ${escapeAttr(name)} to the shopping list" />
-            </label>
+            ${alreadyOn
+              ? '<span class="low-stock-on-list">On list ✓</span>'
+              : `<label class="low-stock-choice"><input type="checkbox" class="low-stock-check" data-id="${escapeAttr(itemId)}" aria-label="Add ${escapeAttr(name)} to the shopping list" /></label>`}
           </div>`;
       }).join('')}
     </div>
     <div class="form-actions" style="margin-top:0.75rem">
-      <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="btn-add-low-stock">Add Selected to List</button>
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary" id="btn-add-low-stock">Add selected to list</button>
     </div>`;
 
-  openModal('Low Stock Review', bodyHTML);
-
+  openModal('Add low-stock items', bodyHTML);
   document.getElementById('btn-add-low-stock').addEventListener('click', async () => {
-    const checks = document.querySelectorAll('.low-stock-check:checked');
-    const toAdd = [];
-    checks.forEach(cb => {
-      const itemId = cb.dataset.id;
-      if (!onListIds.has(itemId)) toAdd.push(itemId);
-    });
+    const toAdd = [...document.querySelectorAll('.low-stock-check:checked')].map(input => input.dataset.id);
     if (!toAdd.length) { closeModal(); return; }
     try {
       await Promise.all(toAdd.map(itemId => api.shoppingList.add({ itemId, quantity: 1 })));
       closeModal();
-      showToast(`Added ${toAdd.length} item${toAdd.length !== 1 ? 's' : ''} to list`);
+      showToast(`Added ${toAdd.length} item${toAdd.length === 1 ? '' : 's'} to list`);
       await loadShoppingListTab();
     } catch (err) {
       handleError(err, 'Failed to add items');
@@ -899,15 +943,11 @@ function openLowStockReview() {
   });
 }
 
-// =============================================================
-// Init
-// =============================================================
-
 function initShoppingListTab() {
-  // Start hidden; renderShoppingList() reveals list-wide actions when needed.
-  document.getElementById('btn-clear-all').style.display = 'none';
+  const clearAll = document.getElementById('btn-clear-all');
+  if (clearAll) clearAll.style.display = 'none';
 
-  document.getElementById('btn-add-list-item').addEventListener('click', openAddListItemModal);
+  document.getElementById('btn-add-list-item')?.addEventListener('click', () => openAddListItemModal());
   document.getElementById('btn-list-filter')?.addEventListener('click', openListFilterSheet);
 
   const scanListBtn = document.getElementById('btn-scan-list-item');
@@ -916,10 +956,10 @@ function initShoppingListTab() {
       scanListBtn.style.display = 'none';
     } else {
       scanListBtn.addEventListener('click', () => {
-        if (!window.BarcodeScanner) { showToast('Scanner unavailable. Try reloading the page.', 3000); return; }
-        BarcodeScanner.open(async (upc) => {
+        if (!window.BarcodeScanner) return showToast('Scanner unavailable. Try reloading the page.', 3000);
+        BarcodeScanner.open(async upc => {
           if (!upc) return;
-          await handleBarcodeResult(upc, async (item) => {
+          await handleBarcodeResult(upc, async item => {
             try {
               await api.shoppingList.add({ itemId: item._id, quantity: 1 });
               await loadShoppingListTab();
@@ -936,10 +976,9 @@ function initShoppingListTab() {
   document.getElementById('btn-deselect-all')?.addEventListener('click', deselectAll);
   document.getElementById('btn-remove-checked')?.addEventListener('click', removeCheckedWithoutRecording);
   document.getElementById('btn-done-shopping')?.addEventListener('click', openDoneShoppingReview);
-
   document.getElementById('btn-low-stock')?.addEventListener('click', openLowStockReview);
+  clearAll?.addEventListener('click', emptyShoppingList);
 
-  // Cart bar expand/collapse
   document.getElementById('cart-bar-summary')?.addEventListener('click', () => {
     const detail = document.getElementById('cart-bar-detail');
     const summary = document.getElementById('cart-bar-summary');
@@ -949,23 +988,5 @@ function initShoppingListTab() {
     summary?.setAttribute('aria-expanded', String(!open));
     document.querySelector('.cart-bar-chevron')?.classList.toggle('expanded', !open);
     if (!open) renderCartDetail(detail);
-  });
-
-  document.getElementById('btn-clear-all').addEventListener('click', async (e) => {
-    if (!listState.items.length) { showToast('List is already empty'); return; }
-    if (!confirm('Clear the entire shopping list?')) return;
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    try {
-      await settlePendingCheckWrites();
-      cartState.clear();
-      await api.shoppingList.clear(false);
-      await loadShoppingListTab();
-      showToast('List cleared');
-    } catch (err) {
-      handleError(err, 'Failed to clear list');
-    } finally {
-      btn.disabled = false;
-    }
   });
 }

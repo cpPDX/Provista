@@ -3,6 +3,9 @@ const mongoose = require('mongoose');
 const inventoryItemSchema = new mongoose.Schema({
   householdId: { type: mongoose.Schema.Types.ObjectId, ref: 'Household', required: true },
   itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
+  // Simple tracking is the default parent-facing model: Have / Running low / Out.
+  // Exact tracking makes quantity authoritative and derives status from quantity + threshold.
+  trackingMode: { type: String, enum: ['simple', 'exact'], default: 'simple' },
   quantity: { type: Number, required: true, default: 0 },
   stockStatus: { type: String, enum: ['have', 'low', 'out'], default: 'have' },
   unit: { type: String, trim: true },

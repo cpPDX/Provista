@@ -6,6 +6,7 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
 const STOCK_STATUSES = new Set(['have', 'low', 'out']);
+const TRACKING_MODES = new Set(['simple', 'exact']);
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
 
 function parseNonNegative(value, field) {
@@ -18,15 +19,38 @@ function parseNonNegative(value, field) {
   return parsed;
 }
 
+function effectiveTrackingMode(item) {
+  if (item?.trackingMode === 'exact') return 'exact';
+  if (item?.lowStockThreshold != null) return 'exact';
+  return 'simple';
+}
+
 function derivedStatus(item) {
+  if (effectiveTrackingMode(item) === 'exact') {
+    if (Number(item.quantity) <= 0) return 'out';
+    if (item.lowStockThreshold != null && Number(item.quantity) <= Number(item.lowStockThreshold)) return 'low';
+    return 'have';
+  }
   if (item.stockStatus && STOCK_STATUSES.has(item.stockStatus)) return item.stockStatus;
-  if (Number(item.quantity) <= 0) return 'out';
-  if (item.lowStockThreshold != null && Number(item.quantity) <= Number(item.lowStockThreshold)) return 'low';
-  return 'have';
+  return Number(item.quantity) <= 0 ? 'out' : 'have';
 }
 
 function publicInventoryItem(item) {
-  return { ...item, stockStatus: derivedStatus(item) };
+  return {
+    ...item,
+    trackingMode: effectiveTrackingMode(item),
+    stockStatus: derivedStatus(item)
+  };
+}
+
+function parseTrackingMode(value, fallback = 'simple') {
+  if (value === undefined || value === null || value === '') return fallback;
+  if (!TRACKING_MODES.has(value)) {
+    const error = new Error('trackingMode must be simple or exact');
+    error.status = 400;
+    throw error;
+  }
+  return value;
 }
 
 router.get('/low-stock', requireAuth, async (req, res) => {
@@ -36,9 +60,7 @@ router.get('/low-stock', requireAuth, async (req, res) => {
       .lean();
     const low = items
       .map(publicInventoryItem)
-      .filter(item => item.stockStatus === 'low' || item.stockStatus === 'out' || (
-        item.lowStockThreshold != null && Number(item.quantity) <= Number(item.lowStockThreshold)
-      ));
+      .filter(item => item.stockStatus === 'low' || item.stockStatus === 'out');
     res.json(low);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
@@ -62,7 +84,6 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// Routine Pantry changes are household collaboration, not administration.
 router.post('/', requireAuth, async (req, res) => {
   try {
     const { itemId, unit, notes, lowStockThreshold } = req.body;
@@ -75,33 +96,54 @@ router.post('/', requireAuth, async (req, res) => {
     if (requestedStatus !== undefined && !STOCK_STATUSES.has(requestedStatus)) {
       return res.status(400).json({ error: 'stockStatus must be have, low, or out' });
     }
-    let quantity = req.body.quantity === undefined ? undefined : parseNonNegative(req.body.quantity, 'quantity');
-    const threshold = lowStockThreshold === undefined || lowStockThreshold === null
-      ? lowStockThreshold
-      : parseNonNegative(lowStockThreshold, 'lowStockThreshold');
-    if (requestedStatus === 'out') quantity = 0;
-    if ((requestedStatus === 'have' || requestedStatus === 'low') && (quantity === undefined || quantity <= 0)) quantity = 1;
 
-    const setFields = { lastUpdated: new Date(), lastUpdatedBy: req.user._id };
-    if (quantity !== undefined) setFields.quantity = quantity;
-    if (requestedStatus !== undefined) setFields.stockStatus = requestedStatus;
-    else if (quantity !== undefined) {
-      setFields.stockStatus = quantity <= 0
+    // Backward compatibility: older clients represented exact tracking by
+    // sending quantity/threshold without a stockStatus or trackingMode.
+    const legacyExactIntent = req.body.trackingMode === undefined &&
+      requestedStatus === undefined &&
+      (req.body.quantity !== undefined || lowStockThreshold !== undefined);
+    const trackingMode = parseTrackingMode(req.body.trackingMode, legacyExactIntent ? 'exact' : 'simple');
+    const threshold = lowStockThreshold === undefined || lowStockThreshold === null || lowStockThreshold === ''
+      ? null
+      : parseNonNegative(lowStockThreshold, 'lowStockThreshold');
+
+    let quantity = req.body.quantity === undefined ? 1 : parseNonNegative(req.body.quantity, 'quantity');
+    let stockStatus;
+    let savedThreshold = threshold;
+
+    if (trackingMode === 'exact') {
+      if (requestedStatus !== undefined) {
+        return res.status(400).json({ error: 'Exact tracking derives stock status from quantity and the low-stock threshold' });
+      }
+      stockStatus = quantity <= 0
         ? 'out'
         : (threshold != null && quantity <= threshold ? 'low' : 'have');
+    } else {
+      stockStatus = requestedStatus || 'have';
+      savedThreshold = null;
+      quantity = stockStatus === 'out' ? 0 : Math.max(quantity || 1, 1);
     }
+
+    const setFields = {
+      trackingMode,
+      quantity,
+      stockStatus,
+      lowStockThreshold: savedThreshold,
+      lastUpdated: new Date(),
+      lastUpdatedBy: req.user._id
+    };
     if (unit !== undefined) setFields.unit = String(unit || '').trim();
     if (notes !== undefined) setFields.notes = String(notes || '').trim();
-    if (lowStockThreshold !== undefined) setFields.lowStockThreshold = threshold;
 
-    const insertFields = { householdId: req.user.householdId, itemId };
-    if (quantity === undefined) insertFields.quantity = 1;
-    if (setFields.stockStatus === undefined) insertFields.stockStatus = 'have';
     const inv = await InventoryItem.findOneAndUpdate(
       { householdId: req.user.householdId, itemId },
-      { $set: setFields, $setOnInsert: insertFields },
+      {
+        $set: setFields,
+        $setOnInsert: { householdId: req.user.householdId, itemId }
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
     ).populate('itemId', 'name brand category unit size isOrganic');
+
     res.status(201).json(publicInventoryItem(inv.toObject()));
   } catch (err) {
     res.status(err.status || 400).json({ error: serverErr(err) });
@@ -117,23 +159,39 @@ router.put('/:id', requireAuth, async (req, res) => {
     if (requestedStatus !== undefined && !STOCK_STATUSES.has(requestedStatus)) {
       return res.status(400).json({ error: 'stockStatus must be have, low, or out' });
     }
-    if (req.body.quantity !== undefined) inv.quantity = parseNonNegative(req.body.quantity, 'quantity');
-    if (req.body.lowStockThreshold !== undefined) {
-      inv.lowStockThreshold = req.body.lowStockThreshold === null
-        ? null
-        : parseNonNegative(req.body.lowStockThreshold, 'lowStockThreshold');
-    }
+
+    const currentMode = effectiveTrackingMode(inv);
+    const legacyExactIntent = req.body.trackingMode === undefined &&
+      requestedStatus === undefined &&
+      (req.body.quantity !== undefined || req.body.lowStockThreshold !== undefined);
+    const trackingMode = parseTrackingMode(req.body.trackingMode, legacyExactIntent ? 'exact' : currentMode);
+    const switchingToSimple = currentMode !== 'simple' && trackingMode === 'simple';
+
     if (req.body.unit !== undefined) inv.unit = String(req.body.unit || '').trim();
     if (req.body.notes !== undefined) inv.notes = String(req.body.notes || '').trim();
 
-    if (requestedStatus !== undefined) inv.stockStatus = requestedStatus;
-    else if (req.body.quantity !== undefined || req.body.lowStockThreshold !== undefined) {
+    if (trackingMode === 'exact') {
+      if (requestedStatus !== undefined) {
+        return res.status(400).json({ error: 'Exact tracking derives stock status from quantity and the low-stock threshold' });
+      }
+      if (req.body.quantity !== undefined) inv.quantity = parseNonNegative(req.body.quantity, 'quantity');
+      if (req.body.lowStockThreshold !== undefined) {
+        inv.lowStockThreshold = req.body.lowStockThreshold === null || req.body.lowStockThreshold === ''
+          ? null
+          : parseNonNegative(req.body.lowStockThreshold, 'lowStockThreshold');
+      }
+      inv.trackingMode = 'exact';
       inv.stockStatus = inv.quantity <= 0
         ? 'out'
         : (inv.lowStockThreshold != null && inv.quantity <= inv.lowStockThreshold ? 'low' : 'have');
+    } else {
+      const nextStatus = requestedStatus || (switchingToSimple ? derivedStatus(inv) : inv.stockStatus) || 'have';
+      inv.trackingMode = 'simple';
+      inv.stockStatus = nextStatus;
+      inv.lowStockThreshold = null;
+      inv.quantity = nextStatus === 'out' ? 0 : Math.max(Number(inv.quantity) || 1, 1);
     }
-    if (inv.stockStatus === 'out') inv.quantity = 0;
-    if ((inv.stockStatus === 'have' || inv.stockStatus === 'low') && inv.quantity <= 0) inv.quantity = 1;
+
     inv.lastUpdated = new Date();
     inv.lastUpdatedBy = req.user._id;
     await inv.save();
@@ -144,7 +202,6 @@ router.put('/:id', requireAuth, async (req, res) => {
   }
 });
 
-// Removing the Pantry record entirely remains an administrative catalog action.
 router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const inv = await InventoryItem.findOneAndDelete({ _id: req.params.id, householdId: req.user.householdId });

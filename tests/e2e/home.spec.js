@@ -33,10 +33,18 @@ test.describe('Home / Today', () => {
     await expect(page.locator('[data-insight-tab="spend"]')).toBeVisible();
   });
 
-  test('quick add opens the shopping-list capture flow', async ({ page }) => {
+  test('standalone Quick add opens the guided List capture flow', async ({ page }) => {
     await page.click('#home-quick-add');
     await expect(page.locator('#tab-list')).toHaveClass(/active/);
-    await expect(page.locator('#modal-overlay')).toBeVisible();
+    await expect(page.locator('#modal-title')).toHaveText('Add with details');
+  });
+
+  test('empty What do we need Quick add has the same outcome', async ({ page }) => {
+    const card = page.locator('.home-card', { hasText: 'What do we need?' });
+    await expect(card.getByRole('button', { name: 'Quick add →' })).toBeVisible();
+    await card.getByRole('button', { name: 'Quick add →' }).click();
+    await expect(page.locator('#tab-list')).toHaveClass(/active/);
+    await expect(page.locator('#modal-title')).toHaveText('Add with details');
   });
 
   test('keeps the other Home cards useful when one endpoint fails', async ({ page }) => {
@@ -45,12 +53,20 @@ test.describe('Home / Today', () => {
         .filter(key => key.includes('provista_home_') && key.endsWith('_lowStock'))
         .forEach(key => localStorage.removeItem(key));
     });
-    await page.route('**/api/inventory/low-stock', route => route.fulfill({
-      status: 503,
-      contentType: 'application/json',
-      body: JSON.stringify({ error: 'Temporarily unavailable' })
-    }));
+
+    let releaseLowStockRequest;
+    const lowStockRequestSeen = new Promise(resolve => { releaseLowStockRequest = resolve; });
+    await page.route('**/api/inventory/low-stock', async route => {
+      releaseLowStockRequest();
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Temporarily unavailable' })
+      });
+    });
+
     await page.reload();
+    await lowStockRequestSeen;
 
     await expect(page.locator('.home-card')).toHaveCount(4);
     await expect(page.locator('.home-card', { hasText: 'Couldn’t load this update' })).toHaveCount(1);

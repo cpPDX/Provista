@@ -1,303 +1,377 @@
 # Provista
 
-A browser-based grocery price tracker for households — log prices, scan barcodes, compare stores, and see where your grocery budget is actually going.
+**A household grocery planning and shopping assistant built for busy families.**
+
+Provista helps a household answer the practical questions that come up every day:
+
+- What are we eating?
+- What do we need?
+- What are we running low on?
+- What should I do next?
+
+It brings meal planning, the shopping list, Pantry, purchase history, and grocery spending into one shared workflow. Price tracking still matters, but it supports the shopping experience instead of being the product's center of gravity.
+
+[![CI](https://github.com/cpPDX/Provista/actions/workflows/ci.yml/badge.svg)](https://github.com/cpPDX/Provista/actions/workflows/ci.yml)
 
 ---
 
-## The Problem
+## The Product
 
-Grocery prices change constantly, vary by store, and go on sale in unpredictable cycles. Most people have no idea whether the price they're paying for something is good, bad, or they missed a sale last week. And when you're shopping for a household, that knowledge lives in one person's head (if anywhere).
+Provista is designed around the way a household actually moves through groceries rather than around the underlying database.
 
-**Common frustrations:**
-- "Was this cheaper at the other store?"
-- "I think this went on sale recently but I can't remember the price"
-- "We already have three of those at home — why did you buy more?"
-- "How much are we actually spending on groceries each month?"
+The main navigation is:
 
-## How We're Solving It
+**Home · Plan · List · Pantry · More**
 
-Provista gives households a shared, running log of prices — tied to specific stores, with sale prices, coupon tracking, and a price-per-unit breakdown so you can compare apples to apples (literally).
+### Home
 
-- **Barcode scanning** captures item details without manual entry
-- **Shopping list** defaults to the household’s usual store, shows price age, and suggests another stop only when the savings matter
-- **Spend analytics** break down monthly spend by category and store
-- **Pantry status** keeps Have · Running low · Out sustainable without forcing exact cupboard counts
-- **Household sharing** trusts routine Pantry and trip activity while reserving approval for standalone member price submissions or an optional strict-review setting
+A lightweight Today view surfaces the things that need attention without making the user hunt through the app:
+
+- tonight's meal
+- what is on the shopping list
+- low or out Pantry items
+- unfinished follow-up, such as prices deferred during shopping
+
+### Plan
+
+Plan meals for the household, keep notes about what a meal needs, reuse favorite meals, repeat meals, handle leftovers, and move needed ingredients toward the shopping list.
+
+### List
+
+Build a shared grocery list manually, through rapid capture, or by scanning a barcode. Items can carry a preferred store and known household pricing so the list can organize a realistic shopping trip without requiring the shopper to manage price data manually.
+
+Checking off an item is optimistic and immediate. Shopping should keep moving even when the network does not.
+
+For purchased items with known history, the shopper can **Use** the expected price, **Update price**, or choose **Later**. Missing prices never block checkout.
+
+### Finish shopping
+
+Completing a trip is the boundary between planning and household history. Provista can:
+
+- move purchased items into Pantry
+- record confirmed prices
+- update Spending
+- remove purchased items from the active list
+- preserve deferred prices for later review
+
+The trip's store is chosen once rather than repeated for every item. Known prices stay out of the way unless they need attention.
+
+### Pantry
+
+Pantry supports two levels of tracking:
+
+- **Simple:** Have · Running low · Out
+- **Exact:** optional quantities when precision is useful
+
+The simple model is intentional. Provista should still be useful when nobody wants to maintain a perfect inventory database.
+
+### Insights
+
+Prices and Spending live under **More → Insights**. They provide household history and purchasing context without dominating the core navigation.
 
 ---
 
-## Features
+## Product Principles
 
-- **Auth & Households** — JWT auth (httpOnly cookies), multi-user households with Owner/Admin/Member roles
-- **Invite System** — 6-character invite codes + QR codes; 48-hour expiry, admin-regeneratable
-- **Price Tracking** — Log prices per item per store with regular price, sale price, and coupon breakdown; compare stores; view trends over time
-- **Household trust** — Normal shopping-trip prices are trusted by default; households can opt into strict admin review
-- **Barcode Scanning** — Scan UPC/EAN barcodes to auto-populate item details via Open Food Facts; partial matches let you fill in gaps and save them for future scans
-- **Shopping List** — Practical usual-store trip grouping, price freshness, optimistic check-off, and one-step trip completion
-- **Spend Analytics** — Monthly spend totals with breakdowns by category and store
-- **Pantry** — Have / Running low / Out status and optional exact quantities, editable by every household member
-- **Item Catalog** — ~200 seeded common US grocery items per household; fully editable
-- **Account Settings** — Each user can update their name, email, and password
+A few rules guide the implementation:
+
+1. **Household tasks come before administration.** Routine actions should be obvious from their outcome.
+2. **Shopping interactions must be fast.** A check-off should never wait for a round trip to the server before visibly succeeding.
+3. **Price capture is useful, not mandatory.** The shopper can defer missing or changed prices and keep moving.
+4. **External prices are advisory.** A market observation is not proof of what the household paid.
+5. **Pantry should tolerate imperfect data.** Simple status tracking is a first-class workflow, not a degraded exact-inventory mode.
+6. **Shared household activity should feel collaborative.** Routine List, Pantry, meal, and trip actions should not create unnecessary admin work.
+
+---
+
+## Key Features
+
+- **Home / Today** - parent-oriented summary of meals, shopping, Pantry, and next actions
+- **Meal planning** - weekly plans, household participants, notes, favorites, repeat meals, leftovers, and copy-last-week workflows
+- **Shared shopping list** - rapid capture, quantities, preferred stores, barcode entry, optimistic check-off, and multi-stop shopping
+- **Finish Shopping** - records a completed trip and keeps Pantry, price history, Spend, and the List synchronized
+- **Deferred price review** - safely finish a trip with unknown prices and resolve them later from Home
+- **Pantry** - simple status or exact quantity tracking, with low/out prioritization
+- **Price history** - household-paid prices by item and store, including sales and coupons
+- **Spend analytics** - completed-trip totals broken down by month, category, and store
+- **External price observations** - optional Open Prices enrichment for reliably matched UPC/store combinations
+- **Barcode lookup** - local catalog first, then Open Food Facts for product metadata
+- **Households** - Owner/Admin/Member roles, invite codes, QR invites, and shared data
+- **Mobile-first UI** - responsive browser application with keyboard, screen-reader, reduced-motion, and iPhone safe-area coverage in CI
+- **Offline-aware client** - service worker, IndexedDB support, and queued handling for supported writes
+
+---
+
+## Pricing Data: An Important Boundary
+
+Provista deliberately separates **what the household paid** from **what an external source observed**.
+
+### `PriceEntry`
+
+A `PriceEntry` represents a price the household paid or explicitly submitted. It can feed household price history and, when attached to a completed shopping trip, Spending.
+
+### `PriceObservation`
+
+A `PriceObservation` is advisory data from an external provider. It is useful context, but it never becomes household spending by itself.
+
+The first external provider is [Open Prices](https://prices.openfoodfacts.org/). Provider integration is behind a registry/adapter boundary so additional sources can be added without changing the semantics of shopping trips or household price history.
+
+See [`docs/03-external-pricing.md`](docs/03-external-pricing.md) for the provider contract and matching rules.
+
+---
 
 ## Tech Stack
 
-- **Backend**: Node.js + Express
-- **Database**: MongoDB (Atlas free tier or local)
-- **Frontend**: Vanilla HTML/CSS/JavaScript — mobile-first, no frameworks, no build step
-- **Barcode**: ZXing (client-side, loaded on demand from CDN) + Open Food Facts public API
-- **Auth**: JWT stored in httpOnly cookies, bcrypt password hashing
+| Layer | Technology |
+|---|---|
+| Backend | Node.js 20.19+ · Express |
+| Database | MongoDB · Mongoose |
+| Frontend | Vanilla JavaScript · HTML · CSS |
+| Auth | JWT in httpOnly cookies · bcrypt |
+| Barcode | ZXing in the browser · Open Food Facts metadata |
+| External pricing | Open Prices / Open Food Facts ecosystem |
+| API tests | Jest · Supertest · mongodb-memory-server |
+| Browser tests | Playwright · Chromium mobile · WebKit/iPhone coverage |
+| Deployment | Railway + MongoDB Atlas |
+
+There is no frontend build step. Express serves the browser application directly from `public/`.
 
 ---
 
-## Setup
+## Quick Start
 
-### What You Need
+### Requirements
 
-**Sign up for (both free):**
-- [MongoDB Atlas](https://www.mongodb.com/atlas) — free M0 cluster for the database
-- [Railway](https://railway.app) — only if you want to host it online (optional; local is fine for home use)
+- Node.js **20.19 or newer**
+- npm
+- MongoDB locally or a MongoDB Atlas connection string
+- Git
 
-**Install on your PC:**
-- [Node.js 20.19+](https://nodejs.org) — download the LTS version
-- [Git](https://git-scm.com) — to clone the repo
-
----
-
-### MongoDB Atlas Setup
-
-1. Create a free account at [mongodb.com/atlas](https://www.mongodb.com/atlas)
-2. Create a new project and click **Build a Cluster** → choose **M0 Free Tier**
-3. Under **Database Access**: add a user with a username and password
-4. Under **Network Access**: add your IP address (or `0.0.0.0/0` to allow any IP while testing)
-5. Go to your cluster → **Connect** → **Drivers** → copy the connection string
-
-It looks like:
-```
-mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-```
-
-Add `/provista` before the `?` to set the database name:
-```
-mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/provista?retryWrites=true&w=majority
-```
-
----
-
-### Local Setup
+### Install
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/cppdx/provista.git
-cd provista
-
-# 2. Install dependencies
+git clone https://github.com/cpPDX/Provista.git
+cd Provista
 npm install
-
-# 3. Create environment file
+cp .env.example .env
 ```
 
-Create a `.env` file in the project root:
+Set at least `JWT_SECRET` in `.env`. If you are not running MongoDB locally, also set `MONGODB_URI`.
 
 ```env
-MONGODB_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/provista?retryWrites=true&w=majority
-JWT_SECRET=any-long-random-string-you-make-up
+MONGODB_URI=mongodb://localhost:27017/grocerytracker
 PORT=3000
+JWT_SECRET=replace-this-with-a-long-random-secret
+NODE_ENV=development
 APP_BASE_URL=http://localhost:3000
-# Configure these in production to deliver password-reset email:
-# RESEND_API_KEY=re_...
-# PASSWORD_RESET_FROM=Provista <no-reply@example.com>
 ```
 
-- `MONGODB_URI` — paste your Atlas connection string from above
-- `JWT_SECRET` — any long random string (e.g. `mySuperSecretKey12345abc`); used to sign login tokens
-- `PORT` — `3000` works fine locally
-- `APP_BASE_URL` — public origin used in password-reset links (for example, `https://provista.example.com`)
-- `RESEND_API_KEY` / `PASSWORD_RESET_FROM` — required in production to deliver password-reset email
+Start the app:
 
 ```bash
-# 4. Start the server
 npm start
+```
 
-# Or with auto-reload during development:
+For automatic server reload during development:
+
+```bash
 npm run dev
 ```
 
-Open **http://localhost:3000** in your browser.
+Open `http://localhost:3000`.
 
-**First run:** Register an account → Create a household. You'll be the Owner and ~200 seed grocery items load automatically.
+On first use, register an account and create a household. The household receives a starter grocery catalog and the registering user becomes its Owner.
+
+### Password-reset email
+
+Production password-reset delivery uses Resend:
+
+```env
+RESEND_API_KEY=re_...
+PASSWORD_RESET_FROM=Provista <no-reply@example.com>
+```
+
+### Optional Open Prices configuration
+
+Open Prices read access works without credentials. These variables are optional:
+
+```env
+OPEN_PRICES_BASE_URL=https://prices.openfoodfacts.org
+OPEN_PRICES_TIMEOUT_MS=5000
+OPEN_PRICES_USER_AGENT=Provista/1.0
+```
+
+The defaults are suitable for normal development.
 
 ---
 
-### Use It on Your Phone (Same Wi-Fi)
+## Testing
 
-Find your PC's local IP address (e.g. `192.168.1.50`) and open `http://192.168.1.50:3000` on your phone's browser. It's mobile-first and works well as a pinned web app — use "Add to Home Screen" from your browser menu.
+Run the API/unit suite:
 
----
+```bash
+npm test
+```
 
-### Invite Household Members
+Run only API tests:
 
-1. Go to **More → Household → Show Invite Code & QR**
-2. Share the 6-character code or QR code with family members
-3. They open the app, register, and enter the code to join your household
-4. New members start as **Member** role — owners can promote to Admin
+```bash
+npm run test:api
+```
 
----
+Run Playwright browser tests:
 
-## Roles
+```bash
+npm run test:e2e
+```
 
-| Role | Can do |
-|------|--------|
-| **Owner** | Everything — manage roles, household settings, and destructive catalog changes |
-| **Admin** | Manage catalog/stores, optional strict price review, and invite codes |
-| **Member** | Manage the List and routine Pantry status/quantities, add catalog items, and record trusted shopping-trip prices unless strict review is enabled |
+Run Playwright headed while debugging:
+
+```bash
+npm run test:e2e:headed
+```
+
+GitHub Actions runs syntax checks, the API suite, and critical browser workflows. Browser CI includes mobile Chromium coverage plus targeted WebKit/iPhone accessibility coverage.
 
 ---
 
 ## Deployment on Railway
 
-1. **Atlas setup** — follow the MongoDB Atlas steps above; whitelist `0.0.0.0/0` since Railway IPs are dynamic
+Provista is a standard Node service and does not need a frontend build pipeline.
 
-2. **Deploy to Railway**
-   - Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
-   - Select this repository — Railway auto-detects Node.js and runs `npm start`
+1. Create a MongoDB Atlas database.
+2. Connect the repository to a Railway service.
+3. Configure the required environment variables:
+   - `MONGODB_URI`
+   - `JWT_SECRET`
+   - `NODE_ENV=production`
+   - `APP_BASE_URL` set to the public application origin
+4. Configure `RESEND_API_KEY` and `PASSWORD_RESET_FROM` if password-reset email should be delivered.
+5. Deploy the desired branch. Railway runs `npm start`.
 
-3. **Set environment variables in Railway**
-   - `MONGODB_URI` — your Atlas connection string
-   - `JWT_SECRET` — your secret string
-   - `NODE_ENV` — set to `production` (enables secure cookies)
-   - `APP_BASE_URL` — your Railway public URL
-   - `RESEND_API_KEY` and `PASSWORD_RESET_FROM` — password-reset delivery credentials
-   - `PORT` is injected automatically; don't set it manually
+Railway supplies `PORT`; do not hard-code it in production.
 
-4. Push to the connected branch — Railway deploys automatically and gives you a public URL
+The server begins listening before MongoDB finishes connecting so the process can start cleanly in Railway. Deployment readiness should use:
+
+```text
+/api/health/ready
+```
 
 ---
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MONGODB_URI` | `mongodb://localhost:27017/provista` | MongoDB connection string |
-| `PORT` | `3000` | HTTP port (auto-set by Railway) |
-| `JWT_SECRET` | *(required)* | Long random secret for signing JWTs |
-| `NODE_ENV` | `development` | Set to `production` for secure cookies |
-| `APP_BASE_URL` | Request origin | Public origin placed in password-reset links |
-| `RESEND_API_KEY` | *(none)* | Resend API key; required for production reset-email delivery |
-| `PASSWORD_RESET_FROM` | *(none)* | Verified sender used for reset email |
+| Variable | Required | Default | Purpose |
+|---|---:|---|---|
+| `JWT_SECRET` | Yes | - | Signs authentication tokens; server exits if missing |
+| `MONGODB_URI` | Production | `mongodb://localhost:27017/grocerytracker` | MongoDB connection string |
+| `PORT` | No | `3000` | HTTP port; normally supplied by Railway |
+| `NODE_ENV` | No | `development` | Enables production cookie/proxy behavior when set to `production` |
+| `APP_BASE_URL` | Recommended | request origin | Origin used in password-reset links |
+| `RESEND_API_KEY` | For production reset email | - | Resend API key |
+| `PASSWORD_RESET_FROM` | For production reset email | - | Verified reset-email sender |
+| `OPEN_PRICES_BASE_URL` | No | `https://prices.openfoodfacts.org` | Open Prices service origin |
+| `OPEN_PRICES_TIMEOUT_MS` | No | `5000` | External pricing request timeout |
+| `OPEN_PRICES_USER_AGENT` | No | Provista identifier | User-Agent for Open Prices requests |
 
 ---
 
-## Project Structure
+## Roles
 
+| Role | Typical capabilities |
+|---|---|
+| **Owner** | Full household control, role management, settings, and destructive administrative actions |
+| **Admin** | Catalog/store administration, household settings, invites, and optional strict price review |
+| **Member** | Routine household work including List, Pantry, meals, item creation, and shopping-trip activity |
+
+Households can enable stricter review for submitted prices without forcing every normal household action through an approval queue.
+
+---
+
+## Architecture at a Glance
+
+```text
+Browser / PWA
+  public/js + public/css
+        │
+        ▼
+Express routes
+  auth · household · grocery · list · trips · pantry
+  meals · prices · external prices · spend · sync
+        │
+        ▼
+Service / domain logic
+  shopping-trip completion · external pricing adapters
+        │
+        ▼
+Mongoose models
+        │
+        ▼
+MongoDB
 ```
-├── server.js              # Express server, MongoDB connection
-├── models/
-│   ├── User.js
-│   ├── Household.js
-│   ├── HouseholdPerson.js
-│   ├── Item.js
-│   ├── Store.js
-│   ├── PriceEntry.js      # regularPrice, salePrice, couponAmount, finalPrice, pricePerUnit
-│   ├── InventoryItem.js
-│   ├── ShoppingListItem.js
-│   ├── ShoppingTrip.js      # completed trip totals and purchased-item snapshots
-│   ├── MealPlan.js          # collaborative weekly household plans
-│   └── FavoriteMeal.js      # reusable meals with usual shopping notes
-├── routes/
-│   ├── auth.js            # Register, login, logout, profile, password
-│   ├── household.js       # Members, roles, invite codes, settings
-│   ├── items.js
-│   ├── stores.js
-│   ├── prices.js          # Price CRUD, compare, history, pending approval
-│   ├── barcode.js         # UPC lookup via local catalog + Open Food Facts
-│   ├── inventory.js
-│   ├── shoppingList.js
-│   ├── mealPlan.js        # weekly plans, favorites, and copy-last-week
-│   └── spend.js
-├── middleware/
-│   └── auth.js            # requireAuth, requireAdmin, requireOwner
-├── utils/
-│   ├── seed.js            # seedHousehold() — called on household creation
-│   ├── upc.js             # UPC-A / EAN-13 / UPC-E normalization
-│   └── categoryMap.js     # Open Food Facts → local category mapping
-├── seeds/
-│   └── items.json         # ~200 seeded grocery items
-├── scripts/
-│   └── backfill-upcs.js   # One-time UPC backfill for seeded items
-└── public/
-    ├── index.html
-    ├── login.html
-    ├── css/
-    │   ├── style.css
-    │   └── auth.css
-    └── js/
-        ├── api.js          # Fetch wrapper for all API calls
-        ├── auth.js         # window.appAuth singleton
-        ├── ui.js           # Shared utilities, formatting, charting
-        ├── autocomplete.js # Reusable item + store autocomplete
-        ├── scanner.js      # Barcode scanner (ZXing) + confirmation flow
-        ├── prices.js       # Price log tab
-        ├── shoppingList.js # Shopping list tab
-        ├── spend.js        # Analytics tab
-        ├── more.js         # Pantry, catalog, stores, household, account
-        └── app.js          # Tab navigation + initialization
+
+Important domain records include:
+
+- `Household`, `User`, `HouseholdPerson`
+- `Item`, `Store`
+- `ShoppingListItem`, `ShoppingTrip`
+- `InventoryItem`
+- `MealPlan`, `FavoriteMeal`
+- `PriceEntry` for household price history
+- `PriceObservation` for external advisory prices
+
+The deeper model, route, auth, and data-flow reference lives in [`docs/01-architecture-and-data.md`](docs/01-architecture-and-data.md).
+
+---
+
+## Repository Layout
+
+```text
+Provista/
+├── server.js                  Express entry point and route mounting
+├── models/                    Mongoose domain models
+├── routes/                    HTTP API endpoints
+├── services/                  Domain services and provider adapters
+│   └── externalPricing/       External price provider registry + Open Prices
+├── middleware/                Auth, authorization, and security middleware
+├── utils/                     Seeding, UPC normalization, category mapping, helpers
+├── seeds/                     Starter grocery catalog
+├── public/                    Mobile-first browser application
+│   ├── index.html
+│   ├── login.html
+│   ├── sw.js
+│   ├── css/
+│   └── js/
+├── tests/
+│   ├── api/                   Jest / Supertest coverage
+│   └── e2e/                   Playwright household workflows
+├── docs/                      Architecture, external pricing, release guidance
+└── .github/workflows/         CI
 ```
 
 ---
 
-## API Reference
+## Documentation
 
-```
-POST   /api/auth/register             create account
-POST   /api/auth/login                login
-POST   /api/auth/logout               clear cookie
-POST   /api/auth/forgot-password      request an enumeration-safe reset link
-POST   /api/auth/reset-password       consume a 30-minute, single-use reset token
-GET    /api/auth/me                   current user + household + feature flags
-PUT    /api/auth/profile              update name/email/barcode preference
-PUT    /api/auth/password             change password
+- [`docs/01-architecture-and-data.md`](docs/01-architecture-and-data.md) - detailed architecture, data models, routes, and operational behavior
+- [`docs/03-external-pricing.md`](docs/03-external-pricing.md) - external price data boundary, provider contract, and Open Prices behavior
+- [`docs/release-accessibility-checklist.md`](docs/release-accessibility-checklist.md) - accessibility checks for releases
 
-GET    /api/household                 members list
-PUT    /api/household                 rename household (owner only)
-PATCH  /api/household/settings        update household settings (admin+)
-GET    /api/household/invite          get current invite code + QR data
-POST   /api/household/invite          regenerate invite code
-DELETE /api/household/members/:id     remove member
-PUT    /api/household/members/:id     update member role
+---
 
-GET    /api/items                     list items (search param supported)
-POST   /api/items                     create item
-PUT    /api/items/:id                 update item
-DELETE /api/items/:id                 delete item
+## External Data
 
-GET    /api/stores                    list stores
-POST   /api/stores                    create store
-PUT    /api/stores/:id                update store
-DELETE /api/stores/:id                delete store
+Provista currently uses two Open Food Facts ecosystem services for different purposes:
 
-GET    /api/prices                    list price entries
-POST   /api/prices                    create price entry
-PUT    /api/prices/:id/approve        approve + optionally edit a pending entry
-DELETE /api/prices/:id/reject         reject a pending entry
-GET    /api/prices/pending            list pending entries (admin+)
-GET    /api/prices/compare/:itemId    latest approved price per store for an item
-GET    /api/prices/history/:itemId    full approved price history for an item
-GET    /api/prices/last-purchased/:itemId  most recent approved entry per store
+- **Open Food Facts** - product metadata discovered from UPC/EAN barcodes
+- **Open Prices** - community-observed market prices used only as shopping context
 
-GET    /api/barcode/:upc              look up item by UPC (local catalog, then Open Food Facts)
+External data is treated as enrichment. Failure or ambiguity in an external provider should not prevent the household from building a list or completing a shopping trip.
 
-GET    /api/inventory                 list Pantry items, low/out first
-POST   /api/inventory                 add or update a Pantry item (all roles)
-PUT    /api/inventory/:id             update status/quantity/notes (all roles)
-DELETE /api/inventory/:id             stop tracking a Pantry item (admin+)
+Open Prices / Open Food Facts data carries its own open-data licensing and attribution requirements. See the external pricing documentation before adding exports, redistribution, or another data-combination workflow.
 
-GET    /api/shopping-list             list with usual-store, savings, and freshness context
-POST   /api/shopping-list             add item to list
-POST   /api/shopping-list/complete    complete trip; update Pantry, prices, Spend, list + low stock
-PUT    /api/shopping-list/:id         update item (checked, quantity)
-DELETE /api/shopping-list/:id         remove item
-DELETE /api/shopping-list             clear list (?checkedOnly=true to clear only checked)
+---
 
-GET    /api/spend?month=YYYY-MM       monthly spend breakdown by category + store
-GET    /api/spend/summary             monthly totals for the last 6 months
-```
+## License
+
+Provista is licensed under the **GNU General Public License v3.0**. See [`LICENSE`](LICENSE).

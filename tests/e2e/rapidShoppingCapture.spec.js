@@ -36,10 +36,8 @@ test.describe('Rapid shopping capture', () => {
     expect(existingResponse.ok()).toBeTruthy();
 
     await openList(page);
-    await page.fill(
-      '#rapid-list-input',
-      `${milk.name} x3, ${eggs.name}, ${bananas.name} x2`
-    );
+    await expect(page.getByText('Add groceries', { exact: true })).toBeVisible();
+    await page.fill('#rapid-list-input', `${milk.name} x3, ${eggs.name}, ${bananas.name} x2`);
     await page.locator('#rapid-list-capture button[type="submit"]').click();
 
     await expect(page.locator('#rapid-list-status')).toHaveAttribute('data-state', 'success');
@@ -47,6 +45,7 @@ test.describe('Rapid shopping capture', () => {
     await expect(page.locator('.list-item', { hasText: eggs.name })).toContainText('qty 1');
     await expect(page.locator('.list-item', { hasText: bananas.name })).toContainText('qty 2');
     await expect(page.locator('#rapid-list-input')).toHaveValue('');
+    await expect(page.locator('#rapid-review-details')).toBeHidden();
 
     const listResponse = await page.request.get('/api/shopping-list');
     expect(listResponse.ok()).toBeTruthy();
@@ -54,7 +53,7 @@ test.describe('Rapid shopping capture', () => {
     expect(list.filter(entry => [milk._id, eggs._id, bananas._id].includes(entry.itemId?._id))).toHaveLength(3);
   });
 
-  test('keeps ambiguous and unknown products in the capture box for review', async ({ page }) => {
+  test('routes ambiguous and unknown products directly into Add with details', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     await Promise.all([
       createCatalogItem(page, `Rapid Ambiguous ${suffix} One`),
@@ -68,8 +67,13 @@ test.describe('Rapid shopping capture', () => {
     await page.locator('#rapid-list-capture button[type="submit"]').click();
 
     await expect(page.locator('#rapid-list-status')).toHaveAttribute('data-state', 'warning');
-    await expect(page.locator('#rapid-list-status')).toContainText('2 items need review');
+    await expect(page.locator('#rapid-list-status')).toContainText('2 items need details');
     await expect(page.locator('#rapid-list-input')).toHaveValue(`${ambiguous}, ${missing}`);
+    await expect(page.locator('#rapid-review-details')).toHaveText('Review 2 items with details');
+
+    await page.locator('#rapid-review-details').click();
+    await expect(page.locator('#modal-title')).toHaveText('Add with details');
+    await expect(page.locator('#list-item-input')).toHaveValue(ambiguous);
 
     const listResponse = await page.request.get('/api/shopping-list');
     expect(listResponse.ok()).toBeTruthy();
