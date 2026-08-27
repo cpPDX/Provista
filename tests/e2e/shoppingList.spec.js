@@ -37,7 +37,8 @@ test.describe('Shopping List critical flows', () => {
   test('creates a completely new catalog item without closing the List form', async ({ page }) => {
     const name = `Inline List Item ${Date.now()}`;
     await page.click('#btn-add-list-item');
-    await expect(page.locator('#modal-title')).toHaveText('Add with details');
+    const dialog = page.getByRole('dialog', { name: 'Add with details' });
+    await expect(dialog).toBeVisible();
     await page.fill('#list-item-input', name);
     const createOption = page.locator('#list-item-dropdown .autocomplete-create');
     await expect(createOption).toContainText(`Create "${name}"`);
@@ -47,7 +48,7 @@ test.describe('Shopping List critical flows', () => {
     await page.fill('#list-new-category', 'Pantry');
     await page.fill('#list-new-unit', 'each');
     await page.fill('#list-qty', '2');
-    await page.getByRole('button', { name: 'Add to list', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Add to list', exact: true }).click();
 
     await expect(page.locator('#modal-overlay')).toBeHidden();
     await expect(page.locator('.list-item', { hasText: name })).toContainText('qty 2');
