@@ -17,6 +17,7 @@
 }
 
 .price-choice-btn {
+  min-height: 44px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -156,6 +157,102 @@
   min-width: 0;
 }
 
+.pantry-mode-help {
+  margin: 0.5rem 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.pantry-status-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.pantry-status-option {
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pantry-status-option.active {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.pantry-mode-switch {
+  min-height: 44px;
+  margin-top: 0.35rem;
+}
+
+.pantry-secondary-actions,
+.pantry-qty-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.pantry-qty-controls .qty-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.pantry-qty-controls .qty-val {
+  min-width: 2.5rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.pantry-tracking-choice {
+  margin: 0 0 1rem;
+  padding: 0;
+  border: 0;
+}
+
+.pantry-tracking-choice legend {
+  margin-bottom: 0.45rem;
+  font-weight: 700;
+}
+
+.pantry-tracking-option {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.65rem 0;
+}
+
+.pantry-tracking-option span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pantry-tracking-option small {
+  color: var(--text-muted);
+}
+
+.low-stock-on-list {
+  align-self: center;
+  margin-right: 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.confirmation-message {
+  line-height: 1.5;
+}
+
 @media (max-width: 430px) {
   .deferred-price-row {
     align-items: flex-start;
@@ -164,5 +261,9 @@
 
   .deferred-price-input-wrap {
     width: 100%;
+  }
+
+  .pantry-status-actions {
+    grid-template-columns: 1fr;
   }
 }
