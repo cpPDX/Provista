@@ -90,6 +90,7 @@ test.describe('UX Batch 1 correctness journeys', () => {
     await page.locator('#btn-done-shopping').click();
     await expect(page.locator('#parent-trip-store')).toHaveValue(target._id);
     await page.locator('#parent-finish-shopping').click();
+    await expect(page.locator('#modal-overlay')).toBeHidden({ timeout: 10000 });
 
     deferred = await (await page.request.get('/api/shopping-trips/deferred-prices')).json();
     expect(deferred.find(entry => entry.itemId === milk._id)).toMatchObject({ storeId: fred._id });
@@ -109,7 +110,7 @@ test.describe('UX Batch 1 correctness journeys', () => {
     const card = page.locator(`.pantry-card[data-inv-id="${inventory._id}"]`);
     await card.getByRole('button', { name: 'Edit details' }).click();
     await page.locator('#edit-inv-notes').fill('Keep this note');
-    await page.click('[data-tab="home"]');
+    await page.locator('#modal-close').click();
 
     const prompt = page.locator('#unsaved-prompt');
     await expect(prompt).toBeVisible();
@@ -129,7 +130,7 @@ test.describe('UX Batch 1 correctness journeys', () => {
       }
     });
 
-    await page.click('[data-tab="home"]');
+    await page.locator('#modal-close').click();
     await prompt.getByRole('button', { name: 'Save & leave' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.locator('#toast')).toContainText('Forced save failure');
@@ -137,9 +138,12 @@ test.describe('UX Batch 1 correctness journeys', () => {
     expect(await page.evaluate(() => window._dirtyForm?.isDirty)).toBe(true);
 
     await page.unroute(inventoryRoute);
-    await page.click('[data-tab="home"]');
+    await page.locator('#modal-close').click();
     await prompt.getByRole('button', { name: 'Save & leave' }).click();
     await expect(page.locator('#modal-overlay')).toBeHidden();
+    await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
+
+    await page.click('[data-tab="home"]');
     await expect(page.locator('#tab-home')).toHaveClass(/active/);
 
     const saved = await (await page.request.get('/api/inventory')).json();
