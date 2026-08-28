@@ -46,7 +46,9 @@ const api = {
         if (!offlineManager?.isOnline && hasOffline) {
           return this._offlineFallback(method, path, body);
         }
-        window.location.href = '/login.html';
+        fetch('/api/auth/logout', { method: 'POST' }).catch(() => {}).finally(() => {
+          window.location.href = '/?auth=signin';
+        });
         throw new Error('Not authenticated');
       }
 

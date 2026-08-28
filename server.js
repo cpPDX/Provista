@@ -3,6 +3,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const fs = require('fs');
+const jwt = require('jsonwebtoken');
 const { securityHeaders, createRateLimiter } = require('./middleware/security');
 
 if (!process.env.JWT_SECRET) {
@@ -27,7 +29,35 @@ app.use('/api/auth/password', passwordLimiter);
 app.use('/api/auth/forgot-password', passwordLimiter);
 app.use('/api/auth/reset-password', passwordLimiter);
 
-app.use(express.static(path.join(__dirname, 'public')));
+const publicDirectory = path.join(__dirname, 'public');
+const landingTemplate = fs.readFileSync(path.join(publicDirectory, 'landing.html'), 'utf8');
+
+function renderLandingPage(req) {
+  let publicUrl = String(process.env.APP_BASE_URL || '').trim();
+  if (!publicUrl && process.env.NODE_ENV !== 'production') {
+    publicUrl = `${req.protocol}://${req.get('host')}`;
+  }
+
+  try {
+    const origin = new URL(publicUrl);
+    if (!['http:', 'https:'].includes(origin.protocol)) throw new Error('Unsupported public URL protocol');
+    const canonicalUrl = new URL('/', origin).href;
+    const imageUrl = new URL('/og.jpg', origin).href;
+    return landingTemplate
+      .replaceAll('__PROVISTA_PUBLIC_URL__', canonicalUrl)
+      .replaceAll('__PROVISTA_OG_IMAGE_URL__', imageUrl);
+  } catch (_) {
+    return landingTemplate
+      .replace(/^.*__PROVISTA_PUBLIC_URL__.*\n/gm, '')
+      .replace(/^.*__PROVISTA_OG_IMAGE_URL__.*\n/gm, '');
+  }
+}
+
+app.get('/landing.html', (req, res) => {
+  res.type('html').send(renderLandingPage(req));
+});
+
+app.use(express.static(publicDirectory, { index: false }));
 
 // Health check (no auth required)
 app.use('/api/health', require('./routes/health'));
@@ -62,9 +92,24 @@ app.get('/reset-password', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+// The public root explains Provista before asking someone to create an account.
+// Returning users with a valid session continue directly into the app.
+app.get('/', (req, res) => {
+  try {
+    jwt.verify(req.cookies?.token, process.env.JWT_SECRET);
+    return res.sendFile(path.join(publicDirectory, 'index.html'));
+  } catch (_) {
+    return res.type('html').send(renderLandingPage(req));
+  }
+});
+
+app.get('/app', (req, res) => {
+  res.sendFile(path.join(publicDirectory, 'index.html'));
+});
+
 // SPA fallback
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(publicDirectory, 'index.html'));
 });
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocerytracker';

@@ -1,18 +1,21 @@
 // Provista Service Worker
 // Network-first for navigations, JS/CSS, and API data; cache-first for static assets.
 
-const SHELL_CACHE = 'provista-shell-v10';
+const SHELL_CACHE = 'provista-shell-v12';
 const API_CACHE = 'provista-api-v5';
 
 const SHELL_ASSETS = [
   '/',
+  '/landing.html',
   '/index.html',
   '/login.html',
+  '/css/landing.css',
   '/css/style.css',
   '/css/auth.css',
   '/css/parentExperience.css',
   '/css/rapidShoppingCapture.css',
   '/js/auth.js',
+  '/js/landing.js',
   '/js/api.js',
   '/js/ui.js',
   '/js/autocomplete.js',
@@ -34,6 +37,10 @@ const SHELL_ASSETS = [
   '/js/offline.js',
   '/js/install-prompt.js',
   '/brand/provista-mark.svg',
+  '/screenshots/meal-plan.jpg',
+  '/screenshots/shopping-list.jpg',
+  '/screenshots/pantry.jpg',
+  '/og.jpg',
   '/favicon.svg',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg',
@@ -134,9 +141,6 @@ async function networkFirstWithCacheFallback(request) {
     if (response.ok && request.method === 'GET') {
       const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
-      if (request.mode === 'navigate') {
-        cache.put('/index.html', response.clone()).catch(() => {});
-      }
     }
     return response;
   } catch {
