@@ -6,6 +6,22 @@ test.describe('Authentication', () => {
     await expect(page.locator('#login-form')).toBeVisible();
   });
 
+  test('renders only the current Provista mark when legacy login markup is present', async ({ page }) => {
+    await page.goto('/login.html');
+
+    const logo = page.locator('.auth-logo-icon');
+    const legacyMark = logo.locator('svg');
+    await expect(logo).toBeVisible();
+    await expect(legacyMark).toBeHidden();
+
+    const brandLayer = await logo.evaluate(el => {
+      const style = getComputedStyle(el, '::before');
+      return { content: style.content, backgroundImage: style.backgroundImage };
+    });
+    expect(brandLayer.content).not.toBe('none');
+    expect(brandLayer.backgroundImage).toContain('/brand/provista-mark.svg');
+  });
+
   test('switches to Create Account tab', async ({ page }) => {
     await page.goto('/login.html');
     await page.click('.auth-tab[data-mode="register"]');
