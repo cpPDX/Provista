@@ -28,10 +28,23 @@ body.auth-page {
   height: 72px;
   margin-bottom: 0.25rem;
   border-radius: 18px;
-  background: url('/brand/provista-mark.svg?v=b2-5') center / cover no-repeat;
+  position: relative;
+  overflow: hidden;
   filter: drop-shadow(0 12px 28px rgba(0,0,0,0.35));
 }
-.auth-logo-icon svg { display: none; }
+.auth-logo-icon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/brand/provista-mark.svg?v=b2-6') center / cover no-repeat;
+}
+/* Older login markup included an inline P fallback. Never allow it to stack
+   with the current brand mark when HTML/CSS versions are temporarily skewed. */
+body.auth-page .auth-logo-icon > svg,
+body.auth-page .auth-logo-icon > img {
+  display: none !important;
+  visibility: hidden !important;
+}
 .auth-logo h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.045em; line-height: 1; }
 .auth-logo::after {
   content: 'Plan together. Shop with clarity.';
