@@ -16,8 +16,12 @@ function itemObjectId(item) {
   return stringId(item?.itemId);
 }
 
+function preferredStoreId(item) {
+  return stringId(item?.storeId) || null;
+}
+
 function plannedStoreId(item) {
-  return stringId(item?.storeId || item?.tripStore) || null;
+  return preferredStoreId(item) || stringId(item?.tripStore) || null;
 }
 
 function usualStoreId() {
@@ -347,9 +351,33 @@ function openInlinePriceEditor(item, entry) {
   });
 }
 
-function handleListItemCheck(id, willBeChecked) {
+async function handleListItemCheck(id, willBeChecked) {
   const item = listState.items.find(entry => entry._id === id);
   if (!item) return;
+
+  // Once a shopping stop has started, an explicit preference for another store
+  // cannot silently join the current purchase. Suggested/inferred stores remain
+  // planning hints, so items with no explicit preference can still be bought
+  // at the active stop without interruption.
+  if (willBeChecked && activeShoppingStoreId) {
+    const preferredId = preferredStoreId(item);
+    if (preferredId && preferredId !== String(activeShoppingStoreId)) {
+      const preferredName = storeName(preferredId) || 'another store';
+      const activeName = storeName(activeShoppingStoreId) || 'this store';
+      const buyHere = await confirmAction({
+        title: `This item is planned for ${preferredName}.`,
+        message: `You’re shopping at ${activeName} now. Buy it here instead, or leave it for ${preferredName}?`,
+        confirmLabel: 'Buy here instead',
+        cancelLabel: `Leave for ${preferredName}`,
+        danger: false
+      });
+      if (!buyHere) {
+        document.querySelector(`.list-item[data-id="${CSS.escape(id)}"] .list-item-check-wrap`)?.focus({ preventScroll: true });
+        return;
+      }
+    }
+  }
+
   let sync = checkSyncState.get(id);
   if (!sync) {
     sync = { serverChecked: Boolean(item.checked), desiredChecked: Boolean(item.checked), processing: false, promise: null };
@@ -818,7 +846,7 @@ function toggleListFilterCat(button) {
 async function deselectAll() {
   const checked = listState.items.filter(item => item.checked);
   if (!checked.length) return showToast('No purchased items to uncheck');
-  checked.forEach(item => handleListItemCheck(item._id, false));
+  checked.forEach(item => { void handleListItemCheck(item._id, false); });
   if (await settlePendingCheckWrites()) showToast('Purchased items unchecked');
 }
 

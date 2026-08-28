@@ -166,7 +166,6 @@ test.describe('Shopping List critical flows', () => {
     await expect(choices.getByRole('button', { name: 'Use $4.29' })).toBeVisible();
     await expect(choices.getByRole('button', { name: 'Update price' })).toBeVisible();
     await expect(choices.getByRole('button', { name: 'Later' })).toBeVisible();
-
     await choices.getByRole('button', { name: 'Update price' }).click();
     await expect(page.locator('#modal-title')).toHaveText('Update price');
     await page.fill('#inline-price-value', '4.99');
@@ -268,6 +267,8 @@ test.describe('Shopping List critical flows', () => {
     const purchasedIds = new Set(items.map(item => item._id));
     expect((await pantryResponse.json()).filter(entry => purchasedIds.has(entry.itemId?._id))).toHaveLength(20);
     expect((await spendResponse.json()).total).toBeGreaterThan(0);
-    expect(await deferredResponse.json()).toHaveLength(3);
+    const tripDeferred = (await deferredResponse.json()).filter(entry => purchasedIds.has(entry.itemId));
+    expect(tripDeferred).toHaveLength(3);
+    expect(tripDeferred.map(entry => entry.itemId).sort()).toEqual(items.slice(17).map(item => item._id).sort());
   });
 });
