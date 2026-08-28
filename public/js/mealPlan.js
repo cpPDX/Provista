@@ -147,7 +147,13 @@ function renderMealSuggestionRow(suggestion, index) {
   if (suggestion.matchStatus === 'unmatched') {
     return `<div class="meal-suggestion-row" data-suggestion-index="${index}">
       <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}</div>
-      <div class="meal-suggestion-unmatched">No catalog match. Edit the shopping need or add this item from List.</div>
+      <div class="meal-suggestion-unmatched">
+        <span>No catalog match.</span>
+        <button type="button" class="btn-link meal-suggestion-create-btn"
+          data-source-text="${escapeAttr(suggestion.sourceText)}" data-quantity="${escapeAttr(quantity)}">
+          Add “${escapeHtml(suggestion.sourceText)}” with details
+        </button>
+      </div>
     </div>`;
   }
 
@@ -191,6 +197,23 @@ function renderMealSuggestionRow(suggestion, index) {
     </label>
     <div class="meal-suggestion-status">${suggestionStatusHtml(item, suggestion.duplicateInNotes)}</div>
   </div>`;
+}
+
+async function openUnmatchedMealNeedDetails(button) {
+  const sourceText = button?.dataset.sourceText?.trim() || '';
+  const quantity = Math.max(1, Number(button?.dataset.quantity) || 1);
+  if (!sourceText) return;
+
+  button.disabled = true;
+  try {
+    closeModal();
+    await switchTab('list');
+    openAddListItemModal(sourceText);
+    const quantityInput = document.getElementById('list-qty');
+    if (quantityInput) quantityInput.value = String(quantity);
+  } catch (err) {
+    handleError(err, 'Failed to open shopping item details');
+  }
 }
 
 function selectedMealSuggestionItems() {
@@ -249,6 +272,9 @@ function bindMealSuggestionControls() {
   });
   document.querySelectorAll('.meal-suggestion-check').forEach(checkbox => {
     checkbox.addEventListener('change', updateMealSuggestionSubmit);
+  });
+  document.querySelectorAll('.meal-suggestion-create-btn').forEach(button => {
+    button.addEventListener('click', () => openUnmatchedMealNeedDetails(button));
   });
 }
 
