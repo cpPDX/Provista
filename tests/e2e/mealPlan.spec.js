@@ -105,7 +105,7 @@ test.describe('Meal Plan Tab', () => {
     await expect(days.nth(collapsedIndex).locator('.meal-day-content')).toBeVisible();
   });
 
-  test('each day starts with four meal type sections and quiet default audiences', async ({ page }) => {
+  test('each day shows its current audience without opening the picker', async ({ page }) => {
     const dayCard = page.locator(`.meal-day[data-day-index="${currentDayIndex()}"]`);
     await expect(dayCard.locator('.meal-type-section')).toHaveCount(4);
     await expect(page.locator('.meal-plan-mode-summary')).toHaveText('Dinner only');
@@ -117,14 +117,44 @@ test.describe('Meal Plan Tab', () => {
     const audienceButtons = dayCard.locator('.meal-audience-toggle');
     await expect(audienceButtons).toHaveCount(4);
     for (let i = 0; i < 4; i++) {
-      await expect(audienceButtons.nth(i)).toHaveText('Change who');
+      await expect(audienceButtons.nth(i)).toHaveText('Everyone · Change');
+      await expect(audienceButtons.nth(i)).toHaveAttribute('aria-label', 'Everyone. Change who this meal is for');
     }
   });
 
-  test('meal rows include an optional notes field', async ({ page }) => {
+  test('meal rows expose one explicit shopping-needs field', async ({ page }) => {
     const firstRow = dinnerRow(page);
     await expect(firstRow.locator('.meal-name-input')).toBeVisible();
-    await expect(firstRow.locator('.meal-notes-input')).toBeVisible();
+    await expect(firstRow.locator('.meal-needs-label')).toHaveText('Need for this meal');
+    await expect(firstRow.locator('.meal-notes-input')).toHaveAttribute('aria-label', 'Need for this meal');
+    await expect(firstRow.locator('.meal-notes-input')).toHaveAttribute('placeholder', 'e.g. tortillas, salsa, cilantro');
+    await expect(page.locator('#mp-shopping-notes')).toHaveCount(0);
+    await expect(page.locator('#mp-export-btn')).toHaveText('Export to calendar');
+  });
+
+  test('hidden legacy weekly shopping notes survive normal autosave', async ({ page }) => {
+    const weekStart = currentWeekStart();
+    const seeded = await page.request.put('/api/meal-plan', {
+      data: {
+        weekStart,
+        days: blankWeek(weekStart),
+        produceNotes: '',
+        shoppingNotes: 'Legacy note that must survive'
+      }
+    });
+    expect(seeded.ok()).toBeTruthy();
+    await page.click('[data-tab="home"]');
+    await page.click('[data-tab="meal-plan"]');
+    await page.waitForSelector('.meal-day');
+    await expect(page.locator('#mp-shopping-notes')).toHaveCount(0);
+
+    await dinnerRow(page).locator('.meal-name-input').fill('Autosave dinner');
+    await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
+
+    const savedResponse = await page.request.get(`/api/meal-plan?weekStart=${weekStart}`);
+    expect(savedResponse.ok()).toBeTruthy();
+    const saved = await savedResponse.json();
+    expect(saved.shoppingNotes).toBe('Legacy note that must survive');
   });
 
   test('Plan settings can show all meals while leaving unplanned types collapsed', async ({ page }) => {
@@ -142,19 +172,22 @@ test.describe('Meal Plan Tab', () => {
     await expect(breakfast.locator('.meal-type-rows')).toBeVisible();
   });
 
-  test('Repeat this meal and Leftovers fill the next dinner with one tap', async ({ page }) => {
+  test('Repeat and Leftovers labels state their exact result', async ({ page }) => {
     const firstDinner = dinnerRow(page);
     await firstDinner.locator('.meal-name-input').fill('Tacos');
+    await expect(firstDinner.locator('.meal-repeat-btn')).toHaveText('Repeat next dinner');
+    await expect(firstDinner.locator('.meal-leftovers-btn')).toHaveText('Make this leftovers');
     await firstDinner.locator('.meal-repeat-btn').click();
 
     const nextDinner = dinnerRow(page, currentDayIndex() + 1);
     await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Tacos');
     await nextDinner.locator('.meal-leftovers-btn').click();
     await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Leftovers');
+    await expect(page.locator('#toast')).toContainText('This meal is now Leftovers');
     await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
   });
 
-  test('favorite meals remember their usual shopping notes', async ({ page }) => {
+  test('favorite meals remember their usual shopping needs', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const mealName = `Favorite Tacos ${suffix}`;
     const mealNotes = `tortillas ${suffix}, lettuce, salsa`;
@@ -279,8 +312,9 @@ test.describe('Meal Plan Tab', () => {
     await firstSection.locator('.meal-add-row').click();
     await expect(firstSection.locator('.meal-row')).toHaveCount(2);
     const audience = firstSection.locator('.meal-row').nth(1).locator('.meal-audience-toggle');
-    await expect(audience).not.toHaveText('Choose people');
-    await expect(audience).not.toHaveText('Everyone');
+    await expect(audience).toContainText('· Change');
+    await expect(audience).not.toHaveText('Choose people · Change');
+    await expect(audience).not.toHaveText('Everyone · Change');
   });
 
   test('prev/next week nav changes the week label', async ({ page }) => {
@@ -294,7 +328,7 @@ test.describe('Meal Plan Tab', () => {
     await expect(label).not.toHaveText(beforeText);
   });
 
-  test('Copy last week remaps meals and notes onto this week', async ({ page }) => {
+  test('Copy last week uses shared confirmation and preserves hidden weekly notes', async ({ page }) => {
     const weekStart = currentWeekStart();
     const previousWeekStart = addDays(weekStart, -7);
     const previousDays = blankWeek(previousWeekStart);
@@ -312,13 +346,21 @@ test.describe('Meal Plan Tab', () => {
     });
     expect(setupResponse.ok()).toBeTruthy();
 
-    page.once('dialog', dialog => dialog.accept());
     await page.locator('#mp-copy-last-week').click();
+    const confirm = page.getByRole('dialog', { name: 'Replace this week with last week?' });
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText('Existing entries in this week will be replaced.');
+    await confirm.getByRole('button', { name: 'Copy last week' }).click();
 
     const firstDinner = dinnerRow(page);
     await expect(firstDinner.locator('.meal-name-input')).toHaveValue('Last Week Tacos');
     await expect(firstDinner.locator('.meal-notes-input')).toHaveValue('tortillas, lettuce, salsa');
     await expect(page.locator('#mp-produce-notes')).toHaveValue('Use the cilantro');
-    await expect(page.locator('#mp-shopping-notes')).toHaveValue('Check the beans');
+    await expect(page.locator('#mp-shopping-notes')).toHaveCount(0);
+
+    const copiedResponse = await page.request.get(`/api/meal-plan?weekStart=${weekStart}`);
+    expect(copiedResponse.ok()).toBeTruthy();
+    const copied = await copiedResponse.json();
+    expect(copied.shoppingNotes).toBe('Check the beans');
   });
 });

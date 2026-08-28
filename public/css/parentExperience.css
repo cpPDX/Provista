@@ -276,6 +276,20 @@
   font-weight: 700;
 }
 
+.meal-needs-label {
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.meal-audience-toggle {
+  max-width: min(12rem, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .confirmation-message {
   line-height: 1.5;
 }
