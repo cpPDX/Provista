@@ -84,6 +84,7 @@ jobs:
           node --check tests/e2e/rapidShoppingCapture.spec.js
           node --check tests/e2e/inventory.spec.js
           node --check tests/e2e/destructiveActions.spec.js
+          node --check tests/e2e/household.spec.js
           node --check tests/e2e/auth.spec.js
           node --check tests/e2e/accessibility.spec.js
           node --check tests/e2e/uxBatch1.spec.js
@@ -125,4 +126,4 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
 
       - name: Run critical household, latency, and mobile accessibility tests
-        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/household.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js
