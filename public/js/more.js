@@ -1146,21 +1146,29 @@ function loadAboutSection() {
   document.getElementById('about-content').innerHTML = `
     <div style="text-align:center;padding:1rem 0 1.5rem">
       <div style="margin-bottom:0.75rem">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="display:inline-block">
-          <rect width="48" height="48" rx="12" fill="#21ABCD"/>
-          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="#1A1C20" text-anchor="middle" letter-spacing="-0.5">P</text>
-        </svg>
+        <img src="/brand/provista-mark.svg?v=b2-5" width="64" height="64" alt="" style="display:inline-block;border-radius:16px;box-shadow:var(--shadow-card-elevated)">
       </div>
       <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Provista</h2>
-      <p class="text-muted text-sm">Version 1.0</p>
+      <p style="color:var(--primary-light);font-size:0.875rem;font-weight:700">Plan together. Shop with clarity.</p>
+      <p class="text-muted text-sm" style="margin-top:0.25rem">Version 1.0</p>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-body">
+        <div class="card-title">Why the name?</div>
+        <p class="text-muted text-sm" style="margin-top:0.5rem;line-height:1.6">
+          <strong style="color:var(--text)">Provista</strong> combines <em>provisions</em> — the food and essentials
+          that keep a household moving — with <em>vista</em>, a clear view of what lies ahead. It brings meals,
+          shopping, Pantry, and spending into one shared view, so your household can plan together and shop with clarity.
+        </p>
+      </div>
     </div>
     <div class="card" style="margin-bottom:1rem">
       <div class="card-body">
         <div class="card-title">Why this app exists</div>
         <p class="text-muted text-sm" style="margin-top:0.5rem;line-height:1.6">
-          Grocery prices vary wildly by store, week, and season. This app was built to help
-          households track what they actually pay, spot the best deals, and make smarter
-          shopping decisions — without spreadsheets or receipt-stuffed wallets.
+          Provista brings meal planning, the shared shopping list, Pantry, and household
+          spending into one calm workflow. It helps everyone see what is next, shop with
+          confidence, and keep the household moving together.
         </p>
       </div>
     </div>

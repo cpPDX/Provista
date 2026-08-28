@@ -1,5 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- Maskable icons need a safe zone: content within central 80% (51.2px padding each side) -->
-  <rect width="512" height="512" fill="#21ABCD"/>
-  <text x="256" y="340" font-family="system-ui, -apple-system, sans-serif" font-size="280" font-weight="800" fill="#1A1C20" text-anchor="middle" letter-spacing="-8">P</text>
+  <rect width="512" height="512" fill="#1A1C20"/>
+  <rect x="144" y="112" width="116" height="288" rx="43" fill="#F0F2F5"/>
+  <path d="M218 126h72c57 0 93 36 93 89s-36 89-93 89h-72" fill="none" stroke="#F0F2F5" stroke-width="28" stroke-linecap="butt" stroke-linejoin="round"/>
+  <path d="M184 112h90v28h-90zM218 290h56v28h-56z" fill="#F0F2F5"/>
+  <path d="M175 160c0-11 9-20 20-20h37v63h-57v-43z" fill="#7CD8E9"/>
+  <rect x="175" y="218" width="57" height="62" fill="#21ABCD"/>
+  <path d="M175 295h57v58c0 9-7 16-16 16h-25c-9 0-16-7-16-16v-58z" fill="#7CD8E9"/>
 </svg>
