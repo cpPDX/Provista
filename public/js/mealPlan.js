@@ -406,16 +406,21 @@ function repeatMeal(row) {
   showToast('No open day remains this week for that meal');
 }
 
+function setMealRowActionVisible(button, visible) {
+  if (!button) return;
+  button.hidden = !visible;
+  // .meal-row-action has an author-level display rule, so set the inline
+  // display as well; otherwise CSS can override the browser's [hidden] rule.
+  button.style.display = visible ? '' : 'none';
+}
+
 function refreshMealRowActions(row) {
   const current = mealRowValue(row);
   const hasMeal = Boolean(current.name);
   const hasContent = Boolean(current.name || current.notes);
-  const repeatButton = row.querySelector('.meal-repeat-btn');
-  const saveFavoriteButton = row.querySelector('.meal-save-favorite-btn');
-  const leftoversButton = row.querySelector('.meal-leftovers-btn');
-  if (repeatButton) repeatButton.hidden = !hasMeal;
-  if (saveFavoriteButton) saveFavoriteButton.hidden = !hasMeal;
-  if (leftoversButton) leftoversButton.hidden = hasContent;
+  setMealRowActionVisible(row.querySelector('.meal-repeat-btn'), hasMeal);
+  setMealRowActionVisible(row.querySelector('.meal-save-favorite-btn'), hasMeal);
+  setMealRowActionVisible(row.querySelector('.meal-leftovers-btn'), !hasContent);
 }
 
 function expandMealTypeSection(section) {
@@ -636,11 +641,12 @@ async function openFavoriteDestinationPicker(favorite) {
   document.getElementById('favorite-destination-back')?.addEventListener('click', () => openFavoriteManager());
   document.getElementById('favorite-destination-form')?.addEventListener('submit', async event => {
     event.preventDefault();
-    const submit = event.currentTarget.querySelector('[type="submit"]');
+    const submit = formSubmitButton(event.currentTarget);
     const row = findFavoriteDestinationRow(document.getElementById('favorite-destination')?.value);
     if (!row) return;
-    submit.disabled = true;
-    await useFavoriteInRow(row, favorite, { returnToManager: true });
+    if (submit) submit.disabled = true;
+    const used = await useFavoriteInRow(row, favorite, { returnToManager: true });
+    if (!used && submit?.isConnected) submit.disabled = false;
   });
 }
 
@@ -664,9 +670,11 @@ async function openFavoriteEditor(favorite) {
   document.getElementById('favorite-edit-back')?.addEventListener('click', () => openFavoriteManager());
   document.getElementById('favorite-edit-form')?.addEventListener('submit', async event => {
     event.preventDefault();
-    const submit = event.currentTarget.querySelector('[type="submit"]');
-    submit.disabled = true;
-    submit.textContent = 'Saving…';
+    const submit = formSubmitButton(event.currentTarget);
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = 'Saving…';
+    }
     try {
       const updated = await api.mealPlan.updateFavorite(favorite._id, {
         name: document.getElementById('favorite-edit-name').value,
@@ -677,8 +685,10 @@ async function openFavoriteEditor(favorite) {
       await openFavoriteManager();
     } catch (err) {
       handleError(err, 'Failed to update favorite meal');
-      submit.disabled = false;
-      submit.textContent = 'Save changes';
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = 'Save changes';
+      }
     }
   });
 }
