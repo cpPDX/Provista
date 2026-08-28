@@ -298,6 +298,29 @@ test.describe('Meal Plan Tab', () => {
     expect(thresholdOnHand.quantity).toBe(3);
   });
 
+  test('unmatched shopping needs open Add with details with the need and quantity preserved', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const need = `Purple dragonfruit ${suffix}`;
+    const firstRow = dinnerRow(page);
+    await firstRow.locator('.meal-name-input').fill('Smoothies');
+    await firstRow.locator('.meal-notes-input').fill(`${need} x3`);
+
+    const suggestionButton = firstRow.locator('.meal-list-suggestions-btn');
+    await expect(suggestionButton).toHaveText('Check 1 shopping need');
+    await suggestionButton.click();
+
+    const unmatchedRow = page.locator('.meal-suggestion-row', { hasText: need });
+    await expect(unmatchedRow).toContainText('No catalog match.');
+    const addDetails = unmatchedRow.getByRole('button', { name: `Add “${need}” with details` });
+    await expect(addDetails).toBeVisible();
+    await addDetails.click();
+
+    await expect(page.locator('#tab-list')).toHaveClass(/active/);
+    await expect(page.locator('#modal-title')).toHaveText('Add with details');
+    await expect(page.locator('#list-item-input')).toHaveValue(need);
+    await expect(page.locator('#list-qty')).toHaveValue('3');
+  });
+
   test('autosave has one clear passive status instead of a Save button', async ({ page }) => {
     await expect(page.locator('#mp-save-btn')).toHaveCount(0);
     await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓');
