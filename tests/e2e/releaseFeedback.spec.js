@@ -93,10 +93,12 @@ test.describe('Post-release recovery states', () => {
   test('Price History offers Record price when the household has no history', async ({ page }) => {
     await openPriceHistory(page);
 
-    await expect(page.getByText('No price history yet. Record the first price your household paid.')).toBeVisible();
-    const record = page.getByRole('button', { name: 'Record price' });
-    await expect(record).toBeVisible();
-    await record.click();
+    // Wait on the recovery control itself so the assertion follows the async
+    // Price History render rather than racing the tab becoming active.
+    const emptyRecord = page.locator('#prices-empty-record');
+    await expect(emptyRecord).toBeVisible();
+    await expect(page.locator('#prices-list')).toContainText('No price history yet. Record the first price your household paid.');
+    await emptyRecord.click();
 
     await expect(page.locator('#modal-overlay')).toBeVisible();
     await expect(page.locator('#modal-title')).toContainText('Add Grocery');
