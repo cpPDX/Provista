@@ -36,11 +36,22 @@ async function addAccountMember(page, baseURL) {
   const household = await householdResponse.json();
   const member = household.members.find(entry => entry.email === email);
   expect(member).toBeTruthy();
-  return member;
+
+  // Linked account rows use the Person id when one exists, matching
+  // renderRosterRow()'s data-roster-id contract in householdPeople.js.
+  const linkedPerson = household.people.find(person => {
+    const userId = person.userId?._id || person.userId;
+    return String(userId || '') === String(member._id);
+  });
+
+  return {
+    ...member,
+    rosterId: linkedPerson?._id || member._id
+  };
 }
 
 function accountRosterRow(page, member) {
-  return page.locator(`#household-roster-list .member-card[data-roster-id="${member._id}"]`);
+  return page.locator(`#household-roster-list .member-card[data-roster-id="${member.rosterId}"]`);
 }
 
 async function visibleRosterName(row) {
