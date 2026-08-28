@@ -53,12 +53,74 @@ window.Catalog = (() => {
     if (dot) dot.style.display = (isFiltered || sortBy !== 'name') ? '' : 'none';
   }
 
+  function clearStructuredFilters() {
+    catalogFilterState = { categories: [], organic: 'all', sortBy: 'name' };
+    applyFilter();
+  }
+
   function render() {
     const container = document.getElementById('catalog-list');
     if (!container) return;
     const items = catalogState.filtered;
     if (!items.length) {
-      container.innerHTML = emptyState('🏷️', 'No products found.');
+      const query = (document.getElementById('catalog-search')?.value || '').trim();
+      const hasStructuredFilters = catalogFilterState.categories.length || catalogFilterState.organic !== 'all';
+      const canCreate = Boolean(window.appAuth?.isAdmin());
+
+      if (hasStructuredFilters) {
+        container.innerHTML = `
+          ${emptyState('🏷️', query ? `No products match “${escapeHtml(query)}” with the current filters.` : 'No products match the current filters.')}
+          <div class="empty-state-actions" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-top:-1rem">
+            <button type="button" class="btn btn-primary" id="catalog-clear-empty-filters">Clear filters</button>
+          </div>`;
+        document.getElementById('catalog-clear-empty-filters')?.addEventListener('click', clearStructuredFilters);
+        return;
+      }
+
+      if (query && canCreate) {
+        container.innerHTML = `
+          ${emptyState('🏷️', `No products match “${escapeHtml(query)}”.`)}
+          <div class="empty-state-actions" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-top:-1rem">
+            <button type="button" class="btn btn-primary" id="catalog-add-search-product">Add Product “${escapeHtml(query)}”</button>
+            <button type="button" class="btn btn-outline" id="catalog-clear-search">Clear search</button>
+          </div>`;
+        document.getElementById('catalog-add-search-product')?.addEventListener('click', () => {
+          promptCreateItem(query, async () => {
+            const input = document.getElementById('catalog-search');
+            if (input) input.value = '';
+            await load();
+            showToast('Product created');
+          });
+        });
+        document.getElementById('catalog-clear-search')?.addEventListener('click', () => {
+          const input = document.getElementById('catalog-search');
+          if (input) {
+            input.value = '';
+            input.focus();
+          }
+          applyFilter();
+        });
+        return;
+      }
+
+      if (query) {
+        container.innerHTML = `
+          ${emptyState('🏷️', `No products match “${escapeHtml(query)}”.`)}
+          <div class="empty-state-actions" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-top:-1rem">
+            <button type="button" class="btn btn-primary" id="catalog-clear-search">Clear search</button>
+          </div>`;
+        document.getElementById('catalog-clear-search')?.addEventListener('click', () => {
+          const input = document.getElementById('catalog-search');
+          if (input) {
+            input.value = '';
+            input.focus();
+          }
+          applyFilter();
+        });
+        return;
+      }
+
+      container.innerHTML = emptyState('🏷️', canCreate ? 'No products yet. Use Add Product to create the first one.' : 'No products yet.');
       return;
     }
 

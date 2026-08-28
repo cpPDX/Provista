@@ -71,6 +71,31 @@ test.describe('Pantry household workflows', () => {
     await expect(page.locator('.pantry-card')).toContainText(`Have Flour ${suffix}`);
   });
 
+  test('turns a no-match Pantry search into a prefilled Track item action', async ({ page }) => {
+    const name = `Chai Concentrate ${Date.now()}`;
+    await page.fill('#pantry-search', name);
+
+    await expect(page.getByText(`No Pantry items match “${name}”.`)).toBeVisible();
+    const trackSearch = page.getByRole('button', { name: `Track “${name}”` });
+    await expect(trackSearch).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clear search' })).toBeVisible();
+
+    await trackSearch.click();
+    await expect(page.locator('#modal-title')).toHaveText('Track an item');
+    await expect(page.locator('#inv-item-input')).toHaveValue(name);
+    await expect(page.locator('#inv-item-input')).toBeFocused();
+    await expect(page.locator('#inv-item-dropdown .autocomplete-create')).toContainText(`Create "${name}"`);
+
+    await page.locator('#inv-item-dropdown .autocomplete-create').click();
+    await page.fill('#inv-new-category', 'Beverages');
+    await page.fill('#inv-new-unit', 'each');
+    await page.getByRole('button', { name: 'Track item', exact: true }).click();
+
+    await expect(page.locator('#modal-overlay')).toBeHidden();
+    await expect(page.locator('#pantry-search')).toHaveValue('');
+    await expect(page.locator('.pantry-card', { hasText: name })).toBeVisible();
+  });
+
   test('keeps a simple status control under the user instead of re-sorting mid-action', async ({ page, baseURL }) => {
     const suffix = Date.now();
     const firstItem = await createItem(page, `Stable First ${suffix}`);

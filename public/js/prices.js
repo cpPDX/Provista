@@ -85,11 +85,69 @@ async function loadPricesTab() {
   }
 }
 
+function hasPriceFilters() {
+  const filter = pricesState.filter;
+  return Boolean(filter.categories.length || filter.stores.length ||
+    filter.dateRange !== 'all' || filter.organicOnly || filter.saleOnly);
+}
+
+function clearPriceSearch() {
+  pricesState.searchQuery = '';
+  const input = document.getElementById('price-search');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  applyPricesFilter();
+}
+
+function clearPriceFilters() {
+  pricesState.filter = { categories: [], stores: [], dateRange: 'all', organicOnly: false, saleOnly: false, sortBy: 'date' };
+  applyPricesFilter();
+}
+
 function renderPricesList(clusters) {
   const container = document.getElementById('prices-list');
 
   if (!clusters.length) {
-    container.innerHTML = emptyState('💰', 'No approved price entries yet. Tap "+ Add Price" to get started.');
+    const query = String(pricesState.searchQuery || '').trim();
+    const filtered = hasPriceFilters();
+
+    if (!pricesState.entries.length) {
+      container.innerHTML = `
+        ${emptyState('💰', 'No price history yet. Record the first price your household paid.')}
+        <div class="empty-state-actions" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-top:-1rem">
+          <button type="button" class="btn btn-primary" id="prices-empty-record">Record price</button>
+        </div>`;
+      document.getElementById('prices-empty-record')?.addEventListener('click', () => document.getElementById('btn-add-price')?.click());
+      return;
+    }
+
+    if (filtered) {
+      container.innerHTML = `
+        ${emptyState('💰', query
+          ? `No price history matches “${escapeHtml(query)}” with the current filters.`
+          : 'No price history matches the current filters.')}
+        <div class="empty-state-actions" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-top:-1rem">
+          <button type="button" class="btn btn-primary" id="prices-empty-clear-filters">Clear filters</button>
+          ${query ? '<button type="button" class="btn btn-outline" id="prices-empty-clear-search">Clear search</button>' : ''}
+        </div>`;
+      document.getElementById('prices-empty-clear-filters')?.addEventListener('click', clearPriceFilters);
+      document.getElementById('prices-empty-clear-search')?.addEventListener('click', clearPriceSearch);
+      return;
+    }
+
+    if (query) {
+      container.innerHTML = `
+        ${emptyState('💰', `No price history matches “${escapeHtml(query)}”.`)}
+        <div class="empty-state-actions" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-top:-1rem">
+          <button type="button" class="btn btn-primary" id="prices-empty-clear-search">Clear search</button>
+        </div>`;
+      document.getElementById('prices-empty-clear-search')?.addEventListener('click', clearPriceSearch);
+      return;
+    }
+
+    container.innerHTML = emptyState('💰', 'No price history matches the current view.');
     return;
   }
 
@@ -174,8 +232,7 @@ function applyPricesFilter() {
 
   // Update count bar
   const totalGroups = new Set(entries.map(e => e.itemId?._id || e.itemId)).size;
-  const isFiltered = filter.categories.length || filter.stores.length ||
-    filter.dateRange !== 'all' || filter.organicOnly || filter.saleOnly;
+  const isFiltered = hasPriceFilters();
   const countBar = document.getElementById('prices-filter-count');
   if (countBar) {
     countBar.textContent = isFiltered ? `Showing ${clusters.length} of ${totalGroups} items` : '';

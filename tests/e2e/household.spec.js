@@ -36,7 +36,26 @@ async function addAccountMember(page, baseURL) {
   const household = await householdResponse.json();
   const member = household.members.find(entry => entry.email === email);
   expect(member).toBeTruthy();
-  return member;
+
+  // Linked account rows use the Person id when one exists, matching
+  // renderRosterRow()'s data-roster-id contract in householdPeople.js.
+  const linkedPerson = household.people.find(person => {
+    const userId = person.userId?._id || person.userId;
+    return String(userId || '') === String(member._id);
+  });
+
+  return {
+    ...member,
+    rosterId: linkedPerson?._id || member._id
+  };
+}
+
+function accountRosterRow(page, member) {
+  return page.locator(`#household-roster-list .member-card[data-roster-id="${member.rosterId}"]`);
+}
+
+async function visibleRosterName(row) {
+  return (await row.locator('.member-name').textContent()).trim();
 }
 
 test.describe('Household management', () => {
@@ -67,8 +86,7 @@ test.describe('Household management', () => {
     const ownerRow = page.locator('#household-roster-list .member-card', { hasText: '(you)' });
     await expect(ownerRow).toContainText('Owner · Can sign in');
 
-    const memberName = accountMember.displayName || accountMember.name.split(/\s+/)[0];
-    const memberRow = page.locator('#household-roster-list .member-card', { hasText: memberName });
+    const memberRow = accountRosterRow(page, accountMember);
     await expect(memberRow).toHaveCount(1);
     await expect(memberRow).toContainText('Member · Can sign in');
 
@@ -87,8 +105,10 @@ test.describe('Household management', () => {
     const accountMember = await addAccountMember(page, baseURL);
     await openHousehold(page);
 
-    const memberName = accountMember.displayName || accountMember.name.split(/\s+/)[0];
-    const memberRow = page.locator('#household-roster-list .member-card', { hasText: memberName });
+    const memberRow = accountRosterRow(page, accountMember);
+    await expect(memberRow).toHaveCount(1);
+    const memberName = await visibleRosterName(memberRow);
+
     await memberRow.getByRole('button', { name: 'Make Admin' }).click();
     let dialog = page.getByRole('dialog', { name: `Make ${memberName} an Admin?` });
     await expect(dialog).toContainText('manage household settings, stores, products, and invites');
