@@ -146,11 +146,111 @@ function closeDetailPanel() {
   }
 }
 
+function waitForDirtySaveOutcome(form) {
+  const overlay = document.getElementById('modal-overlay');
+  const submit = formSubmitButton(form);
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      resolve(value);
+    };
+    const check = () => {
+      const modalOpen = overlay?.style.display !== 'none';
+      if (!modalOpen) return finish(true);
+      // Every current dirty-form submit disables its submit button before the
+      // async write. Re-enabled while the modal remains open means validation
+      // or persistence failed and navigation must not continue.
+      if (submit && !submit.disabled) finish(false);
+    };
+    const observer = new MutationObserver(check);
+    if (overlay) observer.observe(overlay, { attributes: true, attributeFilter: ['style'] });
+    if (submit) observer.observe(submit, { attributes: true, attributeFilter: ['disabled'] });
+    setTimeout(check, 0);
+  });
+}
+
+function showUnsavedNavigationPrompt(onLeave) {
+  const prompt = document.getElementById('unsaved-prompt');
+  if (!prompt) { onLeave(); return; }
+
+  const keepButton = document.getElementById('unsaved-cancel');
+  const saveButton = document.getElementById('unsaved-save');
+  const discardButton = document.getElementById('unsaved-leave');
+  keepButton.textContent = 'Keep editing';
+  saveButton.textContent = 'Save & leave';
+  discardButton.textContent = 'Discard & leave';
+  prompt.style.display = '';
+
+  const hide = () => { prompt.style.display = 'none'; };
+  keepButton.onclick = hide;
+  discardButton.onclick = () => {
+    hide();
+    clearDirtyForm();
+    closeModal();
+    onLeave();
+  };
+  saveButton.onclick = async () => {
+    const dirty = window._dirtyForm;
+    const callback = dirty?.saveCallback;
+    const form = document.querySelector('#modal-body form');
+
+    if (!callback) {
+      hide();
+      clearDirtyForm();
+      closeModal();
+      onLeave();
+      return;
+    }
+    if (form && !form.reportValidity()) {
+      hide();
+      return;
+    }
+
+    saveButton.disabled = true;
+    keepButton.disabled = true;
+    discardButton.disabled = true;
+    saveButton.textContent = 'Saving…';
+    hide();
+
+    try {
+      const callbackResult = callback();
+      let saved;
+      if (callbackResult && typeof callbackResult.then === 'function') {
+        await callbackResult;
+        saved = document.getElementById('modal-overlay')?.style.display === 'none';
+      } else {
+        saved = await waitForDirtySaveOutcome(form);
+      }
+
+      if (!saved) {
+        // The form stays open with its existing validation/error feedback.
+        return;
+      }
+
+      clearDirtyForm();
+      if (document.getElementById('modal-overlay')?.style.display !== 'none') closeModal();
+      await onLeave();
+    } catch (err) {
+      // A rejecting save callback means the current form remains authoritative.
+      // Do not clear dirty state or perform the requested navigation.
+      handleError(err, 'Could not save changes');
+    } finally {
+      saveButton.disabled = false;
+      keepButton.disabled = false;
+      discardButton.disabled = false;
+      saveButton.textContent = 'Save & leave';
+    }
+  };
+}
+
 function handleNavTap(tabId) {
   closeDetailPanel();
   const modalOpen = document.getElementById('modal-overlay').style.display !== 'none';
   if (modalOpen && window._dirtyForm?.isDirty) {
-    showUnsavedPrompt(() => switchTab(tabId));
+    showUnsavedNavigationPrompt(() => switchTab(tabId));
   } else {
     if (modalOpen) closeModal();
     switchTab(tabId);
@@ -188,7 +288,7 @@ async function switchTab(tabId) {
 function initModal() {
   function tryCloseModal() {
     if (window._dirtyForm?.isDirty) {
-      showUnsavedPrompt(() => {});
+      showUnsavedNavigationPrompt(() => {});
     } else {
       closeModal();
     }

@@ -41,7 +41,7 @@ const WIZARD_STEPS = [
     section: 'household',
     sectionLoader: async () => { await loadHousehold(); },
     targetId: 'household-content',
-    title: 'Step 1 of 4 — Add your household',
+    title: 'Step 1 of 4 - Add your household',
     text: 'Start with the people you plan and shop for. You can invite app users now or add planning-only people later.',
     nextLabel: 'Next'
   },
@@ -50,7 +50,7 @@ const WIZARD_STEPS = [
     section: null,
     sectionLoader: null,
     targetId: 'meal-plan-content',
-    title: 'Step 2 of 4 — Plan one meal',
+    title: 'Step 2 of 4 - Plan one meal',
     text: 'Choose tonight’s dinner. Meal planning is the fastest way to turn an idea into a useful household plan.',
     nextLabel: 'Next'
   },
@@ -58,9 +58,9 @@ const WIZARD_STEPS = [
     tab: 'list',
     section: null,
     sectionLoader: null,
-    targetId: 'btn-add-list-item',
-    title: 'Step 3 of 4 — Add what you need',
-    text: 'Add the ingredients or household items you need. Everyone shares this list.',
+    targetId: 'rapid-list-input',
+    title: 'Step 3 of 4 - Add what you need',
+    text: 'Type several groceries at once for the fastest path. Use Add with details when an item needs more information.',
     nextLabel: 'Next'
   },
   {
@@ -94,9 +94,9 @@ function runWizard(startStep) {
   const backdrop = document.createElement('div');
   backdrop.className = 'tour-backdrop';
   backdrop.style.pointerEvents = 'none'; // allow tapping through to highlighted elements
-  backdrop.style.background = 'transparent'; // no dark tint — wizard is non-blocking
+  backdrop.style.background = 'transparent'; // no dark tint - wizard is non-blocking
   document.body.appendChild(backdrop);
-  // Do NOT add 'visible' class — keep backdrop fully transparent for wizard
+  // Do NOT add 'visible' class - keep backdrop fully transparent for wizard
 
   const tooltip = document.createElement('div');
   tooltip.className = 'tour-tooltip wizard-tooltip';
@@ -174,7 +174,7 @@ function runWizard(startStep) {
 
   function skip() {
     close();
-    // Don't mark as done — leave resume button visible
+    // Don't mark as done - leave resume button visible
   }
 
   function complete() {
@@ -203,31 +203,31 @@ function startAppTour() {
     {
       tab: 'home',
       title: 'Home / Today',
-      text: 'See dinner, the shopping list, low-stock staples, and your next best action in one glance.',
+      text: 'See dinner, what you need, low or out Pantry items, and unfinished follow-up in one glance.',
       anchor: '[data-tab="home"]'
     },
     {
       tab: 'meal-plan',
       title: 'Plan',
-      text: 'Plan meals for the household. Changes save automatically, so there is no extra Save step.',
+      text: 'Plan meals for the household, keep shopping notes with them, and reuse favorites. Changes save automatically.',
       anchor: '[data-tab="meal-plan"]'
     },
     {
       tab: 'list',
       title: 'Shopping List',
-      text: 'Build the shared list around your usual store. Provista shows price age and suggests another stop only when the savings clear your household threshold.',
+      text: 'Add several groceries quickly, scan an item, or use Add with details. Checking an item means you bought it immediately; Finish shopping completes one store stop at a time.',
       anchor: '[data-tab="list"]'
     },
     {
       tab: 'inventory',
       title: 'Pantry',
-      text: 'Keep an eye on household staples and low-stock alerts without tracking every cupboard item.',
+      text: 'Use simple Have, Running low, and Out tracking for most items. Track an exact quantity only when you want Provista to determine low stock automatically.',
       anchor: '[data-tab="inventory"]'
     },
     {
       tab: 'more',
       title: 'More',
-      text: 'Open Insights for prices and spending, or manage household people, stores, and account settings.',
+      text: 'Open Insights for household-paid price history and Spending, or manage household people, stores, account settings, and help.',
       anchor: '[data-tab="more"]'
     }
   ];

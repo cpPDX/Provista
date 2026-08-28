@@ -1,5 +1,5 @@
 // Provista Service Worker
-// Cache-first for static assets (images, fonts), network-first for JS/CSS and API data
+// Network-first for navigations, JS/CSS, and API data; cache-first for static assets.
 
 const SHELL_CACHE = 'provista-shell-v7';
 const API_CACHE = 'provista-api-v5';
@@ -8,6 +8,7 @@ const SHELL_ASSETS = [
   '/',
   '/index.html',
   '/css/style.css',
+  '/css/parentExperience.css',
   '/css/rapidShoppingCapture.css',
   '/js/auth.js',
   '/js/api.js',
@@ -19,7 +20,10 @@ const SHELL_ASSETS = [
   '/js/csvImport.js',
   '/js/spend.js',
   '/js/more.js',
+  '/js/moreInit.js',
+  '/js/pantry.js',
   '/js/mealPlan.js',
+  '/js/home.js',
   '/js/onboarding.js',
   '/js/scan.js',
   '/js/scanner.js',
@@ -27,7 +31,6 @@ const SHELL_ASSETS = [
   '/js/vendor/idb.min.js',
   '/js/offline.js',
   '/js/install-prompt.js',
-  '/brand/provista-mark.svg',
   '/favicon.svg',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg',
@@ -65,6 +68,13 @@ self.addEventListener('fetch', (event) => {
   // Only handle same-origin requests
   if (url.origin !== self.location.origin) return;
 
+  // Navigations should pick up the latest deployed shell when online, while
+  // still falling back to the cached app when the household is offline.
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirstWithCacheFallback(request));
+    return;
+  }
+
   // API requests: network-first with cache fallback
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstWithCacheFallback(request));
@@ -80,6 +90,14 @@ self.addEventListener('fetch', (event) => {
   // Static assets (images, icons, fonts): cache-first
   event.respondWith(cacheFirstWithNetworkFallback(request));
 });
+
+function cacheNameForRequest(request) {
+  const url = new URL(request.url);
+  if (request.mode === 'navigate' || url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
+    return SHELL_CACHE;
+  }
+  return API_CACHE;
+}
 
 // Cache-first: serve from cache immediately, fall back to network
 async function cacheFirstWithNetworkFallback(request) {
@@ -106,19 +124,28 @@ async function cacheFirstWithNetworkFallback(request) {
 
 // Network-first: try network, fall back to cache, then structured error
 async function networkFirstWithCacheFallback(request) {
+  const cacheName = cacheNameForRequest(request);
   try {
     const response = await fetch(request);
-    // Cache successful GET responses
+    // Cache successful GET responses in the cache that owns that resource.
     if (response.ok && request.method === 'GET') {
-      const cache = await caches.open(API_CACHE);
+      const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
+      if (request.mode === 'navigate') {
+        cache.put('/index.html', response.clone()).catch(() => {});
+      }
     }
     return response;
   } catch {
-    // Network failed — try cache
+    // Network failed — prefer the owning cache before searching all caches.
     if (request.method === 'GET') {
-      const cached = await caches.match(request);
+      const cache = await caches.open(cacheName);
+      const cached = await cache.match(request);
       if (cached) return cached;
+      if (request.mode === 'navigate') {
+        const cachedIndex = await cache.match('/index.html');
+        if (cachedIndex) return cachedIndex;
+      }
     }
 
     // No cache available — return structured offline error

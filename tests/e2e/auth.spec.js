@@ -12,12 +12,48 @@ test.describe('Authentication', () => {
     await expect(page.locator('#register-form')).toBeVisible();
   });
 
+  test('registration password can be inspected and is masked by default', async ({ page }) => {
+    await page.goto('/login.html');
+    await page.click('.auth-tab[data-mode="register"]');
+
+    const password = page.locator('#register-password');
+    const toggle = page.locator('#register-password-toggle');
+    await expect(password).toHaveAttribute('type', 'password');
+    await expect(toggle).toHaveAttribute('aria-label', 'Show password');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    await password.fill('password123');
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(password).toHaveAttribute('type', 'text');
+    await expect(password).toHaveValue('password123');
+    await expect(toggle).toHaveAttribute('aria-label', 'Hide password');
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+    await toggle.click();
+    await expect(password).toHaveAttribute('type', 'password');
+    await expect(toggle).toHaveText('Show');
+  });
+
   test('shows error for wrong credentials', async ({ page }) => {
     await page.goto('/login.html');
     await page.fill('#login-email', 'notauser@test.com');
     await page.fill('#login-password', 'wrongpass');
     await page.click('#btn-login');
     await expect(page.locator('#login-error')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('registration describes the current shared household workflow', async ({ page }) => {
+    await page.goto('/login.html');
+    await page.click('.auth-tab[data-mode="register"]');
+    await page.fill('#register-name', 'Household Copy User');
+    await page.fill('#register-email', `household-copy-${Date.now()}@test.com`);
+    await page.fill('#register-password', 'password123');
+    await page.click('#btn-register-continue');
+
+    await expect(page.locator('#step-household')).toBeVisible();
+    await expect(page.locator('#step-household')).toContainText('Your household shares meal plans, shopping lists, Pantry status, and shopping history.');
+    await expect(page.locator('#step-household')).not.toContainText('share prices and shopping lists');
   });
 
   test('registers and lands on main app', async ({ page }) => {

@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Provista — Sign In</title>
-  <meta name="description" content="Plan meals, shop together, and keep your household in sync with Provista." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#21ABCD" />
@@ -21,10 +20,12 @@
   <div class="auth-container">
     <div class="auth-logo">
       <div class="auth-logo-icon">
-        <img src="/brand/provista-mark.svg?v=b2-5" width="72" height="72" alt="" />
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" style="display:block">
+          <rect width="48" height="48" rx="12" fill="#21ABCD"/>
+          <text x="24" y="35" font-family="system-ui, -apple-system, sans-serif" font-size="30" font-weight="800" fill="#1A1C20" text-anchor="middle" letter-spacing="-0.5">P</text>
+        </svg>
       </div>
       <h1>Provista</h1>
-      <p>Plan together. Shop with clarity.</p>
     </div>
 
     <!-- Step 1: Login / Register choice -->
@@ -61,8 +62,11 @@
           <input class="form-control" id="register-email" type="email" name="email" required placeholder="you@example.com" autocomplete="email" />
         </div>
         <div class="form-group">
-          <label>Password <span class="text-muted text-sm">(min. 8 chars)</span></label>
-          <input class="form-control" id="register-password" type="password" name="password" required minlength="8" placeholder="••••••••" autocomplete="new-password" />
+          <label for="register-password">Password <span class="text-muted text-sm">(min. 8 chars)</span></label>
+          <div class="auth-password-row">
+            <input class="form-control" id="register-password" type="password" name="password" required minlength="8" placeholder="••••••••" autocomplete="new-password" />
+            <button type="button" class="auth-password-toggle" id="register-password-toggle" aria-controls="register-password" aria-pressed="false" aria-label="Show password">Show</button>
+          </div>
         </div>
         <div id="register-error" class="auth-error" style="display:none"></div>
         <button type="submit" class="btn btn-primary btn-full" id="btn-register-continue">Continue</button>
@@ -103,7 +107,7 @@
     <!-- Step 2: Create or Join household -->
     <div class="auth-card" id="step-household" style="display:none">
       <h2 class="auth-step-title">Set up your household</h2>
-      <p class="text-muted text-sm" style="margin-bottom:1.25rem">A household lets you share prices and shopping lists with family or housemates.</p>
+      <p class="text-muted text-sm" style="margin-bottom:1.25rem">Your household shares meal plans, shopping lists, Pantry status, and shopping history.</p>
       <div class="household-choice">
         <button class="household-choice-btn" id="btn-choose-create-household" data-action="create">
           <span class="choice-icon">🏠</span>
@@ -275,6 +279,17 @@
         document.getElementById('register-form').style.display = mode === 'register' ? '' : 'none';
         clearErrors();
       });
+    });
+
+    const registerPassword = document.getElementById('register-password');
+    const registerPasswordToggle = document.getElementById('register-password-toggle');
+    registerPasswordToggle.addEventListener('click', () => {
+      const visible = registerPassword.type === 'text';
+      registerPassword.type = visible ? 'password' : 'text';
+      registerPasswordToggle.textContent = visible ? 'Show' : 'Hide';
+      registerPasswordToggle.setAttribute('aria-pressed', visible ? 'false' : 'true');
+      registerPasswordToggle.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
+      registerPassword.focus({ preventScroll: true });
     });
 
     function clearErrors() {
