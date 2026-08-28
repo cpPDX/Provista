@@ -43,8 +43,10 @@ test.describe('Pantry household workflows', () => {
     const card = page.locator('.pantry-card', { hasText: name });
     await expect(card).toBeVisible();
     await expect(card).toContainText('Running low');
-    await expect(card).toContainText('Running low and Out items appear on Home');
+    await expect(card).not.toContainText('Running low and Out items appear on Home');
+    await expect(card).not.toContainText('Track an exact quantity instead');
     await expect(card.locator('.pantry-qty-controls')).toHaveCount(0);
+    await expect(page.locator('#pantry-page-help')).toHaveText('Mark staples Running low or Out and Provista will surface them on Home and in List review.');
   });
 
   test('prioritizes low and out items on a fresh load and filters Pantry by search', async ({ page }) => {
@@ -131,7 +133,7 @@ test.describe('Pantry household workflows', () => {
     }, { timeout: 5000 }).toBe(4);
   });
 
-  test('keeps simple and exact tracking mutually exclusive', async ({ page }) => {
+  test('keeps simple and exact tracking mutually exclusive and moves mode changes into Edit details', async ({ page }) => {
     const suffix = Date.now();
     const simpleItem = await createItem(page, `Simple Milk ${suffix}`);
     const exactItem = await createItem(page, `Exact Milk ${suffix}`);
@@ -145,9 +147,14 @@ test.describe('Pantry household workflows', () => {
 
     await expect(simpleCard.locator('.pantry-status-actions')).toBeVisible();
     await expect(simpleCard.locator('.pantry-qty-controls')).toHaveCount(0);
+    await expect(simpleCard).not.toContainText('Track an exact quantity instead');
     await expect(exactCard.locator('.pantry-qty-controls')).toBeVisible();
     await expect(exactCard.locator('.pantry-status-actions')).toHaveCount(0);
     await expect(exactCard).toContainText('Provista marks low at 2');
+
+    await simpleCard.getByRole('button', { name: 'Edit details' }).click();
+    await expect(page.locator('input[name="edit-inv-tracking-mode"][value="simple"]')).toBeChecked();
+    await expect(page.locator('input[name="edit-inv-tracking-mode"][value="exact"]')).toBeVisible();
   });
 
   test('shows meaningful low-stock review state and makes On list static', async ({ page }) => {
