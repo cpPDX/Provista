@@ -1146,7 +1146,7 @@ function loadAboutSection() {
   document.getElementById('about-content').innerHTML = `
     <div style="text-align:center;padding:1rem 0 1.5rem">
       <div style="margin-bottom:0.75rem">
-        <img src="/brand/provista-mark.svg" width="64" height="64" alt="" style="display:inline-block;border-radius:16px;box-shadow:var(--shadow-card-elevated)">
+        <img src="/brand/provista-mark.svg?v=b2-5" width="64" height="64" alt="" style="display:inline-block;border-radius:16px;box-shadow:var(--shadow-card-elevated)">
       </div>
       <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:0.25rem">Provista</h2>
       <p style="color:var(--primary-light);font-size:0.875rem;font-weight:700">Plan together. Shop with clarity.</p>
