@@ -22,6 +22,26 @@ test.describe('Authentication', () => {
     expect(brandLayer.backgroundImage).toContain('/brand/provista-mark.svg');
   });
 
+  test('auth surface covers the full mobile viewport', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/login.html');
+
+    const surface = await page.evaluate(() => {
+      const style = getComputedStyle(document.body);
+      const rect = document.body.getBoundingClientRect();
+      return {
+        bodyHeight: rect.height,
+        viewportHeight: window.innerHeight,
+        overflowY: style.overflowY,
+        backgroundImage: style.backgroundImage
+      };
+    });
+
+    expect(surface.bodyHeight).toBeGreaterThanOrEqual(surface.viewportHeight - 1);
+    expect(surface.overflowY).toBe('auto');
+    expect(surface.backgroundImage).toContain('linear-gradient');
+  });
+
   test('switches to Create Account tab', async ({ page }) => {
     await page.goto('/login.html');
     await page.click('.auth-tab[data-mode="register"]');
