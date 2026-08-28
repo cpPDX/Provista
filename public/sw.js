@@ -1,7 +1,7 @@
 // Provista Service Worker
 // Network-first for navigations, JS/CSS, and API data; cache-first for static assets.
 
-const SHELL_CACHE = 'provista-shell-v9';
+const SHELL_CACHE = 'provista-shell-v10';
 const API_CACHE = 'provista-api-v5';
 
 const SHELL_ASSETS = [
