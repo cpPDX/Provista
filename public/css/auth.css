@@ -1,11 +1,32 @@
 /* Auth page styles */
+html {
+  background: #1A1C20;
+}
+
 body.auth-page {
   background: linear-gradient(135deg, #1A1C20 0%, #2E3035 50%, #1A1C20 100%);
+  background-attachment: fixed;
+  width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: calc(1rem + env(safe-area-inset-top, 0px)) calc(1rem + env(safe-area-inset-right, 0px)) calc(1rem + env(safe-area-inset-bottom, 0px)) calc(1rem + env(safe-area-inset-left, 0px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+}
+
+@media (display-mode: standalone) {
+  body.auth-page {
+    min-height: 100dvh;
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  }
 }
 
 .auth-container {
@@ -14,6 +35,7 @@ body.auth-page {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  margin-inline: auto;
 }
 
 .auth-logo {
