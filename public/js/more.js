@@ -1154,6 +1154,16 @@ function loadAboutSection() {
     </div>
     <div class="card" style="margin-bottom:1rem">
       <div class="card-body">
+        <div class="card-title">Why the name?</div>
+        <p class="text-muted text-sm" style="margin-top:0.5rem;line-height:1.6">
+          <strong style="color:var(--text)">Provista</strong> combines <em>provisions</em> — the food and essentials
+          that keep a household moving — with <em>vista</em>, a clear view of what lies ahead. It brings meals,
+          shopping, Pantry, and spending into one shared view, so your household can plan together and shop with clarity.
+        </p>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-body">
         <div class="card-title">Why this app exists</div>
         <p class="text-muted text-sm" style="margin-top:0.5rem;line-height:1.6">
           Provista brings meal planning, the shared shopping list, Pantry, and household

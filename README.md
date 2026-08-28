@@ -2,6 +2,10 @@
 
 **A household grocery planning and shopping assistant built for busy families.**
 
+## Why “Provista”?
+
+**Provista** combines *provisions* — the food and essentials that keep a household moving — with *vista*, a clear view of what lies ahead. It brings meals, shopping, Pantry, and spending into one shared view, so your household can plan together and shop with clarity.
+
 Provista helps a household answer the practical questions that come up every day:
 
 - What are we eating?
