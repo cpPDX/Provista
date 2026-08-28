@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="80" fill="#1A1C20"/>
-  <rect x="56" y="56" width="400" height="400" rx="64" fill="#21ABCD"/>
-  <text x="256" y="340" font-family="system-ui, -apple-system, sans-serif" font-size="300" font-weight="800" fill="#1A1C20" text-anchor="middle" letter-spacing="-8">P</text>
+  <rect width="512" height="512" rx="118" fill="#1A1C20"/>
+  <path d="M160 384V160c0-35.3 28.7-64 64-64h64c79.5 0 144 64.5 144 144s-64.5 144-144 144h-64" fill="none" stroke="#F0F2F5" stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M160 200h112M160 288h112" fill="none" stroke="#F0F2F5" stroke-width="40" stroke-linecap="round"/>
+  <path d="M184 136h64v40h-64zm0 88h64v40h-64zm0 88h64v48h-64z" fill="#21ABCD"/>
 </svg>
