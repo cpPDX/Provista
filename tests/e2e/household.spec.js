@@ -39,6 +39,14 @@ async function addAccountMember(page, baseURL) {
   return member;
 }
 
+function accountRosterRow(page, member) {
+  return page.locator(`#household-roster-list .member-card[data-roster-id="${member._id}"]`);
+}
+
+async function visibleRosterName(row) {
+  return (await row.locator('.member-name').textContent()).trim();
+}
+
 test.describe('Household management', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await page.addInitScript(() => {
@@ -67,8 +75,7 @@ test.describe('Household management', () => {
     const ownerRow = page.locator('#household-roster-list .member-card', { hasText: '(you)' });
     await expect(ownerRow).toContainText('Owner · Can sign in');
 
-    const memberName = accountMember.displayName || accountMember.name.split(/\s+/)[0];
-    const memberRow = page.locator('#household-roster-list .member-card', { hasText: memberName });
+    const memberRow = accountRosterRow(page, accountMember);
     await expect(memberRow).toHaveCount(1);
     await expect(memberRow).toContainText('Member · Can sign in');
 
@@ -87,8 +94,10 @@ test.describe('Household management', () => {
     const accountMember = await addAccountMember(page, baseURL);
     await openHousehold(page);
 
-    const memberName = accountMember.displayName || accountMember.name.split(/\s+/)[0];
-    const memberRow = page.locator('#household-roster-list .member-card', { hasText: memberName });
+    const memberRow = accountRosterRow(page, accountMember);
+    await expect(memberRow).toHaveCount(1);
+    const memberName = await visibleRosterName(memberRow);
+
     await memberRow.getByRole('button', { name: 'Make Admin' }).click();
     let dialog = page.getByRole('dialog', { name: `Make ${memberName} an Admin?` });
     await expect(dialog).toContainText('manage household settings, stores, products, and invites');
