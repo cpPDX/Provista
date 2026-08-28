@@ -103,9 +103,19 @@ const Pantry = (() => {
     ensurePageHelper();
     const items = visibleItems();
     if (!items.length) {
-      container.innerHTML = emptyState('🧺', state.search
-        ? 'No Pantry items match that search.'
-        : 'Nothing tracked yet. Track staples you want Provista to surface when they’re low.');
+      const query = state.search.trim();
+      if (query) {
+        container.innerHTML = `
+          ${emptyState('🧺', `No Pantry items match “${escapeHtml(query)}”.`)}
+          <div class="empty-state-actions" style="display:flex;justify-content:center;flex-wrap:wrap;gap:0.5rem;margin-top:-1rem">
+            <button type="button" class="btn btn-primary" id="pantry-track-search">Track “${escapeHtml(query)}”</button>
+            <button type="button" class="btn btn-outline" id="pantry-clear-search">Clear search</button>
+          </div>`;
+        document.getElementById('pantry-track-search')?.addEventListener('click', () => openAdd(query));
+        document.getElementById('pantry-clear-search')?.addEventListener('click', clearSearch);
+      } else {
+        container.innerHTML = emptyState('🧺', 'Nothing tracked yet. Track staples you want Provista to surface when they’re low.');
+      }
       return;
     }
     // Preserve the server-provided priority order while the user is on the screen.
@@ -145,6 +155,16 @@ const Pantry = (() => {
 
   function setSearch(value) {
     state.search = String(value || '');
+    render();
+  }
+
+  function clearSearch() {
+    state.search = '';
+    const input = document.getElementById('pantry-search');
+    if (input) {
+      input.value = '';
+      input.focus();
+    }
     render();
   }
 
@@ -311,7 +331,8 @@ const Pantry = (() => {
     return { trackingMode, quantity, lowStockThreshold };
   }
 
-  function openAdd() {
+  function openAdd(prefill = '') {
+    const initialName = typeof prefill === 'string' ? prefill.trim() : '';
     const bodyHTML = `
       <form id="add-inv-form">
         <div class="form-group">
@@ -356,6 +377,12 @@ const Pantry = (() => {
       if (selectedItemName && itemInput.value !== selectedItemName) document.getElementById('inv-item-id').value = '';
     });
 
+    if (initialName) {
+      itemInput.value = initialName;
+      itemInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    requestAnimationFrame(() => itemInput.focus());
+
     document.getElementById('add-inv-form').addEventListener('submit', async event => {
       event.preventDefault();
       let itemId = document.getElementById('inv-item-id').value;
@@ -379,6 +406,9 @@ const Pantry = (() => {
         });
         closeModal();
         showToast('Item is now tracked in Pantry');
+        state.search = '';
+        const searchInput = document.getElementById('pantry-search');
+        if (searchInput) searchInput.value = '';
         await load();
       } catch (err) {
         handleError(err, 'Failed to add to Pantry');
@@ -465,6 +495,7 @@ const Pantry = (() => {
     load,
     render,
     setSearch,
+    clearSearch,
     setStatus,
     adjustQuantity,
     openAdd,
