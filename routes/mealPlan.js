@@ -292,6 +292,31 @@ router.post('/favorites', requireAuth, async (req, res) => {
   }
 });
 
+router.put('/favorites/:id', requireAuth, async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim().replace(/\s+/g, ' ');
+    const notes = String(req.body.notes || '').trim();
+    if (!name) return res.status(400).json({ error: 'Favorite meal name is required' });
+    if (name.length > 120) return res.status(400).json({ error: 'Favorite meal name is too long' });
+    if (notes.length > 2000) return res.status(400).json({ error: 'Favorite meal notes are too long' });
+
+    const favorite = await FavoriteMeal.findOneAndUpdate(
+      { _id: req.params.id, householdId: req.user.householdId },
+      { $set: { name, normalizedName: normalizeFavoriteName(name), notes } },
+      { new: true, runValidators: true }
+    );
+    if (!favorite) return res.status(404).json({ error: 'Favorite meal not found' });
+    res.json(favorite);
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: 'A favorite meal with that name already exists' });
+    }
+    if (err?.name === 'CastError') return res.status(404).json({ error: 'Favorite meal not found' });
+    if (err?.name === 'ValidationError') return res.status(400).json({ error: serverErr(err) });
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
 router.post('/favorites/:id/use', requireAuth, async (req, res) => {
   try {
     const favorite = await FavoriteMeal.findOneAndUpdate(
