@@ -4,7 +4,15 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    branches:
+      - '**'
+
+# A feature-branch push and the pull_request event for the same head can fire
+# together. Keep one authoritative run per branch so pre-PR validation does not
+# double the Actions workload once a PR exists.
+concurrency:
+  group: app-ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
