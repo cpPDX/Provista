@@ -68,14 +68,22 @@ router.get('/', requireAuth, async (req, res) => {
 
     let total = 0;
     const byCategory = {};
-    const byStore = {};
+    const byStore = new Map();
+
+    const addStoreAmount = (storeId, storeName, amount) => {
+      const id = storeId ? String(storeId) : '';
+      const name = storeName || 'Unknown';
+      const key = id || `name:${name}`;
+      const current = byStore.get(key) || { name, storeId: id || null, amount: 0 };
+      current.amount += amount;
+      byStore.set(key, current);
+    };
 
     for (const e of entries) {
       total += e.finalPrice;
       const cat = e.itemId?.category || 'Unknown';
-      const store = e.storeId?.name || 'Unknown';
       byCategory[cat] = (byCategory[cat] || 0) + e.finalPrice;
-      byStore[store] = (byStore[store] || 0) + e.finalPrice;
+      addStoreAmount(e.storeId?._id || e.storeId, e.storeId?.name, e.finalPrice);
     }
 
     for (const trip of trips) {
@@ -83,9 +91,8 @@ router.get('/', requireAuth, async (req, res) => {
       for (const item of trip.items) {
         if (item.price === null || item.price === undefined) continue;
         const cat = item.category || 'Unknown';
-        const store = item.storeName || 'Unknown';
         byCategory[cat] = (byCategory[cat] || 0) + item.price;
-        byStore[store] = (byStore[store] || 0) + item.price;
+        addStoreAmount(item.storeId, item.storeName, item.price);
       }
     }
 
@@ -93,8 +100,12 @@ router.get('/', requireAuth, async (req, res) => {
     res.json({
       month: monthStr,
       total: round(total),
-      byCategory: Object.entries(byCategory).map(([name, amount]) => ({ name, amount: round(amount) })).sort((a, b) => b.amount - a.amount),
-      byStore: Object.entries(byStore).map(([name, amount]) => ({ name, amount: round(amount) })).sort((a, b) => b.amount - a.amount)
+      byCategory: Object.entries(byCategory)
+        .map(([name, amount]) => ({ name, amount: round(amount) }))
+        .sort((a, b) => b.amount - a.amount),
+      byStore: [...byStore.values()]
+        .map(store => ({ ...store, amount: round(store.amount) }))
+        .sort((a, b) => b.amount - a.amount)
     });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });

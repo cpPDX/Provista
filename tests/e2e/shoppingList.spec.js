@@ -148,7 +148,7 @@ test.describe('Shopping List critical flows', () => {
     await expect(page.locator('#btn-remove-checked')).toBeVisible();
   });
 
-  test('offers Use, Update price, and Later inline without interrupting check-off', async ({ page }) => {
+  test('keeps recent prices compact and reveals detailed choices only on demand', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const storeResponse = await page.request.post('/api/stores', { data: { name: `Inline Price Store ${suffix}` } });
     const store = await storeResponse.json();
@@ -163,7 +163,12 @@ test.describe('Shopping List critical flows', () => {
     await card.locator('.list-item-check-wrap').click();
     const choices = card.locator('.purchase-price-choice');
     await expect(choices).toBeVisible();
-    await expect(choices.getByRole('button', { name: 'Use $4.29' })).toBeVisible();
+    await expect(choices.locator('.purchase-price-choice-status')).toHaveText('Bought · using recent $4.29');
+    await expect(choices.getByRole('button', { name: 'Change' })).toBeVisible();
+    await expect(choices.locator('.purchase-price-choice-actions')).toHaveCount(0);
+
+    await choices.getByRole('button', { name: 'Change' }).click();
+    await expect(choices.getByRole('button', { name: 'Use recent $4.29' })).toBeVisible();
     await expect(choices.getByRole('button', { name: 'Update price' })).toBeVisible();
     await expect(choices.getByRole('button', { name: 'Later' })).toBeVisible();
 
@@ -171,12 +176,17 @@ test.describe('Shopping List critical flows', () => {
     await expect(page.locator('#modal-title')).toHaveText('Update price');
     await page.fill('#inline-price-value', '4.99');
     await page.getByRole('button', { name: 'Use this price' }).click();
-    await expect(card.locator('.purchase-price-choice-status')).toContainText('$4.99');
+    await expect(card.locator('.purchase-price-choice-status')).toHaveText('Bought · $4.99 recorded');
+    await expect(card.getByRole('button', { name: 'Change' })).toBeVisible();
 
-    await card.locator('.purchase-price-choice').getByRole('button', { name: 'Later' }).click();
-    await expect(card.locator('.purchase-price-choice-status')).toContainText('reviewed later');
-    await card.locator('.purchase-price-choice').getByRole('button', { name: 'Use $4.29' }).click();
-    await expect(card.locator('.purchase-price-choice-status')).toContainText('$4.29');
+    await card.getByRole('button', { name: 'Change' }).click();
+    await card.getByRole('button', { name: 'Later' }).click();
+    await expect(card.locator('.purchase-price-choice-status')).toHaveText('Bought · price later');
+    await expect(card.getByRole('button', { name: 'Add price' })).toBeVisible();
+
+    await card.getByRole('button', { name: 'Add price' }).click();
+    await card.getByRole('button', { name: 'Use recent $4.29' }).click();
+    await expect(card.locator('.purchase-price-choice-status')).toHaveText('Bought · using recent $4.29');
   });
 
   test('finishes one active shopping stop and leaves other items for the next stop', async ({ page }) => {
@@ -246,7 +256,10 @@ test.describe('Shopping List critical flows', () => {
     }, listItems.map(item => item._id));
     await expect(page.locator('.list-item.checked')).toHaveCount(20);
     await expect(page.locator('.purchase-price-choice')).toHaveCount(20);
-    await expect(page.locator('.price-choice-btn.selected', { hasText: 'Later' })).toHaveCount(3);
+    await expect(page.locator('.purchase-price-attention')).toHaveCount(3);
+    await expect(page.locator('.purchase-price-choice-status', { hasText: 'using recent' })).toHaveCount(17);
+    await expect(page.getByRole('button', { name: 'Add price' })).toHaveCount(3);
+    await expect(page.locator('.purchase-price-choice-actions')).toHaveCount(0);
     await page.locator('#btn-done-shopping').click();
 
     await expect(page.locator('#modal-title')).toHaveText('Finish shopping');
@@ -254,6 +267,8 @@ test.describe('Shopping List critical flows', () => {
     await expect(page.locator('#parent-trip-price-summary')).toContainText('3 prices will be reviewed later');
     await expect(page.locator('.finish-shopping-confirmed')).toContainText('17 recorded prices');
     await expect(page.locator('.finish-shopping-outcomes')).toContainText('Update Spending');
+    await expect(page.locator('.finish-shopping-outcomes')).toContainText('Update Pantry if selected below');
+    await expect(page.locator('.finish-shopping-outcomes')).not.toContainText('Add purchased items to Pantry');
 
     await page.locator('#parent-finish-shopping').click();
     await expect(page.locator('#modal-overlay')).toBeHidden({ timeout: 20000 });
@@ -268,6 +283,8 @@ test.describe('Shopping List critical flows', () => {
     const purchasedIds = new Set(items.map(item => item._id));
     expect((await pantryResponse.json()).filter(entry => purchasedIds.has(entry.itemId?._id))).toHaveLength(20);
     expect((await spendResponse.json()).total).toBeGreaterThan(0);
-    expect(await deferredResponse.json()).toHaveLength(3);
+    const tripDeferred = (await deferredResponse.json()).filter(entry => purchasedIds.has(entry.itemId));
+    expect(tripDeferred).toHaveLength(3);
+    expect(tripDeferred.map(entry => entry.itemId).sort()).toEqual(items.slice(17).map(item => item._id).sort());
   });
 });

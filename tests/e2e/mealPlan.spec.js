@@ -105,7 +105,7 @@ test.describe('Meal Plan Tab', () => {
     await expect(days.nth(collapsedIndex).locator('.meal-day-content')).toBeVisible();
   });
 
-  test('each day starts with four meal type sections and quiet default audiences', async ({ page }) => {
+  test('each day shows its current audience without opening the picker', async ({ page }) => {
     const dayCard = page.locator(`.meal-day[data-day-index="${currentDayIndex()}"]`);
     await expect(dayCard.locator('.meal-type-section')).toHaveCount(4);
     await expect(page.locator('.meal-plan-mode-summary')).toHaveText('Dinner only');
@@ -117,14 +117,44 @@ test.describe('Meal Plan Tab', () => {
     const audienceButtons = dayCard.locator('.meal-audience-toggle');
     await expect(audienceButtons).toHaveCount(4);
     for (let i = 0; i < 4; i++) {
-      await expect(audienceButtons.nth(i)).toHaveText('Change who');
+      await expect(audienceButtons.nth(i)).toHaveText('Everyone · Change');
+      await expect(audienceButtons.nth(i)).toHaveAttribute('aria-label', 'Everyone. Change who this meal is for');
     }
   });
 
-  test('meal rows include an optional notes field', async ({ page }) => {
+  test('meal rows expose one explicit shopping-needs field', async ({ page }) => {
     const firstRow = dinnerRow(page);
     await expect(firstRow.locator('.meal-name-input')).toBeVisible();
-    await expect(firstRow.locator('.meal-notes-input')).toBeVisible();
+    await expect(firstRow.locator('.meal-needs-label')).toHaveText('Need for this meal');
+    await expect(firstRow.locator('.meal-notes-input')).toHaveAttribute('aria-label', 'Need for this meal');
+    await expect(firstRow.locator('.meal-notes-input')).toHaveAttribute('placeholder', 'e.g. tortillas, salsa, cilantro');
+    await expect(page.locator('#mp-shopping-notes')).toHaveCount(0);
+    await expect(page.locator('#mp-export-btn')).toHaveText('Export to calendar');
+  });
+
+  test('hidden legacy weekly shopping notes survive normal autosave', async ({ page }) => {
+    const weekStart = currentWeekStart();
+    const seeded = await page.request.put('/api/meal-plan', {
+      data: {
+        weekStart,
+        days: blankWeek(weekStart),
+        produceNotes: '',
+        shoppingNotes: 'Legacy note that must survive'
+      }
+    });
+    expect(seeded.ok()).toBeTruthy();
+    await page.click('[data-tab="home"]');
+    await page.click('[data-tab="meal-plan"]');
+    await page.waitForSelector('.meal-day');
+    await expect(page.locator('#mp-shopping-notes')).toHaveCount(0);
+
+    await dinnerRow(page).locator('.meal-name-input').fill('Autosave dinner');
+    await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
+
+    const savedResponse = await page.request.get(`/api/meal-plan?weekStart=${weekStart}`);
+    expect(savedResponse.ok()).toBeTruthy();
+    const saved = await savedResponse.json();
+    expect(saved.shoppingNotes).toBe('Legacy note that must survive');
   });
 
   test('Plan settings can show all meals while leaving unplanned types collapsed', async ({ page }) => {
@@ -142,19 +172,22 @@ test.describe('Meal Plan Tab', () => {
     await expect(breakfast.locator('.meal-type-rows')).toBeVisible();
   });
 
-  test('Repeat this meal and Leftovers fill the next dinner with one tap', async ({ page }) => {
+  test('Repeat and Leftovers labels state their exact result', async ({ page }) => {
     const firstDinner = dinnerRow(page);
     await firstDinner.locator('.meal-name-input').fill('Tacos');
+    await expect(firstDinner.locator('.meal-repeat-btn')).toHaveText('Repeat next dinner');
+    await expect(firstDinner.locator('.meal-leftovers-btn')).toHaveText('Make this leftovers');
     await firstDinner.locator('.meal-repeat-btn').click();
 
     const nextDinner = dinnerRow(page, currentDayIndex() + 1);
     await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Tacos');
     await nextDinner.locator('.meal-leftovers-btn').click();
     await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Leftovers');
+    await expect(page.locator('#toast')).toContainText('This meal is now Leftovers');
     await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
   });
 
-  test('favorite meals remember their usual shopping notes', async ({ page }) => {
+  test('favorite meals remember their usual shopping needs', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const mealName = `Favorite Tacos ${suffix}`;
     const mealNotes = `tortillas ${suffix}, lettuce, salsa`;
@@ -177,71 +210,92 @@ test.describe('Meal Plan Tab', () => {
     await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
   });
 
-  test('meal notes preview List duplicates, flag Pantry, and add the remaining items', async ({ page }) => {
+  test('checks meal quantities against Pantry thresholds before adding shopping needs', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const names = {
-      pantry: `Meal Tortillas ${suffix}`,
-      listed: `Meal Lettuce ${suffix}`,
-      add: `Meal Salsa ${suffix}`
+      covered: `Meal Covered ${suffix}`,
+      threshold: `Meal Threshold ${suffix}`,
+      listed: `Meal Listed ${suffix}`,
+      missing: `Meal Missing ${suffix}`
     };
     const createItem = name => page.request.post('/api/items', {
       data: { name, category: 'Other', unit: 'each' }
     });
-    const [pantryResponse, listedResponse, addResponse] = await Promise.all([
-      createItem(names.pantry),
+    const [coveredResponse, thresholdResponse, listedResponse, missingResponse] = await Promise.all([
+      createItem(names.covered),
+      createItem(names.threshold),
       createItem(names.listed),
-      createItem(names.add)
+      createItem(names.missing)
     ]);
-    expect(pantryResponse.ok()).toBeTruthy();
+    expect(coveredResponse.ok()).toBeTruthy();
+    expect(thresholdResponse.ok()).toBeTruthy();
     expect(listedResponse.ok()).toBeTruthy();
-    expect(addResponse.ok()).toBeTruthy();
-    const [pantryItem, listedItem, addItem] = await Promise.all([
-      pantryResponse.json(),
+    expect(missingResponse.ok()).toBeTruthy();
+    const [coveredItem, thresholdItem, listedItem, missingItem] = await Promise.all([
+      coveredResponse.json(),
+      thresholdResponse.json(),
       listedResponse.json(),
-      addResponse.json()
+      missingResponse.json()
     ]);
-    const inventoryResponse = await page.request.post('/api/inventory', {
-      data: { itemId: pantryItem._id, quantity: 2 }
-    });
-    const listSetupResponse = await page.request.post('/api/shopping-list', {
-      data: { itemId: listedItem._id, quantity: 1 }
-    });
-    expect(inventoryResponse.ok()).toBeTruthy();
+
+    const [coveredInventory, thresholdInventory, listSetupResponse] = await Promise.all([
+      page.request.post('/api/inventory', {
+        data: { itemId: coveredItem._id, trackingMode: 'exact', quantity: 5, lowStockThreshold: 1 }
+      }),
+      page.request.post('/api/inventory', {
+        data: { itemId: thresholdItem._id, trackingMode: 'exact', quantity: 3, lowStockThreshold: 1 }
+      }),
+      page.request.post('/api/shopping-list', {
+        data: { itemId: listedItem._id, quantity: 1 }
+      })
+    ]);
+    expect(coveredInventory.ok()).toBeTruthy();
+    expect(thresholdInventory.ok()).toBeTruthy();
     expect(listSetupResponse.ok()).toBeTruthy();
 
     const firstRow = dinnerRow(page);
     await firstRow.locator('.meal-name-input').fill('Tacos');
-    await firstRow.locator('.meal-notes-input').fill(`Need ${names.pantry}, ${names.listed}, and ${names.add}`);
+    await firstRow.locator('.meal-notes-input').fill(
+      `${names.covered} x2, ${names.threshold} x2, ${names.listed}, ${names.missing}`
+    );
     const suggestionButton = firstRow.locator('.meal-list-suggestions-btn');
-    await expect(suggestionButton).toHaveText('Add 3 items to List');
+    await expect(suggestionButton).toHaveText('Check 4 shopping needs');
     await suggestionButton.click();
 
-    await expect(page.locator('#modal-title')).toHaveText('Add items for Tacos');
-    const pantryRow = page.locator('.meal-suggestion-row', { hasText: names.pantry });
+    await expect(page.locator('#modal-title')).toHaveText('Check shopping needs for Tacos');
+    await expect(page.locator('.meal-suggestion-help')).toContainText('Planning does not deduct Pantry now');
+
+    const coveredRow = page.locator('.meal-suggestion-row', { hasText: names.covered });
+    const thresholdRow = page.locator('.meal-suggestion-row', { hasText: names.threshold });
     const listedRow = page.locator('.meal-suggestion-row', { hasText: names.listed });
-    const addRow = page.locator('.meal-suggestion-row', { hasText: names.add });
-    await expect(pantryRow.locator('.meal-suggestion-status')).toContainText('In Pantry');
-    await expect(pantryRow.locator('.meal-suggestion-check')).not.toBeChecked();
+    const missingRow = page.locator('.meal-suggestion-row', { hasText: names.missing });
+
+    await expect(coveredRow.locator('.meal-suggestion-status')).toContainText('Pantry 5 → 3 after meal · low at 1');
+    await expect(coveredRow.locator('.meal-suggestion-check')).not.toBeChecked();
+    await expect(thresholdRow.locator('.meal-suggestion-status')).toContainText('Pantry 3 → 1 after meal · low at 1');
+    await expect(thresholdRow.locator('.meal-suggestion-check')).toBeChecked();
     await expect(listedRow.locator('.meal-suggestion-status')).toContainText('Already on List');
     await expect(listedRow.locator('.meal-suggestion-check')).toBeDisabled();
-    await expect(addRow.locator('.meal-suggestion-check')).toBeChecked();
-    await expect(page.locator('#btn-add-meal-suggestions')).toHaveText('Add 1 to List');
+    await expect(missingRow.locator('.meal-suggestion-status')).toContainText('Not in Pantry');
+    await expect(missingRow.locator('.meal-suggestion-check')).toBeChecked();
+    await expect(page.locator('#btn-add-meal-suggestions')).toHaveText('Add 2 items to Shopping List');
+
     await page.locator('#btn-add-meal-suggestions').click();
     await expect(page.locator('#modal-overlay')).toBeHidden();
-    await expect(suggestionButton).toHaveText('Added to List ✓');
+    await expect(suggestionButton).toHaveText('Shopping needs checked ✓');
 
     const listResponse = await page.request.get('/api/shopping-list');
     const list = await listResponse.json();
     const ids = list.map(entry => entry.itemId?._id);
     expect(ids.filter(id => id === listedItem._id)).toHaveLength(1);
-    expect(ids.filter(id => id === addItem._id)).toHaveLength(1);
-    expect(ids).not.toContain(pantryItem._id);
+    expect(ids.filter(id => id === thresholdItem._id)).toHaveLength(1);
+    expect(ids.filter(id => id === missingItem._id)).toHaveLength(1);
+    expect(ids).not.toContain(coveredItem._id);
 
-    const ownedEntries = list.filter(entry => [listedItem._id, addItem._id].includes(entry.itemId?._id));
-    const cleanupResponses = await Promise.all(
-      ownedEntries.map(entry => page.request.delete(`/api/shopping-list/${entry._id}`))
-    );
-    expect(cleanupResponses.every(response => response.ok())).toBeTruthy();
+    const inventoryResponse = await page.request.get('/api/inventory');
+    const inventory = await inventoryResponse.json();
+    const thresholdOnHand = inventory.find(entry => String(entry.itemId?._id || entry.itemId) === thresholdItem._id);
+    expect(thresholdOnHand.quantity).toBe(3);
   });
 
   test('autosave has one clear passive status instead of a Save button', async ({ page }) => {
@@ -258,8 +312,9 @@ test.describe('Meal Plan Tab', () => {
     await firstSection.locator('.meal-add-row').click();
     await expect(firstSection.locator('.meal-row')).toHaveCount(2);
     const audience = firstSection.locator('.meal-row').nth(1).locator('.meal-audience-toggle');
-    await expect(audience).not.toHaveText('Choose people');
-    await expect(audience).not.toHaveText('Everyone');
+    await expect(audience).toContainText('· Change');
+    await expect(audience).not.toHaveText('Choose people · Change');
+    await expect(audience).not.toHaveText('Everyone · Change');
   });
 
   test('prev/next week nav changes the week label', async ({ page }) => {
@@ -273,7 +328,7 @@ test.describe('Meal Plan Tab', () => {
     await expect(label).not.toHaveText(beforeText);
   });
 
-  test('Copy last week remaps meals and notes onto this week', async ({ page }) => {
+  test('Copy last week uses shared confirmation and preserves hidden weekly notes', async ({ page }) => {
     const weekStart = currentWeekStart();
     const previousWeekStart = addDays(weekStart, -7);
     const previousDays = blankWeek(previousWeekStart);
@@ -291,13 +346,21 @@ test.describe('Meal Plan Tab', () => {
     });
     expect(setupResponse.ok()).toBeTruthy();
 
-    page.once('dialog', dialog => dialog.accept());
     await page.locator('#mp-copy-last-week').click();
+    const confirm = page.getByRole('dialog', { name: 'Replace this week with last week?' });
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText('Existing entries in this week will be replaced.');
+    await confirm.getByRole('button', { name: 'Copy last week' }).click();
 
     const firstDinner = dinnerRow(page);
     await expect(firstDinner.locator('.meal-name-input')).toHaveValue('Last Week Tacos');
     await expect(firstDinner.locator('.meal-notes-input')).toHaveValue('tortillas, lettuce, salsa');
     await expect(page.locator('#mp-produce-notes')).toHaveValue('Use the cilantro');
-    await expect(page.locator('#mp-shopping-notes')).toHaveValue('Check the beans');
+    await expect(page.locator('#mp-shopping-notes')).toHaveCount(0);
+
+    const copiedResponse = await page.request.get(`/api/meal-plan?weekStart=${weekStart}`);
+    expect(copiedResponse.ok()).toBeTruthy();
+    const copied = await copiedResponse.json();
+    expect(copied.shoppingNotes).toBe('Check the beans');
   });
 });

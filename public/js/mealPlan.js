@@ -81,7 +81,7 @@ async function fetchSettings() {
   return res.json();
 }
 
-// ===== Meal notes → Shopping List =====
+// ===== Meal shopping needs =====
 
 function countMealShoppingFragments(notes) {
   const seen = new Set();
@@ -103,24 +103,42 @@ function refreshMealShoppingAction(row) {
   const count = countMealShoppingFragments(notes);
   if (!button) return;
   button.hidden = count === 0;
-  button.textContent = count === 1 ? 'Add 1 item to List' : `Add ${count} items to List`;
+  button.textContent = count === 1 ? 'Check 1 shopping need' : `Check ${count} shopping needs`;
 }
 
 function suggestionStatusHtml(item, duplicateInNotes = false) {
-  if (duplicateInNotes) return '<span class="badge badge-no-data">Duplicate note</span>';
+  if (duplicateInNotes) return '<span class="badge badge-no-data">Duplicate need</span>';
   if (item?.onList) return '<span class="badge badge-no-data">Already on List</span>';
-  if (Number(item?.pantryQuantity) > 0) {
-    return `<span class="badge badge-no-data">In Pantry · ${escapeHtml(item.pantryQuantity)}</span>`;
+
+  if (!item?.pantryTrackingMode) {
+    return '<span class="badge badge-no-data">Not in Pantry</span>';
   }
-  return '';
+
+  if (item.pantryTrackingMode === 'simple') {
+    const label = { have: 'Have', low: 'Running low', out: 'Out' }[item.pantryStatus] || 'Not tracked';
+    return `<span class="badge badge-no-data">Pantry: ${label}</span>`;
+  }
+
+  const onHand = Number(item.pantryQuantity) || 0;
+  const projected = Number(item.projectedQuantity) || 0;
+  const threshold = item.lowStockThreshold;
+  const thresholdText = threshold == null ? '' : ` · low at ${threshold}`;
+  const className = item.shoppingNeeded ? 'badge badge-no-data' : 'badge badge-muted';
+  return `<span class="${className}">Pantry ${onHand} → ${projected} after meal${thresholdText}</span>`;
 }
 
 function mealSuggestionCandidateLabel(item) {
-  const context = item.onList
-    ? ' — already on List'
-    : Number(item.pantryQuantity) > 0
-      ? ` — ${item.pantryQuantity} in Pantry`
-      : '';
+  let context = '';
+  if (item.onList) {
+    context = ' — already on List';
+  } else if (item.pantryTrackingMode === 'simple') {
+    const label = { have: 'Have', low: 'Running low', out: 'Out' }[item.pantryStatus] || 'not tracked';
+    context = ` — Pantry: ${label}`;
+  } else if (item.pantryTrackingMode === 'exact') {
+    context = ` — Pantry ${item.pantryQuantity} → ${item.projectedQuantity} after meal`;
+  } else {
+    context = ' — not in Pantry';
+  }
   return `${item.name}${item.brand ? ` (${item.brand})` : ''}${context}`;
 }
 
@@ -128,8 +146,8 @@ function renderMealSuggestionRow(suggestion, index) {
   const quantity = Number(suggestion.quantity) || 1;
   if (suggestion.matchStatus === 'unmatched') {
     return `<div class="meal-suggestion-row" data-suggestion-index="${index}">
-      <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</div>
-      <div class="meal-suggestion-unmatched">No catalog match. Edit the note or add this item from List.</div>
+      <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}</div>
+      <div class="meal-suggestion-unmatched">No catalog match. Edit the shopping need or add this item from List.</div>
     </div>`;
   }
 
@@ -138,13 +156,18 @@ function renderMealSuggestionRow(suggestion, index) {
       <option value="${escapeAttr(item._id)}"
         data-name="${escapeAttr(item.name)}"
         data-on-list="${item.onList ? 'true' : 'false'}"
-        data-pantry-quantity="${escapeAttr(item.pantryQuantity || 0)}">
+        data-pantry-quantity="${escapeAttr(item.pantryQuantity || 0)}"
+        data-pantry-tracking-mode="${escapeAttr(item.pantryTrackingMode || '')}"
+        data-pantry-status="${escapeAttr(item.pantryStatus || '')}"
+        data-projected-quantity="${escapeAttr(item.projectedQuantity ?? '')}"
+        data-low-stock-threshold="${escapeAttr(item.lowStockThreshold ?? '')}"
+        data-shopping-needed="${item.shoppingNeeded ? 'true' : 'false'}">
         ${escapeHtml(mealSuggestionCandidateLabel(item))}
       </option>`).join('');
     return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
       <label class="meal-suggestion-choice">
         <input type="checkbox" class="meal-suggestion-check" disabled />
-        <span><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</span>
+        <span><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}</span>
       </label>
       <select class="form-control meal-suggestion-select" aria-label="Choose catalog item for ${escapeAttr(suggestion.sourceText)}">
         <option value="">Choose the household item…</option>
@@ -156,13 +179,13 @@ function renderMealSuggestionRow(suggestion, index) {
 
   const item = suggestion.item;
   const disabled = item.onList || suggestion.duplicateInNotes;
-  const checked = !disabled && Number(item.pantryQuantity) <= 0;
+  const checked = !disabled && item.shoppingNeeded;
   return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
     <label class="meal-suggestion-choice">
       <input type="checkbox" class="meal-suggestion-check"
         data-item-id="${escapeAttr(item._id)}" data-item-name="${escapeAttr(item.name)}"
         ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
-      <span><strong>${escapeHtml(item.name)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}
+      <span><strong>${escapeHtml(item.name)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}
         ${suggestion.sourceText.toLowerCase() !== item.name.toLowerCase() ? `<small>From “${escapeHtml(suggestion.sourceText)}”</small>` : ''}
       </span>
     </label>
@@ -187,7 +210,9 @@ function updateMealSuggestionSubmit() {
   const button = document.getElementById('btn-add-meal-suggestions');
   if (!button) return;
   button.disabled = items.length === 0;
-  button.textContent = items.length === 1 ? 'Add 1 to List' : `Add ${items.length} to List`;
+  button.textContent = items.length === 1
+    ? 'Add 1 item to Shopping List'
+    : `Add ${items.length} items to Shopping List`;
 }
 
 function bindMealSuggestionControls() {
@@ -204,13 +229,20 @@ function bindMealSuggestionControls() {
         delete checkbox.dataset.itemName;
         status.innerHTML = '';
       } else {
-        const onList = option.dataset.onList === 'true';
-        const pantryQuantity = Number(option.dataset.pantryQuantity) || 0;
+        const item = {
+          onList: option.dataset.onList === 'true',
+          pantryQuantity: Number(option.dataset.pantryQuantity) || 0,
+          pantryTrackingMode: option.dataset.pantryTrackingMode || null,
+          pantryStatus: option.dataset.pantryStatus || null,
+          projectedQuantity: option.dataset.projectedQuantity === '' ? null : Number(option.dataset.projectedQuantity),
+          lowStockThreshold: option.dataset.lowStockThreshold === '' ? null : Number(option.dataset.lowStockThreshold),
+          shoppingNeeded: option.dataset.shoppingNeeded === 'true'
+        };
         checkbox.dataset.itemId = option.value;
         checkbox.dataset.itemName = option.dataset.name || '';
-        checkbox.disabled = onList;
-        checkbox.checked = !onList && pantryQuantity <= 0;
-        status.innerHTML = suggestionStatusHtml({ onList, pantryQuantity });
+        checkbox.disabled = item.onList;
+        checkbox.checked = !item.onList && item.shoppingNeeded;
+        status.innerHTML = suggestionStatusHtml(item);
       }
       updateMealSuggestionSubmit();
     });
@@ -226,7 +258,7 @@ async function openMealShoppingSuggestions(row, triggerButton) {
   if (!notes) return;
 
   triggerButton.disabled = true;
-  triggerButton.textContent = 'Finding List items…';
+  triggerButton.textContent = 'Checking Pantry & List…';
   try {
     const preview = await api.mealPlan.shoppingSuggestions(notes);
     if (!preview.parsedCount) {
@@ -235,14 +267,14 @@ async function openMealShoppingSuggestions(row, triggerButton) {
     }
 
     const rows = preview.suggestions.map(renderMealSuggestionRow).join('');
-    openModal(mealName ? `Add items for ${mealName}` : 'Add meal items to List', `
+    openModal(mealName ? `Check shopping needs for ${mealName}` : 'Check meal shopping needs', `
       <p class="text-muted text-sm meal-suggestion-help">
-        Provista matched these notes to your household catalog. Pantry items stay unchecked; List duplicates cannot be selected.
+        Provista compares the meal quantities with your Shopping List and Pantry. Exact tracking forecasts what would remain after the meal; Simple tracking uses Have, Running low, or Out. Planning does not deduct Pantry now—checked items are only added to the Shopping List.
       </p>
       <div class="meal-suggestion-list">${rows}</div>
       <div class="form-actions">
-        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" id="btn-add-meal-suggestions">Add to List</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Done</button>
+        <button type="button" class="btn btn-primary" id="btn-add-meal-suggestions">Add to Shopping List</button>
       </div>`);
 
     bindMealSuggestionControls();
@@ -257,9 +289,9 @@ async function openMealShoppingSuggestions(row, triggerButton) {
         const result = await api.mealPlan.addShoppingSuggestions(items);
         closeModal();
         triggerButton.dataset.added = 'true';
-        triggerButton.textContent = 'Added to List ✓';
+        triggerButton.textContent = 'Shopping needs checked ✓';
         const skipped = result.skippedCount ? ` · ${result.skippedCount} already on List` : '';
-        showToast(`Added ${result.addedCount} item${result.addedCount === 1 ? '' : 's'} to List${skipped}`);
+        showToast(`Added ${result.addedCount} item${result.addedCount === 1 ? '' : 's'} to Shopping List${skipped}`);
       } catch (err) {
         handleError(err, 'Failed to add meal items');
         button.disabled = false;
@@ -267,7 +299,7 @@ async function openMealShoppingSuggestions(row, triggerButton) {
       }
     });
   } catch (err) {
-    handleError(err, 'Failed to match meal items');
+    handleError(err, 'Failed to check meal shopping needs');
   } finally {
     triggerButton.disabled = false;
     if (triggerButton.dataset.added !== 'true') refreshMealShoppingAction(row);
@@ -310,25 +342,6 @@ function applyMealValue(row, meal) {
   refreshMealRowActions(row);
 }
 
-function refreshMealRowActions(row) {
-  const hasMeal = Boolean(row.querySelector('.meal-name-input')?.value.trim());
-  const repeatButton = row.querySelector('.meal-repeat-btn');
-  if (repeatButton) repeatButton.disabled = !hasMeal;
-}
-
-function expandMealTypeSection(section) {
-  const content = section?.querySelector('.meal-type-rows');
-  const toggle = section?.querySelector('.meal-type-header[data-collapsed]');
-  if (!content || !toggle) return;
-  toggle.dataset.collapsed = 'false';
-  toggle.setAttribute('aria-expanded', 'true');
-  toggle.textContent = `− ${section.dataset.mealLabel || ''}`;
-  content.style.display = '';
-  if (section.dataset.mealType === 'special') {
-    section.closest('.meal-day').dataset.specialCollapsed = 'false';
-  }
-}
-
 function repeatMeal(row) {
   const meal = mealRowValue(row);
   if (!meal.name) return;
@@ -356,6 +369,25 @@ function repeatMeal(row) {
   showToast('No open day remains this week for that meal');
 }
 
+function refreshMealRowActions(row) {
+  const hasMeal = Boolean(row.querySelector('.meal-name-input')?.value.trim());
+  const repeatButton = row.querySelector('.meal-repeat-btn');
+  if (repeatButton) repeatButton.disabled = !hasMeal;
+}
+
+function expandMealTypeSection(section) {
+  const content = section?.querySelector('.meal-type-rows');
+  const toggle = section?.querySelector('.meal-type-header[data-collapsed]');
+  if (!content || !toggle) return;
+  toggle.dataset.collapsed = 'false';
+  toggle.setAttribute('aria-expanded', 'true');
+  toggle.textContent = `− ${section.dataset.mealLabel || ''}`;
+  content.style.display = '';
+  if (section.dataset.mealType === 'special') {
+    section.closest('.meal-day').dataset.specialCollapsed = 'false';
+  }
+}
+
 function setMealAsLeftovers(row) {
   const nameInput = row.querySelector('.meal-name-input');
   if (!nameInput) return;
@@ -367,7 +399,7 @@ function setMealAsLeftovers(row) {
   refreshMealShoppingAction(row);
   refreshMealRowActions(row);
   scheduleSave();
-  showToast('Leftovers planned');
+  showToast('This meal is now Leftovers');
 }
 
 async function loadMealFavorites(force = false) {
@@ -378,13 +410,13 @@ async function loadMealFavorites(force = false) {
 
 function favoriteMealCards(favorites) {
   if (!favorites.length) {
-    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Save the current meal to reuse its notes next week.</p></div>';
+    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Save the current meal to reuse its shopping needs next week.</p></div>';
   }
   return favorites.map(favorite => `
     <div class="meal-favorite-card" data-favorite-id="${escapeAttr(favorite._id)}">
       <div class="meal-favorite-copy">
         <strong>${escapeHtml(favorite.name)}</strong>
-        ${favorite.notes ? `<small>${escapeHtml(favorite.notes)}</small>` : '<small>No saved shopping notes</small>'}
+        ${favorite.notes ? `<small>${escapeHtml(favorite.notes)}</small>` : '<small>No saved shopping needs</small>'}
       </div>
       <div class="meal-favorite-actions">
         <button type="button" class="btn btn-primary btn-sm meal-favorite-use">Use</button>
@@ -472,7 +504,15 @@ async function openFavoritePicker(row) {
 }
 
 async function copyLastWeek() {
-  if (!confirm('Replace this week with last week’s meal plan?')) return;
+  const confirmed = await confirmAction({
+    title: 'Replace this week with last week?',
+    message: 'Meals and weekly notes from last week will be copied into this week. Existing entries in this week will be replaced.',
+    confirmLabel: 'Copy last week',
+    cancelLabel: 'Cancel',
+    danger: false
+  });
+  if (!confirmed) return;
+
   const button = document.getElementById('mp-copy-last-week');
   if (button) { button.disabled = true; button.textContent = 'Copying…'; }
   if (mealPlanState.saveTimer) {
@@ -545,7 +585,9 @@ function refreshAudienceUI(row) {
   const button = row.querySelector('.meal-audience-toggle');
   if (!button) return;
   const label = getAudienceLabel(row);
-  button.textContent = label === 'Everyone' ? 'Change who' : label;
+  button.textContent = `${label} · Change`;
+  button.title = `${label} — change who this meal is for`;
+  button.setAttribute('aria-label', `${label}. Change who this meal is for`);
   button.classList.toggle('meal-audience-default', label === 'Everyone');
 }
 
@@ -598,8 +640,10 @@ function collectPlanFromDOM() {
   return {
     weekStart: mealPlanState.weekStart,
     days,
-    produceNotes: document.getElementById('mp-produce-notes')?.value || '',
-    shoppingNotes: document.getElementById('mp-shopping-notes')?.value || ''
+    produceNotes: document.getElementById('mp-produce-notes')?.value ?? mealPlanState.plan?.produceNotes ?? '',
+    // Weekly Shopping notes are no longer primary UI, but legacy content stays
+    // round-trippable until a deliberate migration/removal decision is made.
+    shoppingNotes: document.getElementById('mp-shopping-notes')?.value ?? mealPlanState.plan?.shoppingNotes ?? ''
   };
 }
 
@@ -720,12 +764,17 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   });
   row.appendChild(picker);
 
+  const needsLabel = document.createElement('div');
+  needsLabel.className = 'meal-needs-label';
+  needsLabel.textContent = 'Need for this meal';
+  row.appendChild(needsLabel);
+
   const notesInput = document.createElement('textarea');
   notesInput.className = 'meal-notes-input meal-notes-area';
   notesInput.value = meal.notes;
-  notesInput.placeholder = 'Items needed or notes (optional)…';
+  notesInput.placeholder = 'e.g. tortillas, salsa, cilantro';
+  notesInput.setAttribute('aria-label', 'Need for this meal');
   notesInput.rows = 1;
-  notesInput.style.marginTop = '0.5rem';
 
   const suggestionButton = document.createElement('button');
   suggestionButton.type = 'button';
@@ -745,14 +794,15 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   const repeatButton = document.createElement('button');
   repeatButton.type = 'button';
   repeatButton.className = 'meal-repeat-btn meal-row-action btn-link';
-  repeatButton.textContent = 'Repeat this meal';
+  const repeatTarget = mealType === 'special' ? 'special occasion' : mealType;
+  repeatButton.textContent = `Repeat next ${repeatTarget}`;
   repeatButton.addEventListener('click', () => repeatMeal(row));
   quickActions.appendChild(repeatButton);
 
   const leftoversButton = document.createElement('button');
   leftoversButton.type = 'button';
   leftoversButton.className = 'meal-leftovers-btn meal-row-action btn-link';
-  leftoversButton.textContent = 'Leftovers';
+  leftoversButton.textContent = 'Make this leftovers';
   leftoversButton.addEventListener('click', () => setMealAsLeftovers(row));
   quickActions.appendChild(leftoversButton);
 
@@ -888,14 +938,9 @@ function renderMealPlan(plan) {
 
       <div id="mp-days-container"></div>
 
-      <div class="shopping-notes-section">
-        <div class="section-label">🛒 Shopping notes</div>
-        <textarea class="meal-notes-area" id="mp-shopping-notes" placeholder="e.g. check pantry for pasta, need olive oil..." rows="2">${escHtml(plan.shoppingNotes || '')}</textarea>
-      </div>
-
       <div class="meal-plan-actions">
         <span class="meal-save-status" id="mp-save-status" role="status" aria-live="polite" data-state="saved">Saved ✓</span>
-        <button class="btn btn-outline" id="mp-export-btn">Export Week</button>
+        <button class="btn btn-outline" id="mp-export-btn">Export to calendar</button>
         ${isAdmin ? `
           <button class="btn btn-outline btn-sm" id="mp-settings-btn" style="margin-left:auto;font-size:0.8125rem">Plan settings</button>
         ` : ''}
@@ -919,10 +964,7 @@ function renderMealPlan(plan) {
     daysContainer.appendChild(renderDayCard(day, di, expandedIndexes.has(di)));
   });
 
-  ['mp-produce-notes', 'mp-shopping-notes'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', scheduleSave);
-  });
+  document.getElementById('mp-produce-notes')?.addEventListener('input', scheduleSave);
 
   document.getElementById('mp-prev-week')?.addEventListener('click', () => {
     mealPlanState.weekStart = addWeeks(mealPlanState.weekStart, -1);

@@ -108,6 +108,7 @@ function renderHome() {
   const todayPlan = (plan?.days || []).find(day => String(day.date || '').slice(0, 10) === today);
   const dinners = (todayPlan?.meals || []).filter(meal => meal.mealType === 'dinner' && meal.name?.trim());
   const needed = (shoppingList || []).filter(item => !item.checked);
+  const deferredCount = homeState.deferredPrices.length;
 
   let next = {
     title: 'You’re caught up',
@@ -117,6 +118,13 @@ function renderHome() {
   };
   if (homeState.status.plan !== 'error' && plan && !dinners.length) {
     next = { title: 'Plan tonight’s dinner', detail: 'One choice can shape the rest of the week.', action: 'Plan dinner', actionType: 'plan-dinner' };
+  } else if (deferredCount) {
+    next = {
+      title: `Finish ${deferredCount} shopping price${deferredCount === 1 ? '' : 's'}`,
+      detail: 'You chose to review these later.',
+      action: 'Review prices',
+      actionType: 'review-prices'
+    };
   } else if (Array.isArray(lowStock) && lowStock.length) {
     next = { title: 'Review low and out staples', detail: `${lowStock.length} item${lowStock.length === 1 ? '' : 's'} need attention.`, action: 'Open Pantry', tab: 'inventory' };
   } else if (Array.isArray(shoppingList) && needed.length) {
@@ -177,6 +185,9 @@ function renderHome() {
   container.querySelectorAll('[data-home-action="quick-add"]').forEach(button => {
     button.addEventListener('click', openHomeQuickAdd);
   });
+  container.querySelectorAll('[data-home-action="review-prices"]').forEach(button => {
+    button.addEventListener('click', openDeferredPriceReview);
+  });
   container.querySelectorAll('[data-home-retry]').forEach(button => {
     button.addEventListener('click', loadHomeTab, { once: true });
   });
@@ -225,7 +236,8 @@ async function loadHomeTab() {
   const container = document.getElementById('home-content');
   if (!container) return;
 
-  const userName = window.appAuth?.user?.name?.trim().split(/\s+/)[0] || '';
+  const user = window.appAuth?.user;
+  const userName = user?.displayName?.trim() || user?.name?.trim().split(/\s+/)[0] || '';
   const greeting = document.getElementById('home-greeting');
   const date = document.getElementById('home-date');
   if (greeting) greeting.textContent = userName ? `Hi, ${userName}` : 'Today';
@@ -260,7 +272,11 @@ async function openTodaysDinner() {
 
 async function openHomeQuickAdd() {
   await switchTab('list');
-  document.getElementById('btn-add-list-item')?.click();
+  const rapidInput = document.getElementById('rapid-list-input');
+  if (rapidInput) {
+    rapidInput.focus({ preventScroll: true });
+    rapidInput.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 async function openDeferredPriceReview() {
