@@ -280,6 +280,60 @@
   line-height: 1.5;
 }
 
+/* iOS standalone/PWA viewport stabilization. Keep browser zoom available, but
+   prevent Safari's automatic form-control zoom from leaving the app scaled. */
+:root {
+  --provista-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --provista-bottom-nav-height: calc(var(--nav-height) + var(--provista-safe-bottom));
+}
+
+html {
+  width: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  width: 100%;
+  min-width: 0;
+}
+
+#app {
+  bottom: var(--provista-bottom-nav-height);
+  width: 100%;
+  max-width: 100vw;
+}
+
+.bottom-nav {
+  height: var(--provista-bottom-nav-height);
+  padding-bottom: var(--provista-safe-bottom);
+}
+
+.home-quick-actions {
+  bottom: var(--provista-bottom-nav-height);
+}
+
+@supports (height: 100dvh) {
+  html,
+  body {
+    height: 100dvh;
+  }
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: max(16px, 1rem) !important;
+  }
+}
+
+@media (display-mode: standalone) {
+  .tab-panel {
+    padding-bottom: max(1.5rem, var(--provista-safe-bottom));
+  }
+}
+
 @media (max-width: 430px) {
   .deferred-price-row {
     align-items: flex-start;

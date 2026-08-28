@@ -176,7 +176,8 @@ router.put('/', requireAuth, async (req, res) => {
 
 // POST /api/meal-plan/shopping-suggestions
 // Parse one meal's notes and preview household-scoped catalog matches before
-// anything is added to the shopping list.
+// anything is added to the shopping list. Exact Pantry items are projected
+// through the meal quantity so threshold crossings can be surfaced before use.
 router.post('/shopping-suggestions', requireAuth, async (req, res) => {
   try {
     const { notes } = req.body;
@@ -189,7 +190,9 @@ router.post('/shopping-suggestions', requireAuth, async (req, res) => {
     const [items, listItems, inventoryItems, priceUsage] = await Promise.all([
       Item.find({ householdId }).select('name brand category unit').lean(),
       ShoppingListItem.find({ householdId }).select('itemId').lean(),
-      InventoryItem.find({ householdId, quantity: { $gt: 0 } }).select('itemId quantity').lean(),
+      InventoryItem.find({ householdId })
+        .select('itemId quantity trackingMode stockStatus lowStockThreshold')
+        .lean(),
       PriceEntry.aggregate([
         { $match: { householdId } },
         { $group: { _id: '$itemId', count: { $sum: 1 } } }

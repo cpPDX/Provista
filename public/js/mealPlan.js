@@ -81,7 +81,7 @@ async function fetchSettings() {
   return res.json();
 }
 
-// ===== Meal notes → Shopping List =====
+// ===== Meal notes → shopping needs =====
 
 function countMealShoppingFragments(notes) {
   const seen = new Set();
@@ -103,24 +103,42 @@ function refreshMealShoppingAction(row) {
   const count = countMealShoppingFragments(notes);
   if (!button) return;
   button.hidden = count === 0;
-  button.textContent = count === 1 ? 'Add 1 item to List' : `Add ${count} items to List`;
+  button.textContent = count === 1 ? 'Check 1 shopping need' : `Check ${count} shopping needs`;
 }
 
 function suggestionStatusHtml(item, duplicateInNotes = false) {
   if (duplicateInNotes) return '<span class="badge badge-no-data">Duplicate note</span>';
   if (item?.onList) return '<span class="badge badge-no-data">Already on List</span>';
-  if (Number(item?.pantryQuantity) > 0) {
-    return `<span class="badge badge-no-data">In Pantry · ${escapeHtml(item.pantryQuantity)}</span>`;
+
+  if (!item?.pantryTrackingMode) {
+    return '<span class="badge badge-no-data">Not in Pantry</span>';
   }
-  return '';
+
+  if (item.pantryTrackingMode === 'simple') {
+    const label = { have: 'Have', low: 'Running low', out: 'Out' }[item.pantryStatus] || 'Not tracked';
+    return `<span class="badge badge-no-data">Pantry: ${label}</span>`;
+  }
+
+  const onHand = Number(item.pantryQuantity) || 0;
+  const projected = Number(item.projectedQuantity) || 0;
+  const threshold = item.lowStockThreshold;
+  const thresholdText = threshold == null ? '' : ` · low at ${threshold}`;
+  const className = item.shoppingNeeded ? 'badge badge-no-data' : 'badge badge-muted';
+  return `<span class="${className}">Pantry ${onHand} → ${projected} after meal${thresholdText}</span>`;
 }
 
 function mealSuggestionCandidateLabel(item) {
-  const context = item.onList
-    ? ' — already on List'
-    : Number(item.pantryQuantity) > 0
-      ? ` — ${item.pantryQuantity} in Pantry`
-      : '';
+  let context = '';
+  if (item.onList) {
+    context = ' — already on List';
+  } else if (item.pantryTrackingMode === 'simple') {
+    const label = { have: 'Have', low: 'Running low', out: 'Out' }[item.pantryStatus] || 'not tracked';
+    context = ` — Pantry: ${label}`;
+  } else if (item.pantryTrackingMode === 'exact') {
+    context = ` — Pantry ${item.pantryQuantity} → ${item.projectedQuantity} after meal`;
+  } else {
+    context = ' — not in Pantry';
+  }
   return `${item.name}${item.brand ? ` (${item.brand})` : ''}${context}`;
 }
 
@@ -128,7 +146,7 @@ function renderMealSuggestionRow(suggestion, index) {
   const quantity = Number(suggestion.quantity) || 1;
   if (suggestion.matchStatus === 'unmatched') {
     return `<div class="meal-suggestion-row" data-suggestion-index="${index}">
-      <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</div>
+      <div class="meal-suggestion-source"><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}</div>
       <div class="meal-suggestion-unmatched">No catalog match. Edit the note or add this item from List.</div>
     </div>`;
   }
@@ -138,13 +156,18 @@ function renderMealSuggestionRow(suggestion, index) {
       <option value="${escapeAttr(item._id)}"
         data-name="${escapeAttr(item.name)}"
         data-on-list="${item.onList ? 'true' : 'false'}"
-        data-pantry-quantity="${escapeAttr(item.pantryQuantity || 0)}">
+        data-pantry-quantity="${escapeAttr(item.pantryQuantity || 0)}"
+        data-pantry-tracking-mode="${escapeAttr(item.pantryTrackingMode || '')}"
+        data-pantry-status="${escapeAttr(item.pantryStatus || '')}"
+        data-projected-quantity="${escapeAttr(item.projectedQuantity ?? '')}"
+        data-low-stock-threshold="${escapeAttr(item.lowStockThreshold ?? '')}"
+        data-shopping-needed="${item.shoppingNeeded ? 'true' : 'false'}">
         ${escapeHtml(mealSuggestionCandidateLabel(item))}
       </option>`).join('');
     return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
       <label class="meal-suggestion-choice">
         <input type="checkbox" class="meal-suggestion-check" disabled />
-        <span><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}</span>
+        <span><strong>${escapeHtml(suggestion.sourceText)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}</span>
       </label>
       <select class="form-control meal-suggestion-select" aria-label="Choose catalog item for ${escapeAttr(suggestion.sourceText)}">
         <option value="">Choose the household item…</option>
@@ -156,13 +179,13 @@ function renderMealSuggestionRow(suggestion, index) {
 
   const item = suggestion.item;
   const disabled = item.onList || suggestion.duplicateInNotes;
-  const checked = !disabled && Number(item.pantryQuantity) <= 0;
+  const checked = !disabled && item.shoppingNeeded;
   return `<div class="meal-suggestion-row" data-suggestion-index="${index}" data-quantity="${escapeAttr(quantity)}">
     <label class="meal-suggestion-choice">
       <input type="checkbox" class="meal-suggestion-check"
         data-item-id="${escapeAttr(item._id)}" data-item-name="${escapeAttr(item.name)}"
         ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} />
-      <span><strong>${escapeHtml(item.name)}</strong>${quantity !== 1 ? ` <span class="text-muted">· qty ${quantity}</span>` : ''}
+      <span><strong>${escapeHtml(item.name)}</strong>${quantity !== 1 ? ` <span class="text-muted">· meal qty ${quantity}</span>` : ''}
         ${suggestion.sourceText.toLowerCase() !== item.name.toLowerCase() ? `<small>From “${escapeHtml(suggestion.sourceText)}”</small>` : ''}
       </span>
     </label>
@@ -187,7 +210,9 @@ function updateMealSuggestionSubmit() {
   const button = document.getElementById('btn-add-meal-suggestions');
   if (!button) return;
   button.disabled = items.length === 0;
-  button.textContent = items.length === 1 ? 'Add 1 to List' : `Add ${items.length} to List`;
+  button.textContent = items.length === 1
+    ? 'Add 1 item to Shopping List'
+    : `Add ${items.length} items to Shopping List`;
 }
 
 function bindMealSuggestionControls() {
@@ -204,13 +229,20 @@ function bindMealSuggestionControls() {
         delete checkbox.dataset.itemName;
         status.innerHTML = '';
       } else {
-        const onList = option.dataset.onList === 'true';
-        const pantryQuantity = Number(option.dataset.pantryQuantity) || 0;
+        const item = {
+          onList: option.dataset.onList === 'true',
+          pantryQuantity: Number(option.dataset.pantryQuantity) || 0,
+          pantryTrackingMode: option.dataset.pantryTrackingMode || null,
+          pantryStatus: option.dataset.pantryStatus || null,
+          projectedQuantity: option.dataset.projectedQuantity === '' ? null : Number(option.dataset.projectedQuantity),
+          lowStockThreshold: option.dataset.lowStockThreshold === '' ? null : Number(option.dataset.lowStockThreshold),
+          shoppingNeeded: option.dataset.shoppingNeeded === 'true'
+        };
         checkbox.dataset.itemId = option.value;
         checkbox.dataset.itemName = option.dataset.name || '';
-        checkbox.disabled = onList;
-        checkbox.checked = !onList && pantryQuantity <= 0;
-        status.innerHTML = suggestionStatusHtml({ onList, pantryQuantity });
+        checkbox.disabled = item.onList;
+        checkbox.checked = !item.onList && item.shoppingNeeded;
+        status.innerHTML = suggestionStatusHtml(item);
       }
       updateMealSuggestionSubmit();
     });
@@ -226,7 +258,7 @@ async function openMealShoppingSuggestions(row, triggerButton) {
   if (!notes) return;
 
   triggerButton.disabled = true;
-  triggerButton.textContent = 'Finding List items…';
+  triggerButton.textContent = 'Checking Pantry & List…';
   try {
     const preview = await api.mealPlan.shoppingSuggestions(notes);
     if (!preview.parsedCount) {
@@ -235,14 +267,14 @@ async function openMealShoppingSuggestions(row, triggerButton) {
     }
 
     const rows = preview.suggestions.map(renderMealSuggestionRow).join('');
-    openModal(mealName ? `Add items for ${mealName}` : 'Add meal items to List', `
+    openModal(mealName ? `Check shopping needs for ${mealName}` : 'Check meal shopping needs', `
       <p class="text-muted text-sm meal-suggestion-help">
-        Provista matched these notes to your household catalog. Pantry items stay unchecked; List duplicates cannot be selected.
+        Provista compares the meal quantities with your Shopping List and Pantry. Exact tracking forecasts what would remain after the meal; Simple tracking uses Have, Running low, or Out. Planning does not deduct Pantry now—checked items are only added to the Shopping List.
       </p>
       <div class="meal-suggestion-list">${rows}</div>
       <div class="form-actions">
-        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button type="button" class="btn btn-primary" id="btn-add-meal-suggestions">Add to List</button>
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Done</button>
+        <button type="button" class="btn btn-primary" id="btn-add-meal-suggestions">Add to Shopping List</button>
       </div>`);
 
     bindMealSuggestionControls();
@@ -257,9 +289,9 @@ async function openMealShoppingSuggestions(row, triggerButton) {
         const result = await api.mealPlan.addShoppingSuggestions(items);
         closeModal();
         triggerButton.dataset.added = 'true';
-        triggerButton.textContent = 'Added to List ✓';
+        triggerButton.textContent = 'Shopping needs checked ✓';
         const skipped = result.skippedCount ? ` · ${result.skippedCount} already on List` : '';
-        showToast(`Added ${result.addedCount} item${result.addedCount === 1 ? '' : 's'} to List${skipped}`);
+        showToast(`Added ${result.addedCount} item${result.addedCount === 1 ? '' : 's'} to Shopping List${skipped}`);
       } catch (err) {
         handleError(err, 'Failed to add meal items');
         button.disabled = false;
@@ -267,7 +299,7 @@ async function openMealShoppingSuggestions(row, triggerButton) {
       }
     });
   } catch (err) {
-    handleError(err, 'Failed to match meal items');
+    handleError(err, 'Failed to check meal shopping needs');
   } finally {
     triggerButton.disabled = false;
     if (triggerButton.dataset.added !== 'true') refreshMealShoppingAction(row);
