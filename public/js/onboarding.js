@@ -215,7 +215,7 @@ function startAppTour() {
     {
       tab: 'list',
       title: 'Shopping List',
-      text: 'Add several groceries quickly, scan an item, or use Add with details. Checking an item means you bought it immediately; Finish shopping completes one store stop at a time.',
+      text: 'Add several groceries quickly, then shop by familiar store sections. Change a section once and Provista remembers it for your household. Checking an item means you bought it immediately; Finish shopping completes one store stop at a time.',
       anchor: '[data-tab="list"]'
     },
     {

@@ -112,23 +112,30 @@ test.describe('Home / Today', () => {
   });
 
   test('keeps the other Home cards useful when one endpoint fails', async ({ page }) => {
-    await page.evaluate(() => {
-      Object.keys(localStorage)
-        .filter(key => key.includes('provista_home_') && key.endsWith('_lowStock'))
-        .forEach(key => localStorage.removeItem(key));
-    });
-
     await page.route('**/api/inventory/low-stock', route => route.fulfill({
       status: 503,
       contentType: 'application/json',
       body: JSON.stringify({ error: 'Temporarily unavailable' })
     }));
+
+    // Avoid racing the initial Home bootstrap and its cache write. Put this one
+    // source into a known empty/loading state, clear its cache, then explicitly
+    // run the Home refresh after the failing route is installed.
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter(key => key.includes('provista_home_') && key.endsWith('_lowStock'))
+        .forEach(key => localStorage.removeItem(key));
+      homeState.lowStock = null;
+      homeState.status.lowStock = 'loading';
+    });
+
     const failedLowStock = page.waitForResponse(response =>
       response.url().includes('/api/inventory/low-stock') && response.status() === 503
     );
-
-    await page.reload();
-    await failedLowStock;
+    await Promise.all([
+      failedLowStock,
+      page.evaluate(() => loadHomeTab())
+    ]);
 
     await expect(page.locator('.home-card')).toHaveCount(4);
     const lowStockCard = page.locator('.home-card', { hasText: 'Is anything running low?' });

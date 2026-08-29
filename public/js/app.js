@@ -1,6 +1,27 @@
 // Main app: auth check, tab navigation, initialization
 
 let rapidShoppingCaptureLoadPromise = null;
+let storeSectionsLoadPromise = null;
+
+async function ensureStoreSections() {
+  if (window.openStoreSectionPicker) return;
+  if (!storeSectionsLoadPromise) {
+    storeSectionsLoadPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = '/js/storeSections.js';
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Failed to load store sections'));
+      document.head.appendChild(script);
+    });
+  }
+  try {
+    await storeSectionsLoadPromise;
+  } catch (err) {
+    // Shopping remains fully usable if the enhancement cannot load.
+    storeSectionsLoadPromise = null;
+    console.error('Store sections failed to load', err);
+  }
+}
 
 async function ensureRapidShoppingCapture() {
   if (typeof initRapidShoppingCapture === 'function') {
@@ -79,6 +100,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     if (confirmed) await window.appAuth.logout();
   });
+
+  // Store-section behavior wraps the List renderer, so load it before app
+  // initialization. Failure is non-blocking and leaves the original List intact.
+  await ensureStoreSections();
 
   // Attach event handlers immediately so the UI is interactive while offline
   // support initializes in the background.
