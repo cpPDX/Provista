@@ -39,6 +39,7 @@
   const confirmedSections = new Map();
   const baseRenderShoppingList = renderShoppingList;
   const baseLoadShoppingListTab = loadShoppingListTab;
+  const baseLoadAboutSection = typeof loadAboutSection === 'function' ? loadAboutSection : null;
 
   function inferredSection(category) {
     return CATEGORY_SECTIONS.get(String(category || '').trim().toLowerCase()) || 'Other';
@@ -122,6 +123,15 @@
     }
     return baseLoadShoppingListTab();
   };
+
+  if (baseLoadAboutSection) {
+    loadAboutSection = function loadAboutSectionWithStoreSections() {
+      baseLoadAboutSection();
+      const feature = [...document.querySelectorAll('#about-content li')]
+        .find(item => item.textContent.trim().startsWith('Shopping list with'));
+      if (feature) feature.textContent = 'Shopping list organized by store section with running cart total';
+    };
+  }
 
   window.openStoreSectionPicker = function openStoreSectionPicker(listItemId) {
     const listItem = listState.items.find(item => String(item._id) === String(listItemId));
