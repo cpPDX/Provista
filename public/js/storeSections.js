@@ -1,6 +1,6 @@
-// PRO-42: lightweight store-section organization layered onto the existing
-// shopping-list renderer. Store planning remains the outer grouping; familiar
-// departments make each stop faster to scan without changing check-off.
+// PRO-42: store-section organization layered around the existing shopping-list
+// renderer. The purchase/check-off renderer stays authoritative and synchronous;
+// this module only organizes the DOM after a render settles.
 (() => {
   const SECTION_ORDER = [
     'Produce',
@@ -37,10 +37,10 @@
   ]);
 
   const confirmedSections = new Map();
-  const baseRenderShoppingList = renderShoppingList;
   const baseLoadShoppingListTab = loadShoppingListTab;
   const baseLoadAboutSection = typeof loadAboutSection === 'function' ? loadAboutSection : null;
   let organizeFrame = null;
+  let organizing = false;
 
   function inferredSection(category) {
     return CATEGORY_SECTIONS.get(String(category || '').trim().toLowerCase()) || 'Other';
@@ -59,9 +59,7 @@
     button.type = 'button';
     button.className = 'list-item-section-btn';
     button.textContent = `${section} · edit section`;
-    // Avoid colliding with the existing purchase-price "Change" action in
-    // accessible-name queries while still giving this control a precise name.
-    button.setAttribute('aria-label', `Store section for ${name}: ${section}. Edit section`);
+    button.setAttribute('aria-label', `Edit store section for ${name}`);
     button.addEventListener('click', () => openStoreSectionPicker(listItem._id));
     meta.insertAdjacentElement('afterend', button);
   }
@@ -79,7 +77,6 @@
       groups.get(section)?.push({ card, listItem });
     });
 
-    storeGroup.querySelectorAll(':scope > .list-section-group').forEach(group => group.remove());
     for (const section of SECTION_ORDER) {
       const entries = groups.get(section) || [];
       if (!entries.length) continue;
@@ -102,24 +99,35 @@
   }
 
   function organizeRenderedList() {
-    organizeFrame = null;
     const container = document.getElementById('shopping-list');
-    if (!container) return;
-    container.querySelectorAll(':scope > .list-store-group').forEach(organizeStoreGroup);
+    if (!container || organizing) return;
+    organizing = true;
+    try {
+      container.querySelectorAll(':scope > .list-store-group').forEach(organizeStoreGroup);
+    } finally {
+      organizing = false;
+    }
   }
 
-  function scheduleListOrganization() {
-    if (organizeFrame !== null) cancelAnimationFrame(organizeFrame);
-    organizeFrame = requestAnimationFrame(organizeRenderedList);
+  function scheduleOrganization() {
+    if (organizing || organizeFrame !== null) return;
+    organizeFrame = requestAnimationFrame(() => {
+      organizeFrame = null;
+      organizeRenderedList();
+    });
   }
 
-  renderShoppingList = function renderShoppingListBySection() {
-    baseRenderShoppingList();
-    // Keep optimistic check-off synchronous and cheap. Re-group once on the
-    // next paint instead of rebuilding section wrappers after every tap in a
-    // rapid burst of shopping actions.
-    scheduleListOrganization();
-  };
+  // Observe the List container instead of replacing renderShoppingList(). This
+  // is important: rapid purchase taps intentionally perform many synchronous
+  // optimistic renders before network writes settle. Section decoration waits
+  // until that burst has finished and therefore cannot invalidate the tap loop.
+  const listContainer = document.getElementById('shopping-list');
+  if (listContainer) {
+    const observer = new MutationObserver(() => {
+      if (!organizing) scheduleOrganization();
+    });
+    observer.observe(listContainer, { childList: true, subtree: true });
+  }
 
   loadShoppingListTab = async function loadShoppingListTabWithSections() {
     try {
@@ -129,11 +137,13 @@
         if (item.storeSection) confirmedSections.set(String(item._id), item.storeSection);
       });
     } catch (err) {
-      // Section inference still works from the category already returned with
-      // each List item. A catalog refresh failure must never block shopping.
+      // Category inference from populated List items remains available. A
+      // catalog refresh failure must never block the shopping workflow.
       console.info('Store section preferences unavailable:', err.message);
     }
-    return baseLoadShoppingListTab();
+    const result = await baseLoadShoppingListTab();
+    scheduleOrganization();
+    return result;
   };
 
   if (baseLoadAboutSection) {
@@ -176,6 +186,8 @@
         confirmedSections.set(String(listItem.itemId._id), updated.storeSection);
         listItem.itemId.storeSection = updated.storeSection;
         closeModal();
+        // Use the existing renderer so checked state, prices, and cart state stay
+        // canonical, then let the observer apply the new section grouping.
         renderShoppingList();
         showToast(`${itemName} will appear under ${updated.storeSection}`);
       } catch (err) {
@@ -187,23 +199,16 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    .list-store-group,
-    .list-section-group,
-    .list-store-heading,
-    .list-section-heading,
-    .list-section-group .list-item { min-width:0; max-width:100%; width:100%; }
-    .list-section-group { margin:.25rem 0 .85rem; overflow:hidden; }
-    .list-store-heading,
-    .list-section-heading { flex-wrap:wrap; }
-    .list-store-heading h2,
-    .list-section-heading h3 { min-width:0; overflow-wrap:anywhere; }
-    .list-store-heading span,
-    .list-section-heading span { flex:0 1 auto; min-width:0; }
-    .list-section-heading { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.45rem .2rem .35rem; }
+    .list-store-group, .list-section-group, .list-section-heading, .list-store-heading, .list-section-group .list-item { min-width:0; max-width:100%; }
+    .list-store-heading, .list-section-heading { flex-wrap:wrap; }
+    .list-store-heading h2, .list-section-heading h3 { min-width:0; overflow-wrap:anywhere; }
+    .list-store-heading span, .list-section-heading span { flex:0 1 auto; min-width:0; }
+    .list-section-group { margin:.25rem 0 .85rem; }
+    .list-section-heading { display:flex; align-items:center; justify-content:space-between; gap:.4rem .75rem; padding:.45rem .2rem .35rem; }
     .list-section-heading h3 { margin:0; font-size:.78rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); }
     .list-section-heading span { font-size:.75rem; color:var(--text-muted); }
     .list-section-group .list-item { margin-bottom:.45rem; }
-    .list-item-section-btn { display:block; max-width:100%; margin:.2rem 0 0; padding:0; border:0; background:none; color:var(--primary); font:inherit; font-size:.75rem; line-height:1.35; cursor:pointer; text-align:left; white-space:normal; overflow-wrap:anywhere; }
+    .list-item-section-btn { display:block; max-width:100%; margin:.2rem 0 0; padding:0; border:0; background:none; color:var(--primary); font:inherit; font-size:.75rem; cursor:pointer; text-align:left; white-space:normal; overflow-wrap:anywhere; }
     .list-item-section-btn:focus-visible { outline:2px solid var(--primary); outline-offset:2px; border-radius:2px; }
   `;
   document.head.appendChild(style);
