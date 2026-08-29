@@ -11,7 +11,8 @@ const {
   MAX_MATCH_INPUT_LENGTH,
   MAX_MATCH_ITEMS,
   matchCatalogItem,
-  parseShoppingText
+  parseShoppingText,
+  stemShoppingText
 } = require('../utils/itemMatching');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -27,6 +28,16 @@ function publicMatchItem(item) {
     unit: item.unit,
     size: item.size || '',
     isOrganic: Boolean(item.isOrganic)
+  };
+}
+
+function publicAlias(alias) {
+  if (!alias) return null;
+  return {
+    _id: String(alias._id),
+    text: alias.text,
+    source: alias.source,
+    confirmedAt: alias.confirmedAt
   };
 }
 
@@ -117,7 +128,7 @@ router.post('/match', requireAuth, async (req, res) => {
     const householdId = req.user.householdId;
     const [items, usageRows] = await Promise.all([
       Item.find({ householdId })
-        .select('name brand category unit size isOrganic')
+        .select('name brand category unit size isOrganic aliases')
         .lean(),
       ShoppingTrip.aggregate([
         { $match: { householdId, status: 'completed' } },
@@ -132,7 +143,8 @@ router.post('/match', requireAuth, async (req, res) => {
       const match = matchCatalogItem(parsed, items, { usageByItemId });
       const candidates = match.candidates.map(candidate => ({
         ...publicMatchItem(candidate.item),
-        score: candidate.score
+        score: candidate.score,
+        matchSource: candidate.matchSource
       }));
       const item = match.matchStatus === 'matched' ? publicMatchItem(match.item) : null;
       const duplicateInInput = Boolean(item && resolvedIds.has(item._id));
@@ -143,6 +155,8 @@ router.post('/match', requireAuth, async (req, res) => {
         matchStatus: match.matchStatus,
         confidenceScore: match.confidenceScore,
         confidenceGap: match.confidenceGap,
+        matchSource: match.matchSource,
+        matchedAlias: match.matchedAlias,
         duplicateInInput,
         item,
         candidates
@@ -190,6 +204,89 @@ router.post('/', requireAuth, async (req, res) => {
     res.status(201).json(item);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// POST /api/items/:id/aliases - persist a household-scoped alias only after a
+// user has explicitly resolved the text to an existing catalog item.
+router.post('/:id/aliases', requireAuth, async (req, res) => {
+  try {
+    const text = String(req.body?.text || '').trim().replace(/\s+/g, ' ');
+    const source = String(req.body?.source || 'user-entry');
+    if (!text) return res.status(400).json({ error: 'alias text is required' });
+    if (text.length > 120) return res.status(400).json({ error: 'alias text must be 120 characters or fewer' });
+    if (!['user-entry', 'receipt', 'import'].includes(source)) {
+      return res.status(400).json({ error: 'Invalid alias source' });
+    }
+
+    const normalized = stemShoppingText(text);
+    if (!normalized) return res.status(400).json({ error: 'alias text is invalid' });
+
+    const householdId = req.user.householdId;
+    const catalog = await Item.find({ householdId }).select('name aliases');
+    const item = catalog.find(candidate => String(candidate._id) === String(req.params.id));
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    if (stemShoppingText(item.name) === normalized) {
+      return res.json({ created: false, alias: null, item: publicMatchItem(item) });
+    }
+
+    const existing = item.aliases.find(alias => alias.normalized === normalized);
+    if (existing) {
+      return res.json({ created: false, alias: publicAlias(existing), item: publicMatchItem(item) });
+    }
+
+    const conflictingItem = catalog.find(candidate =>
+      String(candidate._id) !== String(item._id) && (
+        stemShoppingText(candidate.name) === normalized ||
+        candidate.aliases.some(alias => alias.normalized === normalized)
+      )
+    );
+    if (conflictingItem) {
+      return res.status(409).json({
+        error: `That text already identifies ${conflictingItem.name}. Remove or correct the existing mapping first.`
+      });
+    }
+
+    item.aliases.push({
+      text,
+      normalized,
+      source,
+      confirmedBy: req.user._id,
+      confirmedAt: new Date()
+    });
+    await item.save();
+    const alias = item.aliases[item.aliases.length - 1];
+
+    res.status(201).json({
+      created: true,
+      alias: publicAlias(alias),
+      item: publicMatchItem(item)
+    });
+  } catch (err) {
+    if (err?.name === 'CastError') return res.status(404).json({ error: 'Item not found' });
+    if (err?.name === 'ValidationError') return res.status(400).json({ error: serverErr(err) });
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// DELETE /api/items/:id/aliases/:aliasId - reversible correction path for a
+// bad learned mapping. Alias identity remains attached to the catalog item and
+// never creates a duplicate product.
+router.delete('/:id/aliases/:aliasId', requireAuth, async (req, res) => {
+  try {
+    const item = await Item.findOne({ _id: req.params.id, householdId: req.user.householdId });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const alias = item.aliases.id(req.params.aliasId);
+    if (!alias) return res.status(404).json({ error: 'Alias not found' });
+    alias.deleteOne();
+    await item.save();
+
+    res.json({ success: true });
+  } catch (err) {
+    if (err?.name === 'CastError') return res.status(404).json({ error: 'Alias not found' });
+    res.status(500).json({ error: serverErr(err) });
   }
 });
 
