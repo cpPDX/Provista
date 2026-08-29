@@ -133,7 +133,9 @@ const api = {
     create: (data) => api.post('/items', data),
     update: (id, data) => api.put(`/items/${id}`, data),
     delete: (id) => api.delete(`/items/${id}`),
-    merge: (sourceId, targetId) => api.post(`/items/${sourceId}/merge`, { targetId })
+    merge: (sourceId, targetId) => api.post(`/items/${sourceId}/merge`, { targetId }),
+    addAlias: (id, text, source = 'user-entry') => api.post(`/items/${id}/aliases`, { text, source }),
+    removeAlias: (id, aliasId) => api.delete(`/items/${id}/aliases/${aliasId}`)
   },
   stores: {
     list: () => api.get('/stores'),
