@@ -46,7 +46,15 @@
     const token = pendingReviewTokens[0];
     if (!token) return;
     openAddListItemModal(token.name, {
-      onAdded: () => {
+      onAdded: ({ itemId }) => {
+        // The guided Add with details action is the explicit confirmation that
+        // this previously unresolved text refers to the selected catalog item.
+        // Learning the alias is best-effort and must never undo the successful
+        // shopping-list action if the mapping conflicts or cannot be saved.
+        api.items.addAlias(itemId, token.name, 'user-entry').catch(err => {
+          console.info('Could not remember grocery alias:', err.message);
+        });
+
         pendingReviewTokens.shift();
         syncPendingInput();
         if (pendingReviewTokens.length) {
@@ -163,7 +171,7 @@
     const state = document.createElement('span');
     state.className = 'rapid-preview-state';
     if (suggestion.matchStatus === 'matched') {
-      state.textContent = 'Matched';
+      state.textContent = suggestion.matchSource === 'alias' ? 'Remembered match' : 'Matched';
     } else if (suggestion.matchStatus === 'ambiguous') {
       const names = (suggestion.candidates || []).slice(0, 2).map(candidate => candidate.name).filter(Boolean);
       state.textContent = names.length
