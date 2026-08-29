@@ -344,7 +344,7 @@ function handleError(err, fallbackMsg) {
 // Empty state — accepts optional CTA { label, onclick } to render an action button
 function emptyState(icon, text, cta) {
   const ctaHTML = cta
-    ? `<button class="btn btn-outline" style="margin-top:0.25rem" onclick="${escapeAttr(cta.onclick)}">${escapeHtml(text)}</button>`
+    ? `<button class="btn btn-outline" style="margin-top:0.25rem" onclick="${escapeAttr(cta.onclick)}">${escapeHtml(cta.label)}</button>`
     : '';
   return `<div class="empty-state"><div class="empty-icon">${icon}</div><p>${escapeHtml(text)}</p>${ctaHTML}</div>`;
 }
