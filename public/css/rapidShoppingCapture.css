@@ -44,9 +44,9 @@
 .rapid-list-preview {
   margin-top: 0.65rem;
   padding: 0.75rem;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--surface-secondary);
+  background: var(--surface-raised);
 }
 
 .rapid-preview-heading {
@@ -68,7 +68,7 @@
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.35rem 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
 }
 
 .rapid-preview-item:last-child {
