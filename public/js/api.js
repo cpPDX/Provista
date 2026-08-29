@@ -9,6 +9,7 @@ function _isSimpleCrudPath(method, path) {
   if (method === 'GET') return true;
   if ([
     '/grocery/log',
+    '/items/match',
     '/meal-plan/copy-previous',
     '/meal-plan/shopping-suggestions',
     '/shopping-list/complete',
@@ -128,10 +129,13 @@ const api = {
   items: {
     search: (q) => api.get(`/items?search=${encodeURIComponent(q)}`),
     list: () => api.get('/items'),
+    match: (text) => api.post('/items/match', { text }),
     create: (data) => api.post('/items', data),
     update: (id, data) => api.put(`/items/${id}`, data),
     delete: (id) => api.delete(`/items/${id}`),
-    merge: (sourceId, targetId) => api.post(`/items/${sourceId}/merge`, { targetId })
+    merge: (sourceId, targetId) => api.post(`/items/${sourceId}/merge`, { targetId }),
+    addAlias: (id, text, source = 'user-entry') => api.post(`/items/${id}/aliases`, { text, source }),
+    removeAlias: (id, aliasId) => api.delete(`/items/${id}/aliases/${aliasId}`)
   },
   stores: {
     list: () => api.get('/stores'),

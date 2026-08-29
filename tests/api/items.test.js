@@ -80,6 +80,147 @@ describe('GET /api/items', () => {
   });
 });
 
+describe('POST /api/items/match', () => {
+  it('parses several groceries with the shared deterministic matcher', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const itemName = 'API Match Black Beans';
+    await createItem(cookie, { name: itemName, category: 'Pantry', unit: 'can' });
+
+    const res = await request(app)
+      .post('/api/items/match')
+      .set('Cookie', cookie)
+      .send({ text: `2 cans ${itemName}, mystery grocery` });
+
+    expect(res.status).toBe(200);
+    expect(res.body.parsedCount).toBe(2);
+    expect(res.body.suggestions[0]).toMatchObject({
+      sourceText: itemName,
+      quantity: 2,
+      matchStatus: 'matched',
+      item: { name: itemName }
+    });
+    expect(res.body.suggestions[1]).toMatchObject({
+      sourceText: 'mystery grocery',
+      matchStatus: 'unmatched',
+      item: null
+    });
+  });
+
+  it('never matches an item or alias from another household', async () => {
+    const { cookie: cookie1 } = await createOwnerSession(app);
+    const { cookie: cookie2 } = await createOwnerSession(app);
+    const { body: item } = await createItem(cookie1, {
+      name: 'Cheerios',
+      category: 'Cereal',
+      unit: 'box'
+    });
+
+    const aliasRes = await request(app)
+      .post(`/api/items/${item._id}/aliases`)
+      .set('Cookie', cookie1)
+      .send({ text: 'GM CHEER 18OZ', source: 'receipt' });
+    expect(aliasRes.status).toBe(201);
+
+    const res = await request(app)
+      .post('/api/items/match')
+      .set('Cookie', cookie2)
+      .send({ text: 'GM CHEER 18OZ' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.suggestions[0]).toMatchObject({ matchStatus: 'unmatched', item: null });
+  });
+
+  it('requires authentication', async () => {
+    const res = await request(app)
+      .post('/api/items/match')
+      .send({ text: 'milk' });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('item aliases', () => {
+  it('learns a confirmed alias and resolves it before fuzzy matching', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const { body: item } = await createItem(cookie, {
+      name: 'Cheerios',
+      category: 'Cereal',
+      unit: 'box'
+    });
+
+    const createAlias = await request(app)
+      .post(`/api/items/${item._id}/aliases`)
+      .set('Cookie', cookie)
+      .send({ text: 'GM CHEER 18OZ', source: 'receipt' });
+
+    expect(createAlias.status).toBe(201);
+    expect(createAlias.body.alias).toMatchObject({ text: 'GM CHEER 18OZ', source: 'receipt' });
+
+    const match = await request(app)
+      .post('/api/items/match')
+      .set('Cookie', cookie)
+      .send({ text: 'GM CHEER 18OZ' });
+
+    expect(match.status).toBe(200);
+    expect(match.body.suggestions[0]).toMatchObject({
+      matchStatus: 'matched',
+      matchSource: 'alias',
+      item: { _id: item._id, name: 'Cheerios' }
+    });
+  });
+
+  it('rejects an alias already owned by another catalog item', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const { body: cheerios } = await createItem(cookie, {
+      name: 'Cheerios',
+      category: 'Cereal',
+      unit: 'box'
+    });
+    const { body: cornFlakes } = await createItem(cookie, {
+      name: 'Corn Flakes',
+      category: 'Cereal',
+      unit: 'box'
+    });
+
+    const first = await request(app)
+      .post(`/api/items/${cheerios._id}/aliases`)
+      .set('Cookie', cookie)
+      .send({ text: 'breakfast box' });
+    expect(first.status).toBe(201);
+
+    const conflict = await request(app)
+      .post(`/api/items/${cornFlakes._id}/aliases`)
+      .set('Cookie', cookie)
+      .send({ text: 'breakfast box' });
+    expect(conflict.status).toBe(409);
+  });
+
+  it('lets a household remove a bad learned alias', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const { body: item } = await createItem(cookie, {
+      name: 'Cheerios',
+      category: 'Cereal',
+      unit: 'box'
+    });
+    const createAlias = await request(app)
+      .post(`/api/items/${item._id}/aliases`)
+      .set('Cookie', cookie)
+      .send({ text: 'GM CHEER 18OZ', source: 'receipt' });
+    expect(createAlias.status).toBe(201);
+
+    const removeAlias = await request(app)
+      .delete(`/api/items/${item._id}/aliases/${createAlias.body.alias._id}`)
+      .set('Cookie', cookie);
+    expect(removeAlias.status).toBe(200);
+
+    const match = await request(app)
+      .post('/api/items/match')
+      .set('Cookie', cookie)
+      .send({ text: 'GM CHEER 18OZ' });
+    expect(match.status).toBe(200);
+    expect(match.body.suggestions[0]).toMatchObject({ matchStatus: 'unmatched', item: null });
+  });
+});
+
 describe('PUT /api/items/:id', () => {
   it('owner can update an item', async () => {
     const { cookie } = await createOwnerSession(app);

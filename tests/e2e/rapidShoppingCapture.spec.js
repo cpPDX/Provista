@@ -22,7 +22,7 @@ test.describe('Rapid shopping capture', () => {
     expect(clearResponse.ok()).toBeTruthy();
   });
 
-  test('adds several known products and rolls quantity into an existing unchecked item', async ({ page }) => {
+  test('reviews several known products before adding and rolls quantity into an existing unchecked item', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const [milk, eggs, bananas] = await Promise.all([
       createCatalogItem(page, `Rapid Milk ${suffix}`),
@@ -40,20 +40,38 @@ test.describe('Rapid shopping capture', () => {
     await page.fill('#rapid-list-input', `${milk.name} x3, ${eggs.name}, ${bananas.name} x2`);
     await page.locator('#rapid-list-capture button[type="submit"]').click();
 
+    await expect(page.locator('#rapid-list-preview')).toBeVisible();
+    await expect(page.locator('.rapid-preview-item')).toHaveCount(3);
+    await expect(page.locator('.rapid-preview-item', { hasText: milk.name })).toContainText('× 3');
+    await expect(page.locator('.rapid-preview-item', { hasText: eggs.name })).toContainText('Matched');
+    await expect(page.locator('.rapid-preview-item', { hasText: bananas.name })).toContainText('× 2');
+    await expect(page.locator('#rapid-list-status')).toContainText('Review 3 matched items before adding.');
+
+    // Nothing except the pre-existing milk entry should change until review is confirmed.
+    let listResponse = await page.request.get('/api/shopping-list');
+    expect(listResponse.ok()).toBeTruthy();
+    let list = await listResponse.json();
+    expect(list).toHaveLength(1);
+    expect(list[0].itemId._id).toBe(milk._id);
+    expect(list[0].quantity).toBe(2);
+
+    await page.locator('#rapid-list-preview .btn-primary').click();
+
     await expect(page.locator('#rapid-list-status')).toHaveAttribute('data-state', 'success');
     await expect(page.locator('.list-item', { hasText: milk.name })).toContainText('qty 5');
     await expect(page.locator('.list-item', { hasText: eggs.name })).toContainText('qty 1');
     await expect(page.locator('.list-item', { hasText: bananas.name })).toContainText('qty 2');
     await expect(page.locator('#rapid-list-input')).toHaveValue('');
+    await expect(page.locator('#rapid-list-preview')).toBeHidden();
     await expect(page.locator('#rapid-review-details')).toBeHidden();
 
-    const listResponse = await page.request.get('/api/shopping-list');
+    listResponse = await page.request.get('/api/shopping-list');
     expect(listResponse.ok()).toBeTruthy();
-    const list = await listResponse.json();
+    list = await listResponse.json();
     expect(list.filter(entry => [milk._id, eggs._id, bananas._id].includes(entry.itemId?._id))).toHaveLength(3);
   });
 
-  test('routes ambiguous and unknown products directly into Add with details', async ({ page }) => {
+  test('reviews ambiguous and unknown products before guided Add with details', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     await Promise.all([
       createCatalogItem(page, `Rapid Ambiguous ${suffix} One`),
@@ -66,17 +84,42 @@ test.describe('Rapid shopping capture', () => {
     await page.fill('#rapid-list-input', `${ambiguous}, ${missing}`);
     await page.locator('#rapid-list-capture button[type="submit"]').click();
 
+    await expect(page.locator('#rapid-list-preview')).toBeVisible();
+    await expect(page.locator('.rapid-preview-item')).toHaveCount(2);
+    await expect(page.locator('.rapid-preview-item', { hasText: ambiguous })).toContainText('Needs a choice');
+    await expect(page.locator('.rapid-preview-item', { hasText: missing })).toContainText('Needs details');
     await expect(page.locator('#rapid-list-status')).toHaveAttribute('data-state', 'warning');
-    await expect(page.locator('#rapid-list-status')).toContainText('2 items need details');
+    await expect(page.locator('#rapid-list-status')).toContainText('2 items need review before the list changes');
     await expect(page.locator('#rapid-list-input')).toHaveValue(`${ambiguous}, ${missing}`);
-    await expect(page.locator('#rapid-review-details')).toHaveText('Review 2 items with details');
+    await expect(page.locator('#rapid-review-details')).toBeHidden();
 
-    await page.locator('#rapid-review-details').click();
-    await expect(page.locator('#modal-title')).toHaveText('Add with details');
-    await expect(page.locator('#list-item-input')).toHaveValue(ambiguous);
-
-    const listResponse = await page.request.get('/api/shopping-list');
+    let listResponse = await page.request.get('/api/shopping-list');
     expect(listResponse.ok()).toBeTruthy();
     expect(await listResponse.json()).toHaveLength(0);
+
+    await page.locator('#rapid-list-preview .btn-primary').click();
+
+    await expect(page.locator('#modal-title')).toHaveText('Add with details');
+    await expect(page.locator('#list-item-input')).toHaveValue(ambiguous);
+    await expect(page.locator('#rapid-list-status')).toContainText('2 items need details');
+    await expect(page.locator('#rapid-review-details')).toHaveText('Review 2 items with details');
+
+    listResponse = await page.request.get('/api/shopping-list');
+    expect(listResponse.ok()).toBeTruthy();
+    expect(await listResponse.json()).toHaveLength(0);
+  });
+
+  test('keeps the single clear-item path immediate', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const milk = await createCatalogItem(page, `Rapid Single Milk ${suffix}`);
+
+    await openList(page);
+    await page.fill('#rapid-list-input', milk.name);
+    await page.locator('#rapid-list-capture button[type="submit"]').click();
+
+    await expect(page.locator('#rapid-list-preview')).toBeHidden();
+    await expect(page.locator('#rapid-list-status')).toHaveAttribute('data-state', 'success');
+    await expect(page.locator('.list-item', { hasText: milk.name })).toContainText('qty 1');
+    await expect(page.locator('#rapid-list-input')).toHaveValue('');
   });
 });

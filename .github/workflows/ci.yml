@@ -4,12 +4,11 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches:
-      - '**'
+    branches: [main]
 
-# A feature-branch push and the pull_request event for the same head can fire
-# together. Keep one authoritative run per branch so pre-PR validation does not
-# double the Actions workload once a PR exists.
+# Pull requests are the authoritative validation path for feature branches.
+# Push validation is reserved for main so a PR update does not start a second,
+# immediately-cancelled workflow run for the same commit.
 concurrency:
   group: app-ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true

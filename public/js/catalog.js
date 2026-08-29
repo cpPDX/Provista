@@ -20,7 +20,8 @@ window.Catalog = (() => {
     const q = (document.getElementById('catalog-search')?.value || '').trim().toLowerCase();
 
     const items = catalogState.items.filter(item => {
-      if (q && ![item.name, item.category, item.brand].some(value => String(value || '').toLowerCase().includes(q))) return false;
+      if (q && ![item.name, item.category, item.brand, ...(item.aliases || []).map(alias => alias.text)]
+        .some(value => String(value || '').toLowerCase().includes(q))) return false;
       if (categories.length && !categories.includes(item.category)) return false;
       if (organic === 'organic' && !item.isOrganic) return false;
       if (organic === 'conventional' && item.isOrganic) return false;
@@ -56,6 +57,22 @@ window.Catalog = (() => {
   function clearStructuredFilters() {
     catalogFilterState = { categories: [], organic: 'all', sortBy: 'name' };
     applyFilter();
+  }
+
+  function aliasMarkup(item) {
+    const aliases = Array.isArray(item.aliases) ? item.aliases : [];
+    if (!aliases.length) return '';
+
+    return `
+      <div class="catalog-aliases text-muted text-sm" aria-label="Remembered names for ${escapeAttr(item.name)}">
+        <span>Remembered as:</span>
+        ${aliases.map(alias => `
+          <button type="button" class="btn-link catalog-alias-remove"
+            data-alias-id="${escapeAttr(alias._id)}"
+            aria-label="Forget remembered name ${escapeAttr(alias.text)} for ${escapeAttr(item.name)}">
+            ${escapeHtml(alias.text)} ×
+          </button>`).join('')}
+      </div>`;
   }
 
   function render() {
@@ -135,6 +152,7 @@ window.Catalog = (() => {
               : ''}
           </div>
         </button>
+        ${aliasMarkup(item)}
         <button type="button" class="card-swipe-delete" aria-label="Delete ${escapeAttr(item.name)}">Delete</button>
       </div>`).join('');
 
@@ -146,6 +164,22 @@ window.Catalog = (() => {
         openEditItemModal(id, item.name, item.category, item.unit, !!item.isOrganic, item.brand || '', item.size);
       });
       card.querySelector('.card-swipe-delete')?.addEventListener('click', () => deleteItem(id));
+      card.querySelectorAll('.catalog-alias-remove').forEach(button => {
+        button.addEventListener('click', async event => {
+          event.stopPropagation();
+          const aliasId = button.dataset.aliasId;
+          if (!aliasId) return;
+          button.disabled = true;
+          try {
+            await api.items.removeAlias(id, aliasId);
+            showToast('Forgot that remembered name');
+            await load();
+          } catch (err) {
+            button.disabled = false;
+            handleError(err, 'Failed to forget remembered name');
+          }
+        });
+      });
       attachSwipeDelete(card);
     });
   }
