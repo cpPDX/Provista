@@ -172,42 +172,139 @@ test.describe('Meal Plan Tab', () => {
     await expect(breakfast.locator('.meal-type-rows')).toBeVisible();
   });
 
-  test('Repeat and Leftovers labels state their exact result', async ({ page }) => {
+  test('repeat and leftovers actions state safe outcomes for the current meal state', async ({ page }) => {
     const firstDinner = dinnerRow(page);
+    await expect(firstDinner.locator('.meal-leftovers-btn')).toBeVisible();
+    await expect(firstDinner.locator('.meal-leftovers-btn')).toHaveText('Plan leftovers');
+    await expect(firstDinner.locator('.meal-repeat-btn')).toBeHidden();
+    await expect(firstDinner.locator('.meal-save-favorite-btn')).toBeHidden();
+    await expect(firstDinner.locator('.meal-use-favorite-btn')).toHaveText('Use favorite meal');
+
+    await firstDinner.locator('.meal-leftovers-btn').click();
+    await expect(firstDinner.locator('.meal-name-input')).toHaveValue('Leftovers');
+    await expect(firstDinner.locator('.meal-notes-input')).toHaveValue('');
+    await expect(firstDinner.locator('.meal-leftovers-btn')).toBeHidden();
+    await expect(firstDinner.locator('.meal-repeat-btn')).toBeVisible();
+    await expect(firstDinner.locator('.meal-save-favorite-btn')).toBeVisible();
+    await expect(page.locator('#toast')).toContainText('Leftovers planned');
+
     await firstDinner.locator('.meal-name-input').fill('Tacos');
+    await firstDinner.locator('.meal-notes-input').fill('tortillas, salsa');
     await expect(firstDinner.locator('.meal-repeat-btn')).toHaveText('Repeat next dinner');
-    await expect(firstDinner.locator('.meal-leftovers-btn')).toHaveText('Make this leftovers');
+    await expect(firstDinner.locator('.meal-leftovers-btn')).toBeHidden();
     await firstDinner.locator('.meal-repeat-btn').click();
 
     const nextDinner = dinnerRow(page, currentDayIndex() + 1);
     await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Tacos');
-    await nextDinner.locator('.meal-leftovers-btn').click();
-    await expect(nextDinner.locator('.meal-name-input')).toHaveValue('Leftovers');
-    await expect(page.locator('#toast')).toContainText('This meal is now Leftovers');
+    await expect(nextDinner.locator('.meal-notes-input')).toHaveValue('tortillas, salsa');
+    await expect(nextDinner.locator('.meal-leftovers-btn')).toBeHidden();
     await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
   });
 
-  test('favorite meals remember their usual shopping needs', async ({ page }) => {
+  test('favorite meals have explicit save, use, and management paths', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const mealName = `Favorite Tacos ${suffix}`;
     const mealNotes = `tortillas ${suffix}, lettuce, salsa`;
+    const editedName = `Family Tacos ${suffix}`;
+    const editedNotes = `tortillas ${suffix}, lettuce, salsa, avocado`;
     const firstDinner = dinnerRow(page);
+
     await firstDinner.locator('.meal-name-input').fill(mealName);
     await firstDinner.locator('.meal-notes-input').fill(mealNotes);
-    await firstDinner.locator('.meal-favorites-btn').click();
-    await page.locator('#btn-save-current-favorite').click();
-    await expect(page.locator('#modal-overlay')).toBeHidden();
+    await expect(firstDinner.locator('.meal-use-favorite-btn')).toHaveText('Use favorite meal');
+    await expect(firstDinner.locator('.meal-save-favorite-btn')).toHaveText('Save as favorite');
+    await expect(firstDinner.locator('.meal-favorites-btn')).toHaveCount(0);
+    await firstDinner.locator('.meal-save-favorite-btn').click();
+    await expect(page.locator('#toast')).toContainText('saved to Favorite meals');
 
+    await page.locator('#mp-favorite-meals').click();
+    await expect(page.locator('#modal-title')).toHaveText('Favorite meals');
+    let favorite = page.locator('.meal-favorite-card', { hasText: mealName });
+    await expect(favorite).toContainText('Usual shopping needs:');
+    await expect(favorite).toContainText(mealNotes);
+    await expect(favorite.getByRole('button', { name: 'Plan this meal' })).toBeVisible();
+    await expect(favorite.getByRole('button', { name: 'Edit' })).toBeVisible();
+    await expect(favorite.getByRole('button', { name: `Delete ${mealName} from Favorite meals` })).toBeVisible();
+
+    await favorite.getByRole('button', { name: 'Edit' }).click();
+    await expect(page.locator('#modal-title')).toHaveText('Edit favorite meal');
+    await page.locator('#favorite-edit-name').fill(editedName);
+    await page.locator('#favorite-edit-notes').fill(editedNotes);
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await expect(page.locator('#modal-title')).toHaveText('Favorite meals');
+    favorite = page.locator('.meal-favorite-card', { hasText: editedName });
+    await expect(favorite).toContainText(editedNotes);
+
+    await page.getByRole('button', { name: 'Done' }).click();
     await firstDinner.locator('.meal-name-input').fill('');
     await firstDinner.locator('.meal-notes-input').fill('');
-    await firstDinner.locator('.meal-favorites-btn').click();
-    const favorite = page.locator('.meal-favorite-card', { hasText: mealName });
-    await expect(favorite).toContainText(mealNotes);
-    await favorite.locator('.meal-favorite-use').click();
+    await firstDinner.locator('.meal-use-favorite-btn').click();
+    await expect(page.locator('#modal-title')).toHaveText('Use favorite meal');
+    favorite = page.locator('.meal-favorite-card', { hasText: editedName });
+    await expect(favorite).toContainText(editedNotes);
+    await favorite.getByRole('button', { name: 'Use this meal' }).click();
 
-    await expect(firstDinner.locator('.meal-name-input')).toHaveValue(mealName);
-    await expect(firstDinner.locator('.meal-notes-input')).toHaveValue(mealNotes);
+    await expect(firstDinner.locator('.meal-name-input')).toHaveValue(editedName);
+    await expect(firstDinner.locator('.meal-notes-input')).toHaveValue(editedNotes);
     await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
+  });
+
+  test('Favorite meals manager plans into an explicit slot and confirms replacement', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const favoriteName = `Manager Soup ${suffix}`;
+    const create = await page.request.post('/api/meal-plan/favorites', {
+      data: { name: favoriteName, notes: 'broth, bread' }
+    });
+    expect(create.ok()).toBeTruthy();
+
+    const firstDinner = dinnerRow(page);
+    await firstDinner.locator('.meal-name-input').fill('Existing Dinner');
+    await firstDinner.locator('.meal-notes-input').fill('existing need');
+
+    await page.locator('#mp-favorite-meals').click();
+    const favorite = page.locator('.meal-favorite-card', { hasText: favoriteName });
+    await favorite.getByRole('button', { name: 'Plan this meal' }).click();
+    await expect(page.locator('#modal-title')).toHaveText(`Plan ${favoriteName}`);
+    await page.locator('#favorite-destination').selectOption(`${currentDayIndex()}|dinner|0`);
+    await page.getByRole('button', { name: 'Plan this meal' }).click();
+
+    const confirm = page.getByRole('dialog', { name: 'Replace Existing Dinner?' });
+    await expect(confirm).toContainText(`replace the current meal and its shopping needs with ${favoriteName}`);
+    await confirm.getByRole('button', { name: 'Keep current meal' }).click();
+    await expect(page.locator('#modal-title')).toHaveText('Favorite meals');
+    await expect(firstDinner.locator('.meal-name-input')).toHaveValue('Existing Dinner');
+
+    const managerFavorite = page.locator('.meal-favorite-card', { hasText: favoriteName });
+    await managerFavorite.getByRole('button', { name: 'Plan this meal' }).click();
+    await page.locator('#favorite-destination').selectOption(`${currentDayIndex()}|dinner|0`);
+    await page.getByRole('button', { name: 'Plan this meal' }).click();
+    await page.getByRole('dialog', { name: 'Replace Existing Dinner?' })
+      .getByRole('button', { name: 'Replace meal' }).click();
+
+    await expect(firstDinner.locator('.meal-name-input')).toHaveValue(favoriteName);
+    await expect(firstDinner.locator('.meal-notes-input')).toHaveValue('broth, bread');
+  });
+
+  test('Favorite meals deletion uses the Provista confirmation and does not change planned meals', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const favoriteName = `Delete Favorite ${suffix}`;
+    const firstDinner = dinnerRow(page);
+    await firstDinner.locator('.meal-name-input').fill('Keep Planned Dinner');
+    const create = await page.request.post('/api/meal-plan/favorites', {
+      data: { name: favoriteName, notes: 'saved need' }
+    });
+    expect(create.ok()).toBeTruthy();
+
+    await page.locator('#mp-favorite-meals').click();
+    const favorite = page.locator('.meal-favorite-card', { hasText: favoriteName });
+    await favorite.getByRole('button', { name: `Delete ${favoriteName} from Favorite meals` }).click();
+
+    const confirm = page.getByRole('dialog', { name: `Delete ${favoriteName} from Favorite meals?` });
+    await expect(confirm).toContainText('Meals already planned this week will not change.');
+    await confirm.getByRole('button', { name: 'Delete favorite' }).click();
+    await expect(page.locator('#modal-title')).toHaveText('Favorite meals');
+    await expect(page.locator('.meal-favorite-card', { hasText: favoriteName })).toHaveCount(0);
+    await expect(firstDinner.locator('.meal-name-input')).toHaveValue('Keep Planned Dinner');
   });
 
   test('checks meal quantities against Pantry thresholds before adding shopping needs', async ({ page }) => {

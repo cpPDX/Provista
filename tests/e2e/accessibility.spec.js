@@ -116,6 +116,26 @@ test.describe('Mobile accessibility foundation', () => {
     await expect(trigger).toBeFocused();
   });
 
+  test('replaces modal footer actions instead of accumulating stale controls', async ({ page }) => {
+    await page.evaluate(() => {
+      openModal('First dialog', `
+        <p>First body</p>
+        <div class="form-actions">
+          <button type="button" class="btn btn-outline">First done</button>
+        </div>`);
+      openModal('Second dialog', `
+        <p>Second body</p>
+        <div class="form-actions">
+          <button type="button" class="btn btn-outline">Second done</button>
+        </div>`);
+    });
+
+    const dialog = page.getByRole('dialog', { name: 'Second dialog' });
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole('button', { name: 'First done' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Second done' })).toHaveCount(1);
+  });
+
   test('supports keyboard-only item creation and accessible filter sheets', async ({ page }) => {
     await page.click('[data-tab="list"]');
     const addTrigger = page.locator('#btn-add-list-item');
@@ -200,22 +220,53 @@ test.describe('Mobile accessibility foundation', () => {
     const viewport = await page.locator('meta[name="viewport"]').getAttribute('content');
     expect(viewport).toContain('viewport-fit=cover');
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+
+    const listLoaded = page.waitForResponse(response =>
+      response.request().method() === 'GET' && response.url().includes('/api/shopping-list') && response.ok()
+    );
     await page.click('[data-tab="list"]');
+    await listLoaded;
     await expect(page.locator('#btn-add-list-item')).toBeVisible();
+    await page.waitForFunction(() => {
+      const link = document.querySelector('link[data-rapid-shopping-capture]');
+      return Boolean(link?.sheet);
+    });
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    });
 
     const layout = await page.evaluate(() => {
       const panel = document.querySelector('.tab-panel.active');
+      const panelRect = panel.getBoundingClientRect();
       const app = document.getElementById('app').getBoundingClientRect();
       const nav = document.querySelector('.bottom-nav').getBoundingClientRect();
       const navItem = document.querySelector('.bottom-nav .nav-item');
+      const overflowElements = [...panel.querySelectorAll('*')]
+        .filter(element => element.offsetParent !== null)
+        .map(element => {
+          const rect = element.getBoundingClientRect();
+          return {
+            target: element.id || String(element.className || element.tagName),
+            left: Math.round(rect.left),
+            right: Math.round(rect.right),
+            width: Math.round(rect.width)
+          };
+        })
+        .filter(element => element.left < Math.floor(panelRect.left - 1) || element.right > Math.ceil(panelRect.right + 1))
+        .slice(0, 12);
       return {
         horizontalOverflow: panel.scrollWidth - panel.clientWidth,
         appBottom: app.bottom,
         navTop: nav.top,
-        navItemFits: navItem.scrollHeight <= navItem.clientHeight + 1
+        navItemFits: navItem.scrollHeight <= navItem.clientHeight + 1,
+        overflowElements
       };
     });
-    expect(layout.horizontalOverflow).toBeLessThanOrEqual(1);
+    expect(
+      layout.horizontalOverflow,
+      `Horizontal overflow elements: ${JSON.stringify(layout.overflowElements)}`
+    ).toBeLessThanOrEqual(1);
     expect(layout.appBottom).toBeLessThanOrEqual(layout.navTop + 1);
     expect(layout.navItemFits).toBe(true);
   });

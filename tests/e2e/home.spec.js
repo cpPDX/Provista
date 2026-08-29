@@ -118,22 +118,21 @@ test.describe('Home / Today', () => {
         .forEach(key => localStorage.removeItem(key));
     });
 
-    let releaseLowStockRequest;
-    const lowStockRequestSeen = new Promise(resolve => { releaseLowStockRequest = resolve; });
-    await page.route('**/api/inventory/low-stock', async route => {
-      releaseLowStockRequest();
-      await route.fulfill({
-        status: 503,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'Temporarily unavailable' })
-      });
-    });
+    await page.route('**/api/inventory/low-stock', route => route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Temporarily unavailable' })
+    }));
+    const failedLowStock = page.waitForResponse(response =>
+      response.url().includes('/api/inventory/low-stock') && response.status() === 503
+    );
 
     await page.reload();
-    await lowStockRequestSeen;
+    await failedLowStock;
 
     await expect(page.locator('.home-card')).toHaveCount(4);
-    await expect(page.locator('.home-card', { hasText: 'Couldn’t load this update' })).toHaveCount(1);
+    const lowStockCard = page.locator('.home-card', { hasText: 'Is anything running low?' });
+    await expect(lowStockCard).toContainText('Couldn’t load this update');
     await expect(page.locator('.home-card', { hasText: 'What’s for dinner?' })).not.toContainText('Couldn’t load');
     await expect(page.locator('.home-card', { hasText: 'What do we need?' })).not.toContainText('Couldn’t load');
   });

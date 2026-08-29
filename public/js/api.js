@@ -96,7 +96,7 @@ const api = {
     const operation = method === 'POST' ? 'CREATE' : method === 'PUT' ? 'UPDATE' : 'DELETE';
 
     if (method === 'DELETE') {
-      // Extract ID from path (e.g., /items/abc123)
+      // Extract ID from path (e.g. /items/abc123)
       const parts = path.split('/');
       const id = parts[parts.length - 1];
       if (id && id !== parts[1]) {
@@ -184,6 +184,7 @@ const api = {
     copyPrevious: (weekStart) => api.post('/meal-plan/copy-previous', { weekStart }),
     favorites: () => api.get('/meal-plan/favorites'),
     saveFavorite: (data) => api.post('/meal-plan/favorites', data),
+    updateFavorite: (id, data) => api.put(`/meal-plan/favorites/${id}`, data),
     useFavorite: (id) => api.post(`/meal-plan/favorites/${id}/use`, {}),
     deleteFavorite: (id) => api.delete(`/meal-plan/favorites/${id}`)
   },

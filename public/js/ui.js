@@ -171,8 +171,17 @@ function formSubmitButton(form) {
 // Modal
 function openModal(title, bodyHTML, onConfirm) {
   const overlay = document.getElementById('modal-overlay');
+  const footer = document.getElementById('modal-footer');
   const wasClosed = overlay.style.display === 'none';
   if (wasClosed) window._modalTrigger = document.activeElement;
+
+  // openModal can replace an already-open dialog (for example manager → edit →
+  // manager). Treat that as a full content replacement so old actions never
+  // survive in the shared footer.
+  if (footer) {
+    footer.innerHTML = '';
+    footer.style.display = 'none';
+  }
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').innerHTML = bodyHTML;
   overlay.style.display = 'flex';
@@ -190,7 +199,6 @@ function openModal(title, bodyHTML, onConfirm) {
 
   // Hoist .form-actions out of the scrollable modal-body into the modal footer,
   // so buttons are never obscured by content above them.
-  const footer = document.getElementById('modal-footer');
   const formActions = document.querySelector('#modal-body .form-actions');
   if (footer && formActions) {
     // Associate any submit buttons with their parent form so they still work
@@ -204,8 +212,6 @@ function openModal(title, bodyHTML, onConfirm) {
     }
     footer.appendChild(formActions);
     footer.style.display = '';
-  } else if (footer) {
-    footer.style.display = 'none';
   }
 
   // Focus entry and trapping keep keyboard and screen-reader users inside the dialog.
@@ -233,6 +239,14 @@ function openModal(title, bodyHTML, onConfirm) {
     }
   };
   modal.addEventListener('keydown', window._modalTrapHandler);
+
+  // Replacing an open modal should replace its viewport listener too. Otherwise
+  // each modal transition leaks another handler until the dialog finally closes.
+  if (window.visualViewport && window._modalVpHandler) {
+    window.visualViewport.removeEventListener('resize', window._modalVpHandler);
+    window.visualViewport.removeEventListener('scroll', window._modalVpHandler);
+    delete window._modalVpHandler;
+  }
 
   // Resize modal to fit above the virtual keyboard on mobile
   if (window.visualViewport) {

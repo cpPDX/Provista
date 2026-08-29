@@ -347,6 +347,16 @@ function mealRowValue(row) {
   };
 }
 
+function refreshMealDaySummary(row) {
+  const day = row?.closest('.meal-day');
+  if (!day) return;
+  const names = [...day.querySelectorAll('.meal-name-input')]
+    .map(input => input.value.trim())
+    .filter(Boolean);
+  const summary = day.querySelector('.meal-day-summary');
+  if (summary) summary.textContent = names.length ? names.slice(0, 2).join(' · ') : 'Not planned';
+}
+
 function applyMealValue(row, meal) {
   const nameInput = row.querySelector('.meal-name-input');
   const notesInput = row.querySelector('.meal-notes-input');
@@ -366,6 +376,7 @@ function applyMealValue(row, meal) {
   refreshAudienceUI(row);
   refreshMealShoppingAction(row);
   refreshMealRowActions(row);
+  refreshMealDaySummary(row);
 }
 
 function repeatMeal(row) {
@@ -395,10 +406,21 @@ function repeatMeal(row) {
   showToast('No open day remains this week for that meal');
 }
 
+function setMealRowActionVisible(button, visible) {
+  if (!button) return;
+  button.hidden = !visible;
+  // .meal-row-action has an author-level display rule, so set the inline
+  // display as well; otherwise CSS can override the browser's [hidden] rule.
+  button.style.display = visible ? '' : 'none';
+}
+
 function refreshMealRowActions(row) {
-  const hasMeal = Boolean(row.querySelector('.meal-name-input')?.value.trim());
-  const repeatButton = row.querySelector('.meal-repeat-btn');
-  if (repeatButton) repeatButton.disabled = !hasMeal;
+  const current = mealRowValue(row);
+  const hasMeal = Boolean(current.name);
+  const hasContent = Boolean(current.name || current.notes);
+  setMealRowActionVisible(row.querySelector('.meal-repeat-btn'), hasMeal);
+  setMealRowActionVisible(row.querySelector('.meal-save-favorite-btn'), hasMeal);
+  setMealRowActionVisible(row.querySelector('.meal-leftovers-btn'), !hasContent);
 }
 
 function expandMealTypeSection(section) {
@@ -414,19 +436,15 @@ function expandMealTypeSection(section) {
   }
 }
 
-function setMealAsLeftovers(row) {
-  const nameInput = row.querySelector('.meal-name-input');
-  if (!nameInput) return;
-  nameInput.value = 'Leftovers';
-  const notesInput = row.querySelector('.meal-notes-input');
-  if (notesInput) notesInput.value = '';
-  const suggestionButton = row.querySelector('.meal-list-suggestions-btn');
-  if (suggestionButton) delete suggestionButton.dataset.added;
-  refreshMealShoppingAction(row);
-  refreshMealRowActions(row);
+function planLeftovers(row) {
+  const current = mealRowValue(row);
+  if (current.name || current.notes) return;
+  applyMealValue(row, { ...current, name: 'Leftovers', notes: '' });
   scheduleSave();
-  showToast('This meal is now Leftovers');
+  showToast('Leftovers planned');
 }
+
+// ===== Favorite meals =====
 
 async function loadMealFavorites(force = false) {
   if (!force && Array.isArray(mealPlanState.favorites)) return mealPlanState.favorites;
@@ -434,94 +452,296 @@ async function loadMealFavorites(force = false) {
   return mealPlanState.favorites;
 }
 
-function favoriteMealCards(favorites) {
+function favoriteShoppingNeedsMarkup(favorite) {
+  return favorite.notes
+    ? `<small><strong>Usual shopping needs:</strong> ${escapeHtml(favorite.notes)}</small>`
+    : '<small>No saved shopping needs</small>';
+}
+
+function favoritePickerCards(favorites) {
   if (!favorites.length) {
-    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Save the current meal to reuse its shopping needs next week.</p></div>';
+    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Save a planned meal as a favorite first.</p></div>';
   }
   return favorites.map(favorite => `
     <div class="meal-favorite-card" data-favorite-id="${escapeAttr(favorite._id)}">
       <div class="meal-favorite-copy">
         <strong>${escapeHtml(favorite.name)}</strong>
-        ${favorite.notes ? `<small>${escapeHtml(favorite.notes)}</small>` : '<small>No saved shopping needs</small>'}
+        ${favoriteShoppingNeedsMarkup(favorite)}
       </div>
       <div class="meal-favorite-actions">
-        <button type="button" class="btn btn-primary btn-sm meal-favorite-use">Use</button>
-        <button type="button" class="btn-link meal-favorite-remove" aria-label="Remove ${escapeAttr(favorite.name)} from favorites">Remove</button>
+        <button type="button" class="btn btn-primary btn-sm meal-favorite-use">Use this meal</button>
       </div>
     </div>`).join('');
+}
+
+function favoriteManagerCards(favorites) {
+  if (!favorites.length) {
+    return '<div class="empty-state meal-favorites-empty"><p>No favorite meals yet. Use Save as favorite on a planned meal to add one.</p></div>';
+  }
+  return favorites.map(favorite => `
+    <div class="meal-favorite-card" data-favorite-id="${escapeAttr(favorite._id)}">
+      <div class="meal-favorite-copy">
+        <strong>${escapeHtml(favorite.name)}</strong>
+        ${favoriteShoppingNeedsMarkup(favorite)}
+      </div>
+      <div class="meal-favorite-actions">
+        <button type="button" class="btn btn-primary btn-sm meal-favorite-plan">Plan this meal</button>
+        <button type="button" class="btn-link meal-favorite-edit">Edit</button>
+        <button type="button" class="btn-link meal-favorite-remove" aria-label="Delete ${escapeAttr(favorite.name)} from Favorite meals">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+async function saveMealAsFavorite(row) {
+  const current = mealRowValue(row);
+  if (!current.name) return;
+  const button = row.querySelector('.meal-save-favorite-btn');
+  if (button) {
+    button.disabled = true;
+    button.textContent = 'Saving…';
+  }
+  try {
+    const saved = await api.mealPlan.saveFavorite({ name: current.name, notes: current.notes });
+    if (Array.isArray(mealPlanState.favorites)) {
+      const index = mealPlanState.favorites.findIndex(entry => entry._id === saved._id);
+      if (index >= 0) mealPlanState.favorites[index] = saved;
+      else mealPlanState.favorites.unshift(saved);
+    }
+    showToast(`${current.name} saved to Favorite meals`);
+  } catch (err) {
+    handleError(err, 'Failed to save favorite meal');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = 'Save as favorite';
+    }
+  }
+}
+
+async function useFavoriteInRow(row, favorite, { returnToManager = false } = {}) {
+  const current = mealRowValue(row);
+  if (current.name || current.notes) {
+    const label = current.name || 'this meal';
+    const confirmed = await confirmAction({
+      title: `Replace ${label}?`,
+      message: `This will replace the current meal and its shopping needs with ${favorite.name}.`,
+      confirmLabel: 'Replace meal',
+      cancelLabel: 'Keep current meal',
+      danger: false
+    });
+    if (!confirmed) {
+      if (returnToManager) await openFavoriteManager();
+      return false;
+    }
+  }
+
+  try {
+    const used = await api.mealPlan.useFavorite(favorite._id);
+    const latestCurrent = mealRowValue(row);
+    applyMealValue(row, {
+      ...latestCurrent,
+      name: favorite.name,
+      notes: favorite.notes || ''
+    });
+    if (Array.isArray(mealPlanState.favorites)) {
+      mealPlanState.favorites = mealPlanState.favorites.map(entry => entry._id === used._id ? used : entry);
+    }
+    closeModal();
+    const section = row.closest('.meal-type-section');
+    const day = row.closest('.meal-day');
+    if (section) expandMealTypeSection(section);
+    if (day) setMealDayExpanded(day, true);
+    scheduleSave();
+    showToast(`${favorite.name} planned`);
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return true;
+  } catch (err) {
+    handleError(err, 'Failed to use favorite meal');
+    if (returnToManager) await openFavoriteManager();
+    return false;
+  }
 }
 
 async function openFavoritePicker(row) {
   try {
     const favorites = await loadMealFavorites();
-    const current = mealRowValue(row);
-    openModal('Favorite meals', `
-      ${current.name ? `<button type="button" class="btn btn-outline btn-full" id="btn-save-current-favorite">☆ Save ${escapeHtml(current.name)} as favorite</button>` : ''}
-      <div class="meal-favorites-list">${favoriteMealCards(favorites)}</div>
+    openModal('Use favorite meal', `
+      <p class="text-muted text-sm">Choose a saved meal for this slot. Its usual shopping needs come with it.</p>
+      <div class="meal-favorites-list">${favoritePickerCards(favorites)}</div>
       <div class="form-actions">
         <button type="button" class="btn btn-outline" onclick="closeModal()">Done</button>
       </div>`);
 
-    document.getElementById('btn-save-current-favorite')?.addEventListener('click', async event => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      button.textContent = 'Saving…';
-      try {
-        await api.mealPlan.saveFavorite({ name: current.name, notes: current.notes });
-        mealPlanState.favorites = null;
-        closeModal();
-        showToast(`${current.name} saved as a favorite`);
-      } catch (err) {
-        handleError(err, 'Failed to save favorite meal');
-        button.disabled = false;
-        button.textContent = `☆ Save ${current.name} as favorite`;
-      }
-    });
-
     document.querySelectorAll('.meal-favorite-use').forEach(button => {
       button.addEventListener('click', async () => {
-        const id = button.closest('.meal-favorite-card').dataset.favoriteId;
+        const id = button.closest('.meal-favorite-card')?.dataset.favoriteId;
         const favorite = favorites.find(entry => entry._id === id);
         if (!favorite) return;
         button.disabled = true;
-        try {
-          const used = await api.mealPlan.useFavorite(id);
-          applyMealValue(row, {
-            name: favorite.name,
-            notes: favorite.notes || '',
-            forEveryone: row.dataset.forEveryone === 'true',
-            personIds: mealRowValue(row).personIds,
-            legacyPersonName: row.dataset.legacyPersonName || ''
-          });
-          mealPlanState.favorites = favorites.map(entry => entry._id === id ? used : entry);
-          closeModal();
-          scheduleSave();
-          showToast(`${favorite.name} added to the plan`);
-        } catch (err) {
-          handleError(err, 'Failed to use favorite meal');
-          button.disabled = false;
-        }
+        const used = await useFavoriteInRow(row, favorite);
+        if (!used && document.getElementById('modal-overlay')?.style.display !== 'none') button.disabled = false;
       });
     });
+  } catch (err) {
+    handleError(err, 'Failed to load favorite meals');
+  }
+}
 
+function favoriteDestinationChoices() {
+  const choices = [];
+  document.querySelectorAll('.meal-day[data-day-index]').forEach(day => {
+    const dayIndex = Number(day.dataset.dayIndex);
+    const dayLabel = day.querySelector('.meal-day-header span')?.textContent || `Day ${dayIndex + 1}`;
+    day.querySelectorAll('.meal-type-section[data-meal-type]').forEach(section => {
+      if (section.hidden) return;
+      const mealType = section.dataset.mealType;
+      const mealLabel = section.dataset.mealLabel || mealType;
+      const rows = [...section.querySelectorAll('.meal-row')];
+      rows.forEach((row, rowIndex) => {
+        const current = mealRowValue(row);
+        const state = current.name || (current.notes ? 'Shopping needs entered' : 'Empty');
+        const suffix = rows.length > 1 ? ` ${rowIndex + 1}` : '';
+        choices.push({
+          key: `${dayIndex}|${mealType}|${rowIndex}`,
+          label: `${dayLabel} · ${mealLabel}${suffix} — ${state}`
+        });
+      });
+    });
+  });
+  return choices;
+}
+
+function findFavoriteDestinationRow(key) {
+  const [dayIndex, mealType, rowIndexRaw] = String(key || '').split('|');
+  const section = document.querySelector(`.meal-day[data-day-index="${dayIndex}"] .meal-type-section[data-meal-type="${mealType}"]`);
+  return section?.querySelectorAll('.meal-row')?.[Number(rowIndexRaw)] || null;
+}
+
+async function openFavoriteDestinationPicker(favorite) {
+  const choices = favoriteDestinationChoices();
+  if (!choices.length) {
+    showToast('No visible meal slots are available this week');
+    return openFavoriteManager();
+  }
+  openModal(`Plan ${favorite.name}`, `
+    <form id="favorite-destination-form">
+      <p class="text-muted text-sm">Choose where to put this meal. Provista will tell you before replacing an existing meal.</p>
+      <div class="form-group">
+        <label for="favorite-destination">Meal slot</label>
+        <select class="form-control" id="favorite-destination" required>
+          ${choices.map(choice => `<option value="${escapeAttr(choice.key)}">${escapeHtml(choice.label)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" id="favorite-destination-back">Back</button>
+        <button type="submit" class="btn btn-primary">Plan this meal</button>
+      </div>
+    </form>`);
+
+  document.getElementById('favorite-destination-back')?.addEventListener('click', () => openFavoriteManager());
+  document.getElementById('favorite-destination-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = formSubmitButton(event.currentTarget);
+    const row = findFavoriteDestinationRow(document.getElementById('favorite-destination')?.value);
+    if (!row) return;
+    if (submit) submit.disabled = true;
+    const used = await useFavoriteInRow(row, favorite, { returnToManager: true });
+    if (!used && submit?.isConnected) submit.disabled = false;
+  });
+}
+
+async function openFavoriteEditor(favorite) {
+  openModal('Edit favorite meal', `
+    <form id="favorite-edit-form">
+      <div class="form-group">
+        <label for="favorite-edit-name">Meal name</label>
+        <input class="form-control" id="favorite-edit-name" maxlength="120" required value="${escapeAttr(favorite.name)}" />
+      </div>
+      <div class="form-group">
+        <label for="favorite-edit-notes">Usual shopping needs</label>
+        <textarea class="form-control" id="favorite-edit-notes" maxlength="2000" rows="3" placeholder="e.g. tortillas, lettuce, salsa">${escapeHtml(favorite.notes || '')}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" id="favorite-edit-back">Back</button>
+        <button type="submit" class="btn btn-primary">Save changes</button>
+      </div>
+    </form>`);
+
+  document.getElementById('favorite-edit-back')?.addEventListener('click', () => openFavoriteManager());
+  document.getElementById('favorite-edit-form')?.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = formSubmitButton(event.currentTarget);
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = 'Saving…';
+    }
+    try {
+      const updated = await api.mealPlan.updateFavorite(favorite._id, {
+        name: document.getElementById('favorite-edit-name').value,
+        notes: document.getElementById('favorite-edit-notes').value
+      });
+      mealPlanState.favorites = (mealPlanState.favorites || []).map(entry => entry._id === updated._id ? updated : entry);
+      showToast('Favorite meal updated');
+      await openFavoriteManager();
+    } catch (err) {
+      handleError(err, 'Failed to update favorite meal');
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = 'Save changes';
+      }
+    }
+  });
+}
+
+async function deleteFavoriteFromManager(favorite) {
+  const confirmed = await confirmAction({
+    title: `Delete ${favorite.name} from Favorite meals?`,
+    message: 'This removes the saved meal and its usual shopping needs. Meals already planned this week will not change.',
+    confirmLabel: 'Delete favorite',
+    cancelLabel: 'Keep favorite',
+    danger: true
+  });
+  if (!confirmed) return openFavoriteManager();
+  try {
+    await api.mealPlan.deleteFavorite(favorite._id);
+    mealPlanState.favorites = (mealPlanState.favorites || []).filter(entry => entry._id !== favorite._id);
+    showToast('Favorite meal deleted');
+    await openFavoriteManager();
+  } catch (err) {
+    handleError(err, 'Failed to delete favorite meal');
+    await openFavoriteManager();
+  }
+}
+
+async function openFavoriteManager() {
+  try {
+    const favorites = await loadMealFavorites(true);
+    openModal('Favorite meals', `
+      <p class="text-muted text-sm">Favorite meals save a meal name together with its usual shopping needs so anyone in the household can reuse it.</p>
+      <div class="meal-favorites-list">${favoriteManagerCards(favorites)}</div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-outline" onclick="closeModal()">Done</button>
+      </div>`);
+
+    document.querySelectorAll('.meal-favorite-plan').forEach(button => {
+      button.addEventListener('click', () => {
+        const id = button.closest('.meal-favorite-card')?.dataset.favoriteId;
+        const favorite = favorites.find(entry => entry._id === id);
+        if (favorite) openFavoriteDestinationPicker(favorite);
+      });
+    });
+    document.querySelectorAll('.meal-favorite-edit').forEach(button => {
+      button.addEventListener('click', () => {
+        const id = button.closest('.meal-favorite-card')?.dataset.favoriteId;
+        const favorite = favorites.find(entry => entry._id === id);
+        if (favorite) openFavoriteEditor(favorite);
+      });
+    });
     document.querySelectorAll('.meal-favorite-remove').forEach(button => {
-      button.addEventListener('click', async () => {
-        const card = button.closest('.meal-favorite-card');
-        const favorite = favorites.find(entry => entry._id === card.dataset.favoriteId);
-        if (!favorite || !confirm(`Remove ${favorite.name} from favorite meals?`)) return;
-        button.disabled = true;
-        try {
-          await api.mealPlan.deleteFavorite(favorite._id);
-          mealPlanState.favorites = favorites.filter(entry => entry._id !== favorite._id);
-          card.remove();
-          if (!mealPlanState.favorites.length) {
-            document.querySelector('.meal-favorites-list').innerHTML = favoriteMealCards([]);
-          }
-          showToast('Favorite removed');
-        } catch (err) {
-          handleError(err, 'Failed to remove favorite meal');
-          button.disabled = false;
-        }
+      button.addEventListener('click', () => {
+        const id = button.closest('.meal-favorite-card')?.dataset.favoriteId;
+        const favorite = favorites.find(entry => entry._id === id);
+        if (favorite) deleteFavoriteFromManager(favorite);
       });
     });
   } catch (err) {
@@ -722,6 +942,7 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   nameInput.placeholder = 'Meal…';
   nameInput.addEventListener('input', () => {
     refreshMealRowActions(row);
+    refreshMealDaySummary(row);
     scheduleSave();
   });
   top.appendChild(nameInput);
@@ -807,6 +1028,7 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   suggestionButton.className = 'meal-list-suggestions-btn btn-link';
   notesInput.addEventListener('input', () => {
     delete suggestionButton.dataset.added;
+    refreshMealRowActions(row);
     scheduleSave();
     refreshMealShoppingAction(row);
   });
@@ -816,6 +1038,20 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   const quickActions = document.createElement('div');
   quickActions.className = 'meal-row-quick-actions';
   quickActions.appendChild(suggestionButton);
+
+  const useFavoriteButton = document.createElement('button');
+  useFavoriteButton.type = 'button';
+  useFavoriteButton.className = 'meal-use-favorite-btn meal-row-action btn-link';
+  useFavoriteButton.textContent = 'Use favorite meal';
+  useFavoriteButton.addEventListener('click', () => openFavoritePicker(row));
+  quickActions.appendChild(useFavoriteButton);
+
+  const saveFavoriteButton = document.createElement('button');
+  saveFavoriteButton.type = 'button';
+  saveFavoriteButton.className = 'meal-save-favorite-btn meal-row-action btn-link';
+  saveFavoriteButton.textContent = 'Save as favorite';
+  saveFavoriteButton.addEventListener('click', () => saveMealAsFavorite(row));
+  quickActions.appendChild(saveFavoriteButton);
 
   const repeatButton = document.createElement('button');
   repeatButton.type = 'button';
@@ -828,16 +1064,10 @@ function buildMealRow(mealType, rawMeal = {}, removable = false) {
   const leftoversButton = document.createElement('button');
   leftoversButton.type = 'button';
   leftoversButton.className = 'meal-leftovers-btn meal-row-action btn-link';
-  leftoversButton.textContent = 'Make this leftovers';
-  leftoversButton.addEventListener('click', () => setMealAsLeftovers(row));
+  leftoversButton.textContent = 'Plan leftovers';
+  leftoversButton.addEventListener('click', () => planLeftovers(row));
   quickActions.appendChild(leftoversButton);
 
-  const favoritesButton = document.createElement('button');
-  favoritesButton.type = 'button';
-  favoritesButton.className = 'meal-favorites-btn meal-row-action btn-link';
-  favoritesButton.textContent = 'Favorites';
-  favoritesButton.addEventListener('click', () => openFavoritePicker(row));
-  quickActions.appendChild(favoritesButton);
   row.appendChild(quickActions);
   refreshMealShoppingAction(row);
   refreshMealRowActions(row);
@@ -954,6 +1184,7 @@ function renderMealPlan(plan) {
 
       <div class="meal-plan-tools">
         <button class="btn btn-outline" id="mp-copy-last-week">Copy last week</button>
+        <button class="btn btn-outline" id="mp-favorite-meals">Favorite meals</button>
         <span class="meal-plan-mode-summary">${mealPlanState.mealPlanMode === 'dinner' ? 'Dinner only' : 'All meals'}</span>
       </div>
 
@@ -1003,6 +1234,7 @@ function renderMealPlan(plan) {
 
   document.getElementById('mp-export-btn')?.addEventListener('click', exportWeekICS);
   document.getElementById('mp-copy-last-week')?.addEventListener('click', copyLastWeek);
+  document.getElementById('mp-favorite-meals')?.addEventListener('click', openFavoriteManager);
   document.getElementById('mp-settings-btn')?.addEventListener('click', openWeekStartSettings);
 }
 

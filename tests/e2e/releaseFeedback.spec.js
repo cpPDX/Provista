@@ -35,8 +35,20 @@ async function recordPrice(page, itemId, storeId, price = 4.25) {
 async function openPriceHistory(page) {
   await page.click('[data-tab="more"]');
   await page.locator('.more-item[data-section="insights"]').click();
+
+  // The Insights click handler starts switchTab() without returning its promise,
+  // so an active tab is not proof that the async price load has completed.
+  // Observe the request before clicking, then wait for both the response and
+  // the loading skeleton to leave the DOM.
+  const pricesLoaded = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return response.request().method() === 'GET' && url.pathname === '/api/prices';
+  });
   await page.locator('[data-insight-tab="prices"]').click();
+  const response = await pricesLoaded;
+  expect(response.ok()).toBeTruthy();
   await expect(page.locator('#tab-prices')).toHaveClass(/active/);
+  await expect(page.locator('#prices-list .skeleton-card')).toHaveCount(0, { timeout: 10000 });
 }
 
 test.describe('Post-release recovery states', () => {
@@ -93,8 +105,6 @@ test.describe('Post-release recovery states', () => {
   test('Price History offers Record price when the household has no history', async ({ page }) => {
     await openPriceHistory(page);
 
-    // Wait on the recovery control itself so the assertion follows the async
-    // Price History render rather than racing the tab becoming active.
     const emptyRecord = page.locator('#prices-empty-record');
     await expect(emptyRecord).toBeVisible();
     await expect(page.locator('#prices-list')).toContainText('No price history yet. Record the first price your household paid.');
