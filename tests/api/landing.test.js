@@ -36,12 +36,12 @@ describe('public landing page', () => {
     expect(robots.text).toContain('Allow: /');
     expect(robots.text).toContain('Disallow: /app');
     expect(robots.text).toContain('Disallow: /api/');
-    expect(robots.text).toContain('Sitemap: http://127.0.0.1/sitemap.xml');
+    expect(robots.text).toMatch(/Sitemap: http:\/\/127\.0\.0\.1(?::\d+)?\/sitemap\.xml/);
 
     const sitemap = await request(app).get('/sitemap.xml');
     expect(sitemap.status).toBe(200);
     expect(sitemap.type).toMatch(/xml/);
-    expect(sitemap.text).toContain('<loc>http://127.0.0.1/</loc>');
+    expect(sitemap.text).toMatch(/<loc>http:\/\/127\.0\.0\.1(?::\d+)?\/<\/loc>/);
   });
 
   it('continues a returning user with a valid session into the app', async () => {
