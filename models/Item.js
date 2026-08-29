@@ -1,5 +1,16 @@
 const mongoose = require('mongoose');
 
+const STORE_SECTIONS = [
+  'Produce',
+  'Meat & Seafood',
+  'Dairy & Eggs',
+  'Bakery',
+  'Pantry',
+  'Frozen',
+  'Household',
+  'Other'
+];
+
 const itemAliasSchema = new mongoose.Schema({
   text: { type: String, required: true, trim: true, maxlength: 120 },
   normalized: { type: String, required: true, trim: true, maxlength: 120 },
@@ -23,6 +34,10 @@ const itemSchema = new mongoose.Schema({
   upc: { type: String, trim: true, default: null },
   upcSource: { type: String, enum: ['scan', 'backfill', 'manual'], default: null },
   upcPendingLookup: { type: Boolean, default: false },
+  // A household-confirmed shopping department. Null means the List may use a
+  // deterministic category mapping, but that inference is never persisted as
+  // if the user confirmed it.
+  storeSection: { type: String, enum: STORE_SECTIONS, default: null },
   // Provider-specific product identifiers. UPC remains the preferred shared
   // identifier, but providers can cache their own IDs here when needed.
   externalIds: { type: Map, of: String, default: {} },
@@ -42,3 +57,4 @@ itemSchema.index({ householdId: 1, upc: 1 }, { sparse: true });
 itemSchema.index({ householdId: 1, 'aliases.normalized': 1 });
 
 module.exports = mongoose.model('Item', itemSchema);
+module.exports.STORE_SECTIONS = STORE_SECTIONS;
