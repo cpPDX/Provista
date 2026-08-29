@@ -112,7 +112,22 @@ function parseShoppingText(input, options = {}) {
   return [...byKey.values()];
 }
 
+function findMatchingAlias(query, item) {
+  const queryRaw = normalizeShoppingText(query);
+  const queryStem = stemShoppingText(query);
+  if (!queryStem || !Array.isArray(item?.aliases)) return null;
+
+  return item.aliases.find(alias => {
+    const aliasValue = alias?.normalized || alias?.text;
+    const aliasRaw = normalizeShoppingText(aliasValue);
+    const aliasStem = stemShoppingText(aliasValue);
+    return Boolean(aliasStem && (queryRaw === aliasRaw || queryStem === aliasStem));
+  }) || null;
+}
+
 function scoreCatalogItem(query, item) {
+  if (findMatchingAlias(query, item)) return 140;
+
   const queryRaw = normalizeShoppingText(query);
   const queryStem = stemShoppingText(query);
   const itemRaw = normalizeShoppingText(item?.name);
@@ -142,11 +157,17 @@ function rankCatalogMatches(query, items, options = {}) {
   const usageByItemId = options.usageByItemId instanceof Map ? options.usageByItemId : new Map();
 
   return (Array.isArray(items) ? items : [])
-    .map(item => ({
-      item,
-      score: scoreCatalogItem(sourceText, item),
-      usage: usageByItemId.get(String(item?._id)) || 0
-    }))
+    .map(item => {
+      const matchedAlias = findMatchingAlias(sourceText, item);
+      const score = scoreCatalogItem(sourceText, item);
+      return {
+        item,
+        score,
+        usage: usageByItemId.get(String(item?._id)) || 0,
+        matchSource: matchedAlias ? 'alias' : (score === 120 ? 'name' : 'fuzzy'),
+        matchedAlias
+      };
+    })
     .filter(candidate => candidate.score >= minScore)
     .sort((a, b) =>
       b.score - a.score ||
@@ -156,6 +177,15 @@ function rankCatalogMatches(query, items, options = {}) {
     .slice(0, Math.max(1, maxCandidates));
 }
 
+function publicAlias(alias) {
+  if (!alias) return null;
+  return {
+    _id: alias._id ? String(alias._id) : null,
+    text: alias.text,
+    source: alias.source || 'user-entry'
+  };
+}
+
 function matchCatalogItem(query, items, options = {}) {
   const ranked = rankCatalogMatches(query, items, options);
   if (!ranked.length) {
@@ -163,6 +193,8 @@ function matchCatalogItem(query, items, options = {}) {
       matchStatus: 'unmatched',
       confidenceScore: 0,
       confidenceGap: 0,
+      matchSource: null,
+      matchedAlias: null,
       item: null,
       candidates: []
     };
@@ -170,16 +202,19 @@ function matchCatalogItem(query, items, options = {}) {
 
   const first = ranked[0];
   const second = ranked[1];
-  const exactMatches = ranked.filter(candidate => candidate.score === 120);
-  const hasClearWinner = !second ||
-    exactMatches.length === 1 ||
+  const exactCollision = Boolean(second && first.score === second.score && first.score >= 120);
+  const hasClearWinner = !second || (!exactCollision && (
+    first.score >= 120 ||
     first.score - second.score >= 12 ||
-    (first.usage > 0 && first.usage > second.usage && first.score >= second.score);
+    (first.usage > 0 && first.usage > second.usage && first.score >= second.score)
+  ));
 
   return {
     matchStatus: hasClearWinner ? 'matched' : 'ambiguous',
     confidenceScore: first.score,
     confidenceGap: second ? first.score - second.score : first.score,
+    matchSource: hasClearWinner ? first.matchSource : null,
+    matchedAlias: hasClearWinner ? publicAlias(first.matchedAlias) : null,
     item: hasClearWinner ? first.item : null,
     candidates: ranked
   };
@@ -189,6 +224,7 @@ module.exports = {
   MAX_MATCH_INPUT_LENGTH,
   MAX_MATCH_ITEMS,
   cleanShoppingFragment,
+  findMatchingAlias,
   matchCatalogItem,
   normalizeShoppingText,
   parseQuantity,
