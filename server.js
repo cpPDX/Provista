@@ -31,8 +31,10 @@ app.use('/api/auth/reset-password', passwordLimiter);
 
 const publicDirectory = path.join(__dirname, 'public');
 const landingTemplate = fs.readFileSync(path.join(publicDirectory, 'landing.html'), 'utf8');
+const SEO_TITLE = 'Provista — Shared Grocery List, Meal Planner & Pantry Tracker';
+const SEO_DESCRIPTION = 'A shared grocery list and meal planning app for households. Organize shopping by store section, track pantry needs, and keep grocery spending together.';
 
-function renderLandingPage(req) {
+function resolvePublicOrigin(req) {
   let publicUrl = String(process.env.APP_BASE_URL || '').trim();
   if (!publicUrl && process.env.NODE_ENV !== 'production') {
     publicUrl = `${req.protocol}://${req.get('host')}`;
@@ -41,20 +43,76 @@ function renderLandingPage(req) {
   try {
     const origin = new URL(publicUrl);
     if (!['http:', 'https:'].includes(origin.protocol)) throw new Error('Unsupported public URL protocol');
-    const canonicalUrl = new URL('/', origin).href;
-    const imageUrl = new URL('/og.jpg', origin).href;
-    return landingTemplate
-      .replaceAll('__PROVISTA_PUBLIC_URL__', canonicalUrl)
-      .replaceAll('__PROVISTA_OG_IMAGE_URL__', imageUrl);
+    return origin;
   } catch (_) {
-    return landingTemplate
+    return null;
+  }
+}
+
+function renderLandingPage(req) {
+  const origin = resolvePublicOrigin(req);
+  let html = landingTemplate
+    .replace(/<title>.*?<\/title>/, `<title>${SEO_TITLE}</title>`)
+    .replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${SEO_DESCRIPTION}" />`)
+    .replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${SEO_TITLE}" />`)
+    .replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${SEO_DESCRIPTION}" />`)
+    .replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${SEO_TITLE}" />`)
+    .replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${SEO_DESCRIPTION}" />`);
+
+  if (!origin) {
+    return html
       .replace(/^.*__PROVISTA_PUBLIC_URL__.*\n/gm, '')
       .replace(/^.*__PROVISTA_OG_IMAGE_URL__.*\n/gm, '');
   }
+
+  const canonicalUrl = new URL('/', origin).href;
+  const imageUrl = new URL('/og.jpg', origin).href;
+  const structuredData = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Provista',
+    applicationCategory: 'LifestyleApplication',
+    operatingSystem: 'Web',
+    url: canonicalUrl,
+    description: SEO_DESCRIPTION,
+    featureList: [
+      'Shared grocery lists',
+      'Grocery list organization by store section',
+      'Household meal planning',
+      'Pantry tracking',
+      'Grocery price and spending history'
+    ]
+  }).replace(/</g, '\\u003c');
+
+  html = html
+    .replaceAll('__PROVISTA_PUBLIC_URL__', canonicalUrl)
+    .replaceAll('__PROVISTA_OG_IMAGE_URL__', imageUrl)
+    .replace('</head>', `  <link rel="canonical" href="${canonicalUrl}" />\n  <script type="application/ld+json">${structuredData}</script>\n</head>`);
+
+  return html;
 }
 
 app.get('/landing.html', (req, res) => {
   res.type('html').send(renderLandingPage(req));
+});
+
+app.get('/robots.txt', (req, res) => {
+  const origin = resolvePublicOrigin(req);
+  const lines = ['User-agent: *', 'Allow: /', 'Disallow: /app', 'Disallow: /api/'];
+  if (origin) lines.push(`Sitemap: ${new URL('/sitemap.xml', origin).href}`);
+  res.type('text/plain').send(`${lines.join('\n')}\n`);
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  const origin = resolvePublicOrigin(req);
+  if (!origin) return res.status(404).type('text/plain').send('Public URL is not configured');
+  const canonicalUrl = new URL('/', origin).href;
+  return res.type('application/xml').send(
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    `  <url><loc>${canonicalUrl}</loc></url>\n` +
+    `</urlset>\n`
+  );
 });
 
 app.use(express.static(publicDirectory, { index: false }));
