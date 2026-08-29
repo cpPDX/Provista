@@ -40,6 +40,7 @@
   const baseRenderShoppingList = renderShoppingList;
   const baseLoadShoppingListTab = loadShoppingListTab;
   const baseLoadAboutSection = typeof loadAboutSection === 'function' ? loadAboutSection : null;
+  let organizeFrame = null;
 
   function inferredSection(category) {
     return CATEGORY_SECTIONS.get(String(category || '').trim().toLowerCase()) || 'Other';
@@ -57,8 +58,10 @@
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'list-item-section-btn';
-    button.textContent = `${section} · change`;
-    button.setAttribute('aria-label', `Change store section for ${name}`);
+    button.textContent = `${section} · edit section`;
+    // Avoid colliding with the existing purchase-price "Change" action in
+    // accessible-name queries while still giving this control a precise name.
+    button.setAttribute('aria-label', `Store section for ${name}: ${section}. Edit section`);
     button.addEventListener('click', () => openStoreSectionPicker(listItem._id));
     meta.insertAdjacentElement('afterend', button);
   }
@@ -99,14 +102,23 @@
   }
 
   function organizeRenderedList() {
+    organizeFrame = null;
     const container = document.getElementById('shopping-list');
     if (!container) return;
     container.querySelectorAll(':scope > .list-store-group').forEach(organizeStoreGroup);
   }
 
+  function scheduleListOrganization() {
+    if (organizeFrame !== null) cancelAnimationFrame(organizeFrame);
+    organizeFrame = requestAnimationFrame(organizeRenderedList);
+  }
+
   renderShoppingList = function renderShoppingListBySection() {
     baseRenderShoppingList();
-    organizeRenderedList();
+    // Keep optimistic check-off synchronous and cheap. Re-group once on the
+    // next paint instead of rebuilding section wrappers after every tap in a
+    // rapid burst of shopping actions.
+    scheduleListOrganization();
   };
 
   loadShoppingListTab = async function loadShoppingListTabWithSections() {
@@ -175,12 +187,23 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    .list-section-group { margin: .25rem 0 .85rem; }
-    .list-section-heading { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.45rem .2rem .35rem; }
+    .list-store-group,
+    .list-section-group,
+    .list-store-heading,
+    .list-section-heading,
+    .list-section-group .list-item { min-width:0; max-width:100%; width:100%; }
+    .list-section-group { margin:.25rem 0 .85rem; overflow:hidden; }
+    .list-store-heading,
+    .list-section-heading { flex-wrap:wrap; }
+    .list-store-heading h2,
+    .list-section-heading h3 { min-width:0; overflow-wrap:anywhere; }
+    .list-store-heading span,
+    .list-section-heading span { flex:0 1 auto; min-width:0; }
+    .list-section-heading { display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.45rem .2rem .35rem; }
     .list-section-heading h3 { margin:0; font-size:.78rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); }
     .list-section-heading span { font-size:.75rem; color:var(--text-muted); }
     .list-section-group .list-item { margin-bottom:.45rem; }
-    .list-item-section-btn { display:block; margin:.2rem 0 0; padding:0; border:0; background:none; color:var(--primary); font:inherit; font-size:.75rem; cursor:pointer; text-align:left; }
+    .list-item-section-btn { display:block; max-width:100%; margin:.2rem 0 0; padding:0; border:0; background:none; color:var(--primary); font:inherit; font-size:.75rem; line-height:1.35; cursor:pointer; text-align:left; white-space:normal; overflow-wrap:anywhere; }
     .list-item-section-btn:focus-visible { outline:2px solid var(--primary); outline-offset:2px; border-radius:2px; }
   `;
   document.head.appendChild(style);
