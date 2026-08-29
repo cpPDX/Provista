@@ -22,7 +22,7 @@ window.appAuth = {
       if (res.status === 401) {
         // If offline, try cached auth instead of redirecting
         if (!navigator.onLine) return this._loadFromCache();
-        window.location.href = '/login.html';
+        await this._redirectToSignIn();
         return false;
       }
 
@@ -52,12 +52,12 @@ window.appAuth = {
     } catch {}
   },
 
-  _loadFromCache() {
+  async _loadFromCache() {
     try {
       const cached = localStorage.getItem('provista_auth');
       if (!cached) {
         // No cached auth — cannot work offline without prior login
-        window.location.href = '/login.html';
+        await this._redirectToSignIn();
         return false;
       }
       const data = JSON.parse(cached);
@@ -67,14 +67,21 @@ window.appAuth = {
       this.offlineSession = true;
       return true;
     } catch {
-      window.location.href = '/login.html';
+      await this._redirectToSignIn();
       return false;
     }
+  },
+
+  async _redirectToSignIn() {
+    // Clear an expired or orphaned cookie so the public root cannot bounce the
+    // person back into an app session that no longer exists.
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    window.location.href = '/?auth=signin';
   },
 
   async logout() {
     localStorage.removeItem('provista_auth');
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
-    window.location.href = '/login.html';
+    window.location.href = '/';
   }
 };

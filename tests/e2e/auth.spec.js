@@ -1,6 +1,39 @@
 const { test, expect } = require('@playwright/test');
 
 test.describe('Authentication', () => {
+  test('introduces Provista before opening account access', async ({ page }) => {
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: /Plan meals.*Shop together.*Stay ahead/ })).toBeVisible();
+    await expect(page.getByText('Grocery planning for real households')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Sign in' }).first().click();
+    await expect(page.locator('#auth-dialog')).toBeVisible();
+    await expect(page.locator('#signin-panel')).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#auth-dialog')).toBeHidden();
+  });
+
+  test('creates a household account without leaving the public page first', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /Create account/ }).first().click();
+
+    const timestamp = Date.now();
+    await page.fill('#landing-signup-name', 'Splash Account User');
+    await page.fill('#landing-signup-email', `e2e-splash-${timestamp}@test.com`);
+    await page.fill('#landing-signup-password', 'password123');
+    await page.locator('#landing-signup-form').getByRole('button', { name: 'Continue' }).click();
+
+    await expect(page.locator('#household-panel')).toBeVisible();
+    await page.getByRole('button', { name: /Create a household/ }).click();
+    await page.fill('#landing-household-name', 'Splash Household');
+    await page.locator('#landing-create-household-form').getByRole('button', { name: 'Create household' }).click();
+
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page.locator('#tab-home')).toBeVisible();
+  });
+
   test('shows Sign In form by default', async ({ page }) => {
     await page.goto('/login.html');
     await expect(page.locator('#login-form')).toBeVisible();

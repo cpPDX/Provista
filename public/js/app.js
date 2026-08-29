@@ -32,7 +32,7 @@ async function ensureRapidShoppingCapture() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Auth check — redirects to /login.html if not authenticated
+  // Auth check — returns to the public page with sign-in open when needed
   const ok = await window.appAuth.load();
   if (!ok) return;
 

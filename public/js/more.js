@@ -159,7 +159,7 @@ async function loadAccountSettings() {
         btn.textContent = 'Deleting…';
         try {
           await api.auth.deleteAccount({ password: document.getElementById('da-password').value });
-          window.location.href = '/login.html';
+          window.location.href = '/';
         } catch (err) {
           handleError(err, 'Failed to delete account');
           btn.disabled = false;
@@ -1007,7 +1007,7 @@ async function loadHousehold() {
           btn.textContent = 'Deleting…';
           try {
             await api.household.deleteHousehold({ password: document.getElementById('dh-password').value });
-            window.location.href = '/login.html';
+            window.location.href = '/';
           } catch (err) {
             handleError(err, 'Failed to delete household');
             btn.disabled = false;
