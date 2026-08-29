@@ -83,20 +83,21 @@ describe('GET /api/items', () => {
 describe('POST /api/items/match', () => {
   it('parses several groceries with the shared deterministic matcher', async () => {
     const { cookie } = await createOwnerSession(app);
-    await createItem(cookie, { name: 'Black Beans', category: 'Pantry', unit: 'can' });
+    const itemName = 'API Match Black Beans';
+    await createItem(cookie, { name: itemName, category: 'Pantry', unit: 'can' });
 
     const res = await request(app)
       .post('/api/items/match')
       .set('Cookie', cookie)
-      .send({ text: '2 cans black beans, mystery grocery' });
+      .send({ text: `2 cans ${itemName}, mystery grocery` });
 
     expect(res.status).toBe(200);
     expect(res.body.parsedCount).toBe(2);
     expect(res.body.suggestions[0]).toMatchObject({
-      sourceText: 'black beans',
+      sourceText: itemName,
       quantity: 2,
       matchStatus: 'matched',
-      item: { name: 'Black Beans' }
+      item: { name: itemName }
     });
     expect(res.body.suggestions[1]).toMatchObject({
       sourceText: 'mystery grocery',
