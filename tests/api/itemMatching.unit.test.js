@@ -37,6 +37,7 @@ describe('shared grocery catalog matching', () => {
     expect(result).toMatchObject({
       matchStatus: 'matched',
       confidenceScore: 120,
+      matchSource: 'name',
       item: { _id: '3', name: 'Salsa' }
     });
   });
@@ -59,6 +60,7 @@ describe('shared grocery catalog matching', () => {
 
     expect(result).toMatchObject({
       matchStatus: 'matched',
+      matchSource: 'fuzzy',
       item: { _id: '2', name: 'Flour Tortillas (8-inch)' }
     });
   });
@@ -70,8 +72,63 @@ describe('shared grocery catalog matching', () => {
     expect(result).toMatchObject({
       matchStatus: 'unmatched',
       confidenceScore: 0,
+      matchSource: null,
       item: null,
       candidates: []
     });
+  });
+
+  it('resolves a confirmed household alias before fuzzy name matching', () => {
+    const aliasedItems = [
+      ...items,
+      {
+        _id: '4',
+        name: 'Cheerios',
+        brand: 'General Mills',
+        category: 'Cereal',
+        unit: 'box',
+        aliases: [{
+          _id: 'a1',
+          text: 'GM CHEER 18OZ',
+          normalized: 'gm cheer 18oz',
+          source: 'receipt'
+        }]
+      }
+    ];
+    const parsed = parseShoppingText('GM CHEER 18OZ')[0];
+    const result = matchCatalogItem(parsed, aliasedItems);
+
+    expect(scoreCatalogItem('GM CHEER 18OZ', aliasedItems[3])).toBe(140);
+    expect(result).toMatchObject({
+      matchStatus: 'matched',
+      confidenceScore: 140,
+      matchSource: 'alias',
+      matchedAlias: { _id: 'a1', text: 'GM CHEER 18OZ', source: 'receipt' },
+      item: { _id: '4', name: 'Cheerios' }
+    });
+  });
+
+  it('keeps conflicting exact aliases ambiguous even when usage differs', () => {
+    const conflicting = [
+      {
+        _id: '4',
+        name: 'Cheerios',
+        aliases: [{ text: 'breakfast box', normalized: 'breakfast box', source: 'user-entry' }]
+      },
+      {
+        _id: '5',
+        name: 'Corn Flakes',
+        aliases: [{ text: 'breakfast box', normalized: 'breakfast box', source: 'user-entry' }]
+      }
+    ];
+    const parsed = parseShoppingText('breakfast box')[0];
+    const result = matchCatalogItem(parsed, conflicting, {
+      usageByItemId: new Map([['4', 20]])
+    });
+
+    expect(result.matchStatus).toBe('ambiguous');
+    expect(result.item).toBeNull();
+    expect(result.confidenceScore).toBe(140);
+    expect(result.confidenceGap).toBe(0);
   });
 });
