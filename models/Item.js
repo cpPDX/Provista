@@ -1,5 +1,17 @@
 const mongoose = require('mongoose');
 
+const itemAliasSchema = new mongoose.Schema({
+  text: { type: String, required: true, trim: true, maxlength: 120 },
+  normalized: { type: String, required: true, trim: true, maxlength: 120 },
+  source: {
+    type: String,
+    enum: ['user-entry', 'receipt', 'import'],
+    default: 'user-entry'
+  },
+  confirmedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  confirmedAt: { type: Date, default: Date.now }
+}, { _id: true });
+
 const itemSchema = new mongoose.Schema({
   householdId: { type: mongoose.Schema.Types.ObjectId, ref: 'Household', required: true },
   name: { type: String, required: true, trim: true },
@@ -14,6 +26,7 @@ const itemSchema = new mongoose.Schema({
   // Provider-specific product identifiers. UPC remains the preferred shared
   // identifier, but providers can cache their own IDs here when needed.
   externalIds: { type: Map, of: String, default: {} },
+  aliases: { type: [itemAliasSchema], default: [] },
   isOrganic: { type: Boolean, default: false },
   isSeeded: { type: Boolean, default: false },
   lastConflict: {
@@ -26,5 +39,6 @@ const itemSchema = new mongoose.Schema({
 
 itemSchema.index({ householdId: 1, name: 1 });
 itemSchema.index({ householdId: 1, upc: 1 }, { sparse: true });
+itemSchema.index({ householdId: 1, 'aliases.normalized': 1 });
 
 module.exports = mongoose.model('Item', itemSchema);
