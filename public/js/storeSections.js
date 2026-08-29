@@ -118,9 +118,8 @@
   }
 
   // Observe the List container instead of replacing renderShoppingList(). This
-  // is important: rapid purchase taps intentionally perform many synchronous
-  // optimistic renders before network writes settle. Section decoration waits
-  // until that burst has finished and therefore cannot invalidate the tap loop.
+  // keeps optimistic check-off synchronous while section decoration waits until
+  // the current render has settled.
   const listContainer = document.getElementById('shopping-list');
   if (listContainer) {
     const observer = new MutationObserver(() => {
@@ -130,20 +129,35 @@
   }
 
   loadShoppingListTab = async function loadShoppingListTabWithSections() {
-    try {
-      const catalog = await api.items.list();
-      confirmedSections.clear();
-      catalog.forEach(item => {
-        if (item.storeSection) confirmedSections.set(String(item._id), item.storeSection);
-      });
-    } catch (err) {
-      // Category inference from populated List items remains available. A
-      // catalog refresh failure must never block the shopping workflow.
-      console.info('Store section preferences unavailable:', err.message);
+    const container = document.getElementById('shopping-list');
+
+    // Never expose stale List cards or a stale empty state while a new List load
+    // is in flight. Apart from being clearer for users, this prevents consumers
+    // from treating the previous render as the result of the current request.
+    if (container) {
+      container.setAttribute('aria-busy', 'true');
+      container.innerHTML = '<div class="list-loading-state text-muted text-sm" role="status">Refreshing list…</div>';
     }
-    const result = await baseLoadShoppingListTab();
-    scheduleOrganization();
-    return result;
+
+    try {
+      try {
+        const catalog = await api.items.list();
+        confirmedSections.clear();
+        catalog.forEach(item => {
+          if (item.storeSection) confirmedSections.set(String(item._id), item.storeSection);
+        });
+      } catch (err) {
+        // Category inference still works from each populated List item. A catalog
+        // refresh failure must never block shopping.
+        console.info('Store section preferences unavailable:', err.message);
+      }
+
+      const result = await baseLoadShoppingListTab();
+      scheduleOrganization();
+      return result;
+    } finally {
+      container?.removeAttribute('aria-busy');
+    }
   };
 
   if (baseLoadAboutSection) {
@@ -186,8 +200,6 @@
         confirmedSections.set(String(listItem.itemId._id), updated.storeSection);
         listItem.itemId.storeSection = updated.storeSection;
         closeModal();
-        // Use the existing renderer so checked state, prices, and cart state stay
-        // canonical, then let the observer apply the new section grouping.
         renderShoppingList();
         showToast(`${itemName} will appear under ${updated.storeSection}`);
       } catch (err) {
@@ -210,6 +222,7 @@
     .list-section-group .list-item { margin-bottom:.45rem; }
     .list-item-section-btn { display:block; max-width:100%; margin:.2rem 0 0; padding:0; border:0; background:none; color:var(--primary); font:inherit; font-size:.75rem; cursor:pointer; text-align:left; white-space:normal; overflow-wrap:anywhere; }
     .list-item-section-btn:focus-visible { outline:2px solid var(--primary); outline-offset:2px; border-radius:2px; }
+    .list-loading-state { padding:1rem .25rem; }
   `;
   document.head.appendChild(style);
 })();
