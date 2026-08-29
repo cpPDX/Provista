@@ -125,9 +125,9 @@ function renderHome() {
       action: 'Review prices',
       actionType: 'review-prices'
     };
-  } else if (homeState.status.lowStock !== 'error' && Array.isArray(lowStock) && lowStock.length) {
+  } else if (Array.isArray(lowStock) && lowStock.length) {
     next = { title: 'Review low and out staples', detail: `${lowStock.length} item${lowStock.length === 1 ? '' : 's'} need attention.`, action: 'Open Pantry', tab: 'inventory' };
-  } else if (homeState.status.shoppingList !== 'error' && Array.isArray(shoppingList) && needed.length) {
+  } else if (Array.isArray(shoppingList) && needed.length) {
     next = { title: 'Review the shopping list', detail: `${needed.length} item${needed.length === 1 ? '' : 's'} left to get.`, action: 'Open list', tab: 'list' };
   }
 
@@ -217,12 +217,7 @@ async function loadHomeSource(source, request) {
     homeState.status[source] = 'fresh';
     writeHomeCache(source, data);
   } catch (_) {
-    // A failed live refresh is an error even when a cached value exists. Showing
-    // cached Pantry/List data as merely "Saved view" can falsely communicate
-    // that an empty result is current (for example, "Pantry looks good"). Keep
-    // the cached value available for later recovery, but make this card's live
-    // data failure explicit until a retry succeeds.
-    homeState.status[source] = 'error';
+    homeState.status[source] = homeState[source] === null ? 'error' : 'stale';
   }
   renderHome();
 }
@@ -282,4 +277,62 @@ async function openHomeQuickAdd() {
     rapidInput.focus({ preventScroll: true });
     rapidInput.scrollIntoView({ block: 'nearest' });
   }
+}
+
+async function openDeferredPriceReview() {
+  await loadDeferredPrices();
+  if (!homeState.deferredPrices.length) return showToast('No prices need review');
+
+  openModal('Review prices', `
+    <p class="text-muted text-sm">Add only the prices you know now. Anything left blank stays here for later.</p>
+    <div class="deferred-price-list">
+      ${homeState.deferredPrices.map((item, index) => `
+        <label class="deferred-price-row">
+          <span><strong>${escapeHtml(item.itemName)}</strong><small>${escapeHtml(item.storeName || 'Store')} · ${escapeHtml(new Date(item.completedAt).toLocaleDateString())}</small></span>
+          <span class="deferred-price-input-wrap"><span>$</span><input class="form-control deferred-price-input" type="number" min="0" step="0.01" inputmode="decimal" data-index="${index}" placeholder="0.00" /></span>
+        </label>`).join('')}
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-outline" onclick="closeModal()">Done for now</button>
+      <button type="button" class="btn btn-primary" id="save-deferred-prices">Save entered prices</button>
+    </div>`);
+
+  document.getElementById('save-deferred-prices')?.addEventListener('click', saveDeferredPrices);
+}
+
+async function saveDeferredPrices() {
+  const button = document.getElementById('save-deferred-prices');
+  const updates = [...document.querySelectorAll('.deferred-price-input')]
+    .map(input => ({ input, item: homeState.deferredPrices[Number(input.dataset.index)], raw: input.value.trim() }))
+    .filter(entry => entry.raw !== '');
+  if (!updates.length) return showToast('Enter at least one price, or choose Done for now');
+
+  for (const update of updates) {
+    const value = Number(update.raw);
+    if (!Number.isFinite(value) || value < 0) {
+      showToast(`Enter a valid price for ${update.item.itemName}`);
+      update.input.focus();
+      return;
+    }
+  }
+
+  if (button) { button.disabled = true; button.textContent = 'Saving…'; }
+  const results = await Promise.allSettled(updates.map(update => api.shoppingTrips.resolvePrice(
+    update.item.tripId,
+    update.item.shoppingListItemId,
+    { price: Number(update.raw), storeId: update.item.storeId }
+  )));
+  const saved = results.filter(result => result.status === 'fulfilled').length;
+  const failed = results.length - saved;
+
+  closeModal();
+  await loadDeferredPrices();
+  showToast(failed
+    ? `${saved} price${saved === 1 ? '' : 's'} saved · ${failed} could not be updated`
+    : `${saved} price${saved === 1 ? '' : 's'} saved · Spending updated`, 5000);
+}
+
+function initHomeTab() {
+  document.getElementById('home-quick-add')?.addEventListener('click', openHomeQuickAdd);
+  document.getElementById('home-plan-dinner')?.addEventListener('click', openTodaysDinner);
 }
