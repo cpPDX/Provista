@@ -2,13 +2,13 @@ name: App CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [staging, main]
   push:
-    branches: [main]
+    branches: [staging, main]
 
 # Pull requests are the authoritative validation path for feature branches.
-# Push validation is reserved for main so a PR update does not start a second,
-# immediately-cancelled workflow run for the same commit.
+# Push validation is reserved for persistent integration branches so a PR update
+# does not start a second, immediately-cancelled workflow run for the same commit.
 concurrency:
   group: app-ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
