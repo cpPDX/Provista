@@ -105,6 +105,8 @@ test.describe('Pantry household workflows', () => {
 
     await loginAsHouseholdMember(page, baseURL);
     await page.click('[data-tab="inventory"]');
+    await expect(page.locator(`.pantry-card[data-inv-id="${first._id}"]`)).toBeVisible();
+    await expect(page.locator(`.pantry-card[data-inv-id="${second._id}"]`)).toBeVisible();
     const before = await page.locator('.pantry-card').evaluateAll(cards => cards.map(card => card.dataset.invId));
     const targetId = before[before.length - 1] === first._id ? first._id : second._id;
     const card = page.locator(`.pantry-card[data-inv-id="${targetId}"]`);
