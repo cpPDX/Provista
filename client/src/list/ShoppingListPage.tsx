@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useConfirm } from '../shell/DialogProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
+import { RapidCapture } from './RapidCapture';
 import { processShoppingQueue } from './storage';
 import {
   entityId,
@@ -243,11 +244,9 @@ export function ShoppingListPage() {
   const threshold = Number(context?.savingsThreshold || 0);
   const showStoreSuggestion = Boolean(context?.additionalStore?.name && savings >= threshold);
 
-  const openLegacyList = async (focus?: string) => {
+  const openLegacyList = async () => {
     if (!(await settleChecks())) return;
-    const params = new URLSearchParams({ tab: 'list' });
-    if (focus) params.set('focus', focus);
-    window.location.assign(`/app?${params.toString()}`);
+    window.location.assign('/app?tab=list');
   };
 
   const finishShopping = async () => {
@@ -266,12 +265,15 @@ export function ShoppingListPage() {
           <h1 id="react-list-title">Shopping list</h1>
           <p>Check items off as you shop. Provista saves each check immediately.</p>
         </div>
-        <button type="button" className="shell-button shell-button-primary" onClick={() => void openLegacyList('rapid-list-input')}>
-          Add groceries
-        </button>
       </header>
 
       {!online && <div className="react-list-offline" role="status">Offline · check-offs and simple List changes will sync when you reconnect.</div>}
+
+      <RapidCapture
+        items={items}
+        online={online}
+        onListChanged={() => queryClient.invalidateQueries({ queryKey })}
+      />
 
       <div className="react-list-controls" aria-label="List filters">
         <label>
@@ -312,8 +314,7 @@ export function ShoppingListPage() {
       ) : !items.length ? (
         <div className="react-list-state">
           <strong>Your list is empty</strong>
-          <span>Add groceries whenever they come to mind.</span>
-          <button type="button" className="shell-button shell-button-primary" onClick={() => void openLegacyList('rapid-list-input')}>Add groceries</button>
+          <span>Add groceries above whenever they come to mind.</span>
         </div>
       ) : !visibleItems.length ? (
         <div className="react-list-state">
