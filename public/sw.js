@@ -1,7 +1,7 @@
 // Provista Service Worker
 // Network-first for navigations, JS/CSS, and API data; cache-first for static assets.
 
-const SHELL_CACHE = 'provista-shell-v12';
+const SHELL_CACHE = 'provista-shell-v13';
 const API_CACHE = 'provista-api-v5';
 
 const SHELL_ASSETS = [
@@ -30,6 +30,7 @@ const SHELL_ASSETS = [
   '/js/mealPlan.js',
   '/js/home.js',
   '/js/onboarding.js',
+  '/js/reactHomeBridge.js',
   '/js/scan.js',
   '/js/scanner.js',
   '/js/app.js',
@@ -48,11 +49,29 @@ const SHELL_ASSETS = [
   '/manifest.json'
 ];
 
-// Install: pre-cache app shell
+async function cacheReactAppShell(cache) {
+  try {
+    const response = await fetch('/app', { credentials: 'same-origin' });
+    if (!response.ok) return;
+
+    const html = await response.clone().text();
+    await cache.put('/app', response);
+
+    const assetPaths = [...html.matchAll(/(?:src|href)="(\/react-preview\/assets\/[^"]+)"/g)]
+      .map(match => match[1]);
+    const uniqueAssets = [...new Set(assetPaths)];
+    await Promise.all(uniqueAssets.map(asset => cache.add(asset).catch(() => undefined)));
+  } catch {
+    // The legacy shell remains available if the React build cannot be cached.
+  }
+}
+
+// Install: pre-cache both the legacy compatibility shell and the current React Home shell.
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => {
-      return cache.addAll(SHELL_ASSETS);
+    caches.open(SHELL_CACHE).then(async (cache) => {
+      await cache.addAll(SHELL_ASSETS);
+      await cacheReactAppShell(cache);
     }).then(() => self.skipWaiting())
   );
 });
@@ -79,7 +98,7 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
 
   // Navigations should pick up the latest deployed shell when online, while
-  // still falling back to the cached app when the household is offline.
+  // still falling back to the appropriate cached React or legacy app offline.
   if (request.mode === 'navigate') {
     event.respondWith(networkFirstWithCacheFallback(request));
     return;
@@ -91,8 +110,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // JS and CSS: network-first so deploys take effect immediately; cache fallback when offline
-  if (url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
+  // JS and CSS: network-first so deploys take effect immediately; cache fallback when offline.
+  // Vite emits hashed React assets under /react-preview/assets/; those are also
+  // shell resources even though their filenames are generated at build time.
+  if (
+    url.pathname.startsWith('/js/') ||
+    url.pathname.startsWith('/css/') ||
+    url.pathname.startsWith('/react-preview/assets/')
+  ) {
     event.respondWith(networkFirstWithCacheFallback(request));
     return;
   }
@@ -103,10 +128,22 @@ self.addEventListener('fetch', (event) => {
 
 function cacheNameForRequest(request) {
   const url = new URL(request.url);
-  if (request.mode === 'navigate' || url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
+  if (
+    request.mode === 'navigate' ||
+    url.pathname.startsWith('/js/') ||
+    url.pathname.startsWith('/css/') ||
+    url.pathname.startsWith('/react-preview/assets/')
+  ) {
     return SHELL_CACHE;
   }
   return API_CACHE;
+}
+
+function navigationFallbackPath(request) {
+  const url = new URL(request.url);
+  const legacyFeature = url.pathname === '/legacy-app' ||
+    (url.pathname === '/app' && (url.searchParams.has('tab') || url.searchParams.get('legacy') === '1'));
+  return legacyFeature ? '/index.html' : '/app';
 }
 
 // Cache-first: serve from cache immediately, fall back to network
@@ -116,18 +153,12 @@ async function cacheFirstWithNetworkFallback(request) {
 
   try {
     const response = await fetch(request);
-    // Cache successful responses for future use
     if (response.ok) {
       const cache = await caches.open(SHELL_CACHE);
       cache.put(request, response.clone());
     }
     return response;
   } catch {
-    // For navigation requests, return cached index.html (SPA fallback)
-    if (request.mode === 'navigate') {
-      const cachedIndex = await caches.match('/index.html');
-      if (cachedIndex) return cachedIndex;
-    }
     return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
   }
 }
@@ -137,25 +168,22 @@ async function networkFirstWithCacheFallback(request) {
   const cacheName = cacheNameForRequest(request);
   try {
     const response = await fetch(request);
-    // Cache successful GET responses in the cache that owns that resource.
     if (response.ok && request.method === 'GET') {
       const cache = await caches.open(cacheName);
       cache.put(request, response.clone());
     }
     return response;
   } catch {
-    // Network failed — prefer the owning cache before searching all caches.
     if (request.method === 'GET') {
       const cache = await caches.open(cacheName);
       const cached = await cache.match(request);
       if (cached) return cached;
       if (request.mode === 'navigate') {
-        const cachedIndex = await cache.match('/index.html');
-        if (cachedIndex) return cachedIndex;
+        const fallback = await cache.match(navigationFallbackPath(request));
+        if (fallback) return fallback;
       }
     }
 
-    // No cache available — return structured offline error
     return new Response(
       JSON.stringify({ error: 'offline', offline: true }),
       {
