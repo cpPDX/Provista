@@ -1,5 +1,9 @@
 const { test, expect } = require('@playwright/test');
 
+// Most E2E specs block service workers so route interception remains reliable.
+// This spec owns the PWA smoke test, so explicitly allow the worker here.
+test.use({ serviceWorkers: 'allow' });
+
 async function createHouseholdSession(page, suffix) {
   const response = await page.request.post('/api/auth/register', {
     data: {
