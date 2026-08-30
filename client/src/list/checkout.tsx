@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '../shell/ToastProvider';
 import { completeShoppingTrip, loadStores, type ShoppingTripResult } from './api';
@@ -85,6 +85,29 @@ function compactPriceCopy(entry: CartEntry) {
   if (entry.priceDecision === 'later') return 'Bought · price later';
   if (entry.suggestedPrice !== null) return `Bought · using recent ${formatCurrency(entry.suggestedPrice)}`;
   return 'Bought · price later';
+}
+
+function handleDialogKey(event: KeyboardEvent<HTMLDivElement>, close: () => void, closeDisabled = false) {
+  if (event.key === 'Escape' && !closeDisabled) {
+    event.preventDefault();
+    close();
+    return;
+  }
+  if (event.key !== 'Tab') return;
+
+  const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, [href], [tabindex]:not([tabindex="-1"])'
+  )].filter(element => element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 export function useShoppingCheckout({
@@ -309,26 +332,36 @@ export function useShoppingCheckout({
 
   const confirmedEntries = Object.values(cartEntries).filter(entry => entry.price !== null);
   const deferredEntries = Object.values(cartEntries).filter(entry => entry.price === null);
+  const closePriceEditor = () => setPriceEditorItemId(null);
+  const closeCheckout = () => {
+    if (!completing) setCheckoutOpen(false);
+  };
 
   const dialogs = (
     <>
       {priceEditorItemId && (
-        <div className="react-list-modal-backdrop">
-          <div className="react-list-modal react-price-modal" role="dialog" aria-modal="true" aria-labelledby="react-price-title">
+        <div className="react-list-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closePriceEditor(); }}>
+          <div
+            className="react-list-modal react-price-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="react-price-title"
+            onKeyDown={event => handleDialogKey(event, closePriceEditor)}
+          >
             <form onSubmit={saveUpdatedPrice}>
               <div className="react-list-modal-heading">
                 <div>
                   <p className="react-list-eyebrow">Purchase price</p>
                   <h2 id="react-price-title">Update price</h2>
                 </div>
-                <button type="button" className="react-list-modal-close" aria-label="Close Update price" onClick={() => setPriceEditorItemId(null)}>✕</button>
+                <button type="button" className="react-list-modal-close" aria-label="Close Update price" onClick={closePriceEditor}>✕</button>
               </div>
               <label>
                 <span>What did you pay?</span>
                 <input id="inline-price-value" ref={priceInputRef} type="number" min="0" step="0.01" inputMode="decimal" value={priceDraft} onChange={event => setPriceDraft(event.target.value)} />
               </label>
               <div className="react-list-modal-actions">
-                <button type="button" className="shell-button shell-button-secondary" onClick={() => setPriceEditorItemId(null)}>Cancel</button>
+                <button type="button" className="shell-button shell-button-secondary" onClick={closePriceEditor}>Cancel</button>
                 <button type="submit" className="shell-button shell-button-primary">Use this price</button>
               </div>
             </form>
@@ -337,14 +370,20 @@ export function useShoppingCheckout({
       )}
 
       {checkoutOpen && (
-        <div className="react-list-modal-backdrop">
-          <div className="react-list-modal react-checkout-modal" role="dialog" aria-modal="true" aria-labelledby="react-checkout-title">
+        <div className="react-list-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeCheckout(); }}>
+          <div
+            className="react-list-modal react-checkout-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="react-checkout-title"
+            onKeyDown={event => handleDialogKey(event, closeCheckout, completing)}
+          >
             <div className="react-list-modal-heading">
               <div>
                 <p className="react-list-eyebrow">Shopping stop</p>
                 <h2 id="react-checkout-title">Finish shopping</h2>
               </div>
-              <button type="button" className="react-list-modal-close" aria-label="Keep shopping" onClick={() => setCheckoutOpen(false)}>✕</button>
+              <button type="button" className="react-list-modal-close" aria-label="Keep shopping" disabled={completing} onClick={closeCheckout}>✕</button>
             </div>
 
             <div className="finish-shopping-outcomes">
@@ -364,6 +403,7 @@ export function useShoppingCheckout({
                 id="parent-trip-store"
                 ref={storeSelectRef}
                 value={checkoutStoreId}
+                disabled={completing}
                 onChange={event => {
                   const value = event.target.value;
                   setCheckoutStoreId(value);
@@ -397,12 +437,12 @@ export function useShoppingCheckout({
             </div>
 
             <label className="trip-pantry-option">
-              <input type="checkbox" checked={addToPantry} onChange={event => setAddToPantry(event.target.checked)} />
+              <input type="checkbox" checked={addToPantry} disabled={completing} onChange={event => setAddToPantry(event.target.checked)} />
               <span><strong>Update Pantry</strong><small>Purchased items become Have; exact-tracked quantities are replenished.</small></span>
             </label>
 
             <div className="react-list-modal-actions">
-              <button type="button" className="shell-button shell-button-secondary" onClick={() => setCheckoutOpen(false)}>Keep shopping</button>
+              <button type="button" className="shell-button shell-button-secondary" disabled={completing} onClick={closeCheckout}>Keep shopping</button>
               <button id="parent-finish-shopping" type="button" className="shell-button shell-button-primary" disabled={completing} onClick={() => void finishCheckout()}>
                 {completing ? 'Finishing…' : 'Finish shopping'}
               </button>
