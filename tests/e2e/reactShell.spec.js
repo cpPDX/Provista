@@ -1,5 +1,9 @@
 const { test, expect } = require('@playwright/test');
 
+// Most E2E specs block service workers so route interception remains reliable.
+// This spec owns the PWA smoke test, so explicitly allow the worker here.
+test.use({ serviceWorkers: 'allow' });
+
 async function createHouseholdSession(page, suffix) {
   const response = await page.request.post('/api/auth/register', {
     data: {
@@ -18,13 +22,11 @@ test.describe('React migration shell', () => {
     await createHouseholdSession(page, 'Navigation');
 
     await page.goto('/react-preview/');
-    // The authenticated shell intentionally prefers the user's display name.
-    // Registration currently derives that from the first token of the full name.
-    await expect(page.getByRole('heading', { name: 'Welcome, React' })).toBeVisible();
-    await expect(page.getByText('Shell Household Navigation')).toBeVisible();
-    await expect(page.getByText('React now owns this shell’s authenticated session')).toBeVisible();
+    await expect(page.locator('#home-react-title')).toHaveText('Hi, React');
+    await expect(page.locator('.shell-brand span')).toHaveText('Shell Household Navigation');
+    await expect(page.locator('.home-question')).toHaveCount(4);
 
-    await page.getByRole('button', { name: 'Pantry' }).click();
+    await page.getByRole('button', { name: 'Pantry', exact: true }).click();
     await expect(page).toHaveURL(/\/app\?tab=inventory$/);
     await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
     await expect(page.locator('#tab-inventory').getByRole('heading', { name: 'Pantry' })).toBeVisible();
@@ -43,5 +45,28 @@ test.describe('React migration shell', () => {
 
     await expect(page).toHaveURL('/');
     await expect(page.getByText('Grocery planning for real households')).toBeVisible();
+  });
+
+  test('keeps the production React Home shell available after going offline', async ({ page, context }) => {
+    await createHouseholdSession(page, 'Offline');
+
+    await page.goto('/app');
+    await expect(page.locator('#home-react-title')).toBeVisible();
+    await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+
+    // Reload once online so the newly active worker owns the navigation and
+    // caches the session plus Home API responses used by the offline reload.
+    await page.reload();
+    await expect(page.locator('#home-react-title')).toBeVisible();
+
+    try {
+      await context.setOffline(true);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#home-react-title')).toBeVisible();
+      await expect(page.locator('.home-question')).toHaveCount(4);
+      await expect(page.locator('.home-react-stale').first()).toBeVisible();
+    } finally {
+      await context.setOffline(false);
+    }
   });
 });

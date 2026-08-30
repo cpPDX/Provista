@@ -30,8 +30,10 @@ app.use('/api/auth/forgot-password', passwordLimiter);
 app.use('/api/auth/reset-password', passwordLimiter);
 
 const publicDirectory = path.join(__dirname, 'public');
-const reactPreviewIndex = path.join(publicDirectory, 'react-preview', 'index.html');
+const reactAppIndex = path.join(publicDirectory, 'react-preview', 'index.html');
+const legacyAppIndex = path.join(publicDirectory, 'index.html');
 const landingTemplate = fs.readFileSync(path.join(publicDirectory, 'landing.html'), 'utf8');
+const legacyAppTemplate = fs.readFileSync(legacyAppIndex, 'utf8');
 const SEO_TITLE = 'Provista — Shared Grocery List, Meal Planner & Pantry Tracker';
 const SEO_DESCRIPTION = 'A shared grocery list and meal planning app for households. Organize shopping by store section, track pantry needs, and keep grocery spending together.';
 
@@ -99,7 +101,7 @@ app.get('/landing.html', (req, res) => {
 
 app.get('/robots.txt', (req, res) => {
   const origin = resolvePublicOrigin(req);
-  const lines = ['User-agent: *', 'Allow: /', 'Disallow: /app', 'Disallow: /api/', 'Disallow: /react-preview/'];
+  const lines = ['User-agent: *', 'Allow: /', 'Disallow: /app', 'Disallow: /legacy-app', 'Disallow: /api/', 'Disallow: /react-preview/'];
   if (origin) lines.push(`Sitemap: ${new URL('/sitemap.xml', origin).href}`);
   res.type('text/plain').send(`${lines.join('\n')}\n`);
 });
@@ -152,27 +154,49 @@ app.get('/reset-password', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+function serveLegacyApp(req, res) {
+  const html = legacyAppTemplate.replace(
+    '</body>',
+    '  <script src="/js/reactHomeBridge.js"></script>\n</body>'
+  );
+  return res.type('html').send(html);
+}
+
+function serveReactApp(req, res) {
+  // Development/test environments can still run the legacy app before the
+  // client build exists. Production and CI build React before starting.
+  if (!fs.existsSync(reactAppIndex)) return serveLegacyApp(req, res);
+  return res.sendFile(reactAppIndex);
+}
+
+function serveReactPreview(req, res) {
+  if (!fs.existsSync(reactAppIndex)) {
+    return res.status(404).type('text/plain').send('React migration preview has not been built');
+  }
+  return res.sendFile(reactAppIndex);
+}
+
 // The public root explains Provista before asking someone to create an account.
-// Returning users with a valid session continue directly into the app.
+// Returning users with a valid session now enter the migrated React Home.
 app.get('/', (req, res) => {
   try {
     jwt.verify(req.cookies?.token, process.env.JWT_SECRET);
-    return res.sendFile(path.join(publicDirectory, 'index.html'));
+    return serveReactApp(req, res);
   } catch (_) {
     return res.type('html').send(renderLandingPage(req));
   }
 });
 
+// `/app` without a feature deep link is the migrated React Home. During the
+// strangler migration, explicit `?tab=` links continue to open the legacy
+// feature renderer until that destination moves to React.
 app.get('/app', (req, res) => {
-  res.sendFile(path.join(publicDirectory, 'index.html'));
+  if (req.query.tab || req.query.legacy === '1') return serveLegacyApp(req, res);
+  return serveReactApp(req, res);
 });
 
-function serveReactPreview(req, res) {
-  if (!fs.existsSync(reactPreviewIndex)) {
-    return res.status(404).type('text/plain').send('React migration preview has not been built');
-  }
-  return res.sendFile(reactPreviewIndex);
-}
+// New-household onboarding still depends on legacy DOM targets until PRO-55.
+app.get('/legacy-app', serveLegacyApp);
 
 // Vite's output lives under public/react-preview, but static directory indexes are
 // intentionally disabled for the rest of Provista. Serve only extensionless
@@ -187,7 +211,7 @@ app.get('/react-preview/*', (req, res, next) => {
 
 // SPA fallback
 app.get('*', (req, res) => {
-  res.sendFile(path.join(publicDirectory, 'index.html'));
+  res.sendFile(legacyAppIndex);
 });
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocerytracker';

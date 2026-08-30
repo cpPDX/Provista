@@ -10,42 +10,57 @@ function uid() { return `${Date.now()}-${process.pid}-${++_counter}`; }
 
 let _credentials = null; // cached per worker / spec file
 
-/**
- * Logs into the app as a test user.
- * First call: registers a new user+household via API (slow — triggers seedHousehold),
- * then logs in via the browser UI.
- * Subsequent calls: skips registration, only does the browser UI login.
- */
-async function loginAsNewUser(page, baseURL) {
-  if (!_credentials) {
-    const email = `e2e-${uid()}@test.com`;
-    const password = 'password123';
+async function ensureCredentials(baseURL) {
+  if (_credentials) return _credentials;
 
-    // Create user via API — only once per worker
-    const apiReq = await request.newContext({ baseURL });
-    const res = await apiReq.post('/api/auth/register', {
-      data: { name: 'E2E User', email, password, action: 'create', householdName: 'E2E House' }
-    });
-    if (!res.ok()) throw new Error(`API register failed: ${await res.text()}`);
-    await apiReq.dispose();
+  const email = `e2e-${uid()}@test.com`;
+  const password = 'password123';
+  const apiReq = await request.newContext({ baseURL });
+  const res = await apiReq.post('/api/auth/register', {
+    data: { name: 'E2E User', email, password, action: 'create', householdName: 'E2E House' }
+  });
+  if (!res.ok()) throw new Error(`API register failed: ${await res.text()}`);
+  await apiReq.dispose();
 
-    _credentials = { email, password };
-  }
+  _credentials = { email, password };
+  return _credentials;
+}
 
-  // Log in via browser (fast)
+async function loginThroughBrowser(page, baseURL) {
+  const credentials = await ensureCredentials(baseURL);
   await page.goto('/login.html');
   const loginForm = page.locator('#login-form');
-  await loginForm.locator('input[name="email"]').fill(_credentials.email);
-  await loginForm.locator('input[name="password"]').fill(_credentials.password);
+  await loginForm.locator('input[name="email"]').fill(credentials.email);
+  await loginForm.locator('input[name="password"]').fill(credentials.password);
   await loginForm.getByRole('button', { name: 'Sign In' }).click();
   await page.waitForURL('/', { timeout: 15000 });
+  return credentials;
+}
 
-  return { ..._credentials };
+/**
+ * Logs into the legacy compatibility surface. Existing feature specs keep
+ * using this helper until their feature is migrated to React.
+ */
+async function loginAsNewUser(page, baseURL) {
+  const credentials = await loginThroughBrowser(page, baseURL);
+  await page.goto('/legacy-app');
+  await page.waitForSelector('#tab-home.active');
+  return { ...credentials };
+}
+
+/**
+ * Logs into the production React Home surface. Use this for migrated Home and
+ * shell coverage so tests exercise the same entry point returning users see.
+ */
+async function loginAsReactHomeUser(page, baseURL) {
+  const credentials = await loginThroughBrowser(page, baseURL);
+  await page.waitForSelector('#home-react-title');
+  return { ...credentials };
 }
 
 /**
  * Adds a normal member to the owner household currently open in `page`, then
- * signs the browser into that member account.
+ * signs the browser into that member account on the legacy compatibility app.
  */
 async function loginAsHouseholdMember(page, baseURL) {
   const inviteResponse = await page.request.get('/api/household/invite');
@@ -65,7 +80,9 @@ async function loginAsHouseholdMember(page, baseURL) {
   await page.locator('#login-form input[name="password"]').fill(password);
   await page.locator('#login-form').getByRole('button', { name: 'Sign In' }).click();
   await page.waitForURL('/', { timeout: 15000 });
+  await page.goto('/legacy-app');
+  await page.waitForSelector('#tab-home.active');
   return { email, password };
 }
 
-module.exports = { loginAsNewUser, loginAsHouseholdMember };
+module.exports = { loginAsNewUser, loginAsReactHomeUser, loginAsHouseholdMember };

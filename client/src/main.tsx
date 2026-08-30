@@ -16,10 +16,16 @@ if (!rootElement) {
   throw new Error('Provista React root element was not found');
 }
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
+
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter basename="/react-preview">
+      <BrowserRouter>
         <AuthProvider>
           <DialogProvider>
             <DirtyStateProvider>

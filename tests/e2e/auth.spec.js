@@ -30,8 +30,8 @@ test.describe('Authentication', () => {
     await page.fill('#landing-household-name', 'Splash Household');
     await page.locator('#landing-create-household-form').getByRole('button', { name: 'Create household' }).click();
 
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.locator('#tab-home')).toBeVisible();
+    await expect(page).toHaveURL(/\/legacy-app\?onboarding=1$/, { timeout: 10000 });
+    await expect(page.locator('.bottom-nav')).toBeVisible();
   });
 
   test('shows Sign In form by default', async ({ page }) => {
@@ -139,9 +139,9 @@ test.describe('Authentication', () => {
     await page.fill('#household-name', 'E2E Household');
     await page.click('#btn-create-household');
 
-    // Should land on main app
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.locator('#tab-home')).toBeVisible();
+    // New household owners stay on the legacy onboarding surface until PRO-55.
+    await expect(page).toHaveURL(/\/legacy-app\?onboarding=1$/, { timeout: 10000 });
+    await expect(page.locator('.bottom-nav')).toBeVisible();
   });
 
   test('recovers a forgotten password from the visible sign-in flow', async ({ page }) => {
