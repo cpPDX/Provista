@@ -10,14 +10,37 @@
     }
   }
 
+  function tourIsActive() {
+    return Boolean(document.querySelector('.tour-tooltip'));
+  }
+
+  function openReactHome() {
+    window.location.assign('/app');
+  }
+
+  // Catch direct bottom-nav clicks before the legacy handler mutates the DOM.
   document.addEventListener('click', event => {
     const homeNav = event.target.closest?.('.nav-item[data-tab="home"]');
-    if (!homeNav || wizardIsActive()) return;
+    if (!homeNav || wizardIsActive() || tourIsActive()) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
-    window.location.assign('/app');
+    openReactHome();
   }, true);
+
+  // Some legacy workflows call switchTab('home') directly instead of clicking
+  // the nav. Preserve those calls for onboarding/tours while routing normal
+  // programmatic Home navigation back to the migrated React surface.
+  const legacySwitchTab = window.switchTab;
+  if (typeof legacySwitchTab === 'function') {
+    window.switchTab = async function bridgedSwitchTab(tabId, ...args) {
+      if (tabId === 'home' && !wizardIsActive() && !tourIsActive()) {
+        openReactHome();
+        return;
+      }
+      return legacySwitchTab.call(this, tabId, ...args);
+    };
+  }
 
   async function applyRequestedFocus() {
     const focus = new URLSearchParams(window.location.search).get('focus');
