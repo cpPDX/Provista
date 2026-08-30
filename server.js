@@ -99,7 +99,7 @@ app.get('/landing.html', (req, res) => {
 
 app.get('/robots.txt', (req, res) => {
   const origin = resolvePublicOrigin(req);
-  const lines = ['User-agent: *', 'Allow: /', 'Disallow: /app', 'Disallow: /api/'];
+  const lines = ['User-agent: *', 'Allow: /', 'Disallow: /app', 'Disallow: /api/', 'Disallow: /react-preview/'];
   if (origin) lines.push(`Sitemap: ${new URL('/sitemap.xml', origin).href}`);
   res.type('text/plain').send(`${lines.join('\n')}\n`);
 });
