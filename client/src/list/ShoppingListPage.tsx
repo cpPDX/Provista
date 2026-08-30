@@ -5,6 +5,7 @@ import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
 import { useShoppingCheckout } from './checkout';
 import { RapidCapture } from './RapidCapture';
+import { StorePreferenceDialog } from './StorePreferenceDialog';
 import { processShoppingQueue } from './storage';
 import {
   entityId,
@@ -51,6 +52,11 @@ function storeName(items: ShoppingListItem[], id: string | null): string {
   return '';
 }
 
+function explicitStoreName(item: ShoppingListItem): string {
+  if (!item.storeId) return 'Any store';
+  return typeof item.storeId === 'string' ? 'Preferred store' : item.storeId.name;
+}
+
 function householdPrice(item: ShoppingListItem): string {
   const product = productFor(item);
   const unit = product?.unit ? `/${product.unit}` : '';
@@ -87,6 +93,7 @@ export function ShoppingListPage() {
   const [storeFilter, setStoreFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
+  const [storePreferenceItem, setStorePreferenceItem] = useState<ShoppingListItem | null>(null);
   const checkSync = useRef(new Map<string, CheckSync>());
 
   const items = listQuery.data || [];
@@ -256,6 +263,11 @@ export function ShoppingListPage() {
   const threshold = Number(context?.savingsThreshold || 0);
   const showStoreSuggestion = Boolean(context?.additionalStore?.name && savings >= threshold);
 
+  const openCompatibilityTool = (action: 'review-low-stock' | 'scan-list-item') => {
+    const params = new URLSearchParams({ tab: 'list', action });
+    window.location.assign(`/app?${params.toString()}`);
+  };
+
   return (
     <section className="react-list-page" aria-labelledby="react-list-title">
       <header className="react-list-heading">
@@ -274,24 +286,34 @@ export function ShoppingListPage() {
         onListChanged={() => queryClient.invalidateQueries({ queryKey })}
       />
 
-      <div className="react-list-controls" aria-label="List filters">
-        <label>
-          <span>Store</span>
-          <select value={storeFilter} onChange={event => setStoreFilter(event.target.value)}>
-            <option value="">All stores</option>
-            {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
-          </select>
-        </label>
-        <label>
-          <span>Category</span>
-          <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
-            <option value="">All categories</option>
-            {categories.map(category => <option key={category} value={category}>{category}</option>)}
-          </select>
-        </label>
-        {(storeFilter || categoryFilter) && (
-          <button type="button" className="react-list-clear-filter" onClick={() => { setStoreFilter(''); setCategoryFilter(''); }}>Clear filters</button>
-        )}
+      <div className="react-list-toolbar">
+        <div className="react-list-controls" aria-label="List filters">
+          <label>
+            <span>Store</span>
+            <select value={storeFilter} onChange={event => setStoreFilter(event.target.value)}>
+              <option value="">All stores</option>
+              {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <select value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
+              <option value="">All categories</option>
+              {categories.map(category => <option key={category} value={category}>{category}</option>)}
+            </select>
+          </label>
+          {(storeFilter || categoryFilter) && (
+            <button type="button" className="react-list-clear-filter" onClick={() => { setStoreFilter(''); setCategoryFilter(''); }}>Clear filters</button>
+          )}
+        </div>
+        <details className="react-list-more-tools">
+          <summary>More shopping tools</summary>
+          <div>
+            <button type="button" onClick={() => openCompatibilityTool('review-low-stock')}>Review low stock</button>
+            <button type="button" onClick={() => openCompatibilityTool('scan-list-item')}>Scan item</button>
+            <small>These tools stay on the compatibility screen until Pantry and scanner migration work is complete.</small>
+          </div>
+        </details>
       </div>
 
       {showStoreSuggestion && (
@@ -344,6 +366,14 @@ export function ShoppingListPage() {
                     <div className="react-list-item-body">
                       <h3>{productName(item)}</h3>
                       <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'} · qty {item.quantity}</p>
+                      <button
+                        type="button"
+                        className="react-list-store-preference"
+                        aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
+                        onClick={() => setStorePreferenceItem(item)}
+                      >
+                        Store: {explicitStoreName(item)}
+                      </button>
                       {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
                     </div>
                     <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
@@ -367,6 +397,7 @@ export function ShoppingListPage() {
         </div>
       )}
 
+      {storePreferenceItem && <StorePreferenceDialog item={storePreferenceItem} onClose={() => setStorePreferenceItem(null)} />}
       {checkout.dialogs}
     </section>
   );
