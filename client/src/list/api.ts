@@ -6,11 +6,36 @@ import {
   readCachedShoppingList,
   replaceCachedShoppingList
 } from './storage';
-import type { ShoppingListItem } from './types';
+import type { ProductRef, ShoppingListItem } from './types';
 
 export interface ShoppingMutationResult {
   data: ShoppingListItem;
   queued: boolean;
+}
+
+export interface MatchCandidate extends ProductRef {
+  score?: number;
+  matchSource?: string;
+}
+
+export interface ShoppingMatchSuggestion {
+  sourceText: string;
+  quantity: number;
+  matchStatus: 'matched' | 'ambiguous' | 'unmatched';
+  confidenceScore?: number;
+  confidenceGap?: number;
+  matchSource?: string;
+  duplicateInInput?: boolean;
+  item?: ProductRef | null;
+  candidates?: MatchCandidate[];
+}
+
+export interface ShoppingMatchResult {
+  parsedCount: number;
+  matchedCount: number;
+  ambiguousCount: number;
+  unmatchedCount: number;
+  suggestions: ShoppingMatchSuggestion[];
 }
 
 function shouldUseOfflineFallback(error: unknown): boolean {
@@ -29,6 +54,48 @@ export async function loadShoppingList(): Promise<ShoppingListItem[]> {
     const cached = await readCachedShoppingList().catch(() => []);
     if (cached.length) return cached;
     throw new Error('Shopping List is not available offline yet. Reconnect once to save it on this device.');
+  }
+}
+
+export async function addShoppingListItem(
+  product: ProductRef,
+  quantity: number,
+  storeId?: string | null
+): Promise<ShoppingMutationResult> {
+  const payload = {
+    itemId: product._id,
+    quantity,
+    ...(storeId ? { storeId } : {})
+  };
+
+  try {
+    const response = await apiFetch<ShoppingListItem>('/api/shopping-list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    await cacheShoppingItem(response).catch(() => undefined);
+    return { data: response, queued: false };
+  } catch (error) {
+    if (!shouldUseOfflineFallback(error)) throw error;
+    const localId = `local-${crypto.randomUUID()}`;
+    const optimistic: ShoppingListItem = {
+      _id: localId,
+      itemId: product,
+      storeId: storeId || null,
+      quantity,
+      checked: false,
+      addedAt: new Date().toISOString()
+    };
+    await cacheShoppingItem(optimistic);
+    await queueShoppingWrite({
+      operation: 'CREATE',
+      payload,
+      path: '/shopping-list',
+      method: 'POST',
+      localId
+    });
+    return { data: optimistic, queued: true };
   }
 }
 
@@ -76,4 +143,37 @@ export async function deleteShoppingListItem(id: string): Promise<{ queued: bool
     });
     return { queued: true };
   }
+}
+
+export async function matchShoppingText(text: string): Promise<ShoppingMatchResult> {
+  return apiFetch<ShoppingMatchResult>('/api/items/match', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
+}
+
+export async function searchCatalog(search: string): Promise<ProductRef[]> {
+  const query = new URLSearchParams({ search });
+  return apiFetch<ProductRef[]>(`/api/items?${query.toString()}`);
+}
+
+export async function createCatalogProduct(input: {
+  name: string;
+  category: string;
+  unit: string;
+}): Promise<ProductRef> {
+  return apiFetch<ProductRef>('/api/items', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function addCatalogAlias(itemId: string, text: string): Promise<void> {
+  await apiFetch(`/api/items/${itemId}/aliases`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, source: 'user-entry' })
+  });
 }
