@@ -42,6 +42,14 @@
     };
   }
 
+  function todaysDinnerInput() {
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const day = [...document.querySelectorAll('.meal-day[data-date]')]
+      .find(element => element.dataset.date.slice(0, 10) === today);
+    return day?.querySelector('.meal-type-section[data-meal-type="dinner"] .meal-name-input') || null;
+  }
+
   async function applyRequestedFocus() {
     const focus = new URLSearchParams(window.location.search).get('focus');
     if (!focus) return;
@@ -57,7 +65,7 @@
         }
       }
 
-      if (focus === 'today-dinner' && typeof window.focusTodaysDinner === 'function') {
+      if (focus === 'today-dinner' && typeof window.focusTodaysDinner === 'function' && todaysDinnerInput()) {
         window.focusTodaysDinner();
         return;
       }
