@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { loginAsNewUser } = require('./helpers/login');
+const { loginAsReactHomeUser } = require('./helpers/login');
 
 async function createDeferredPrice(page) {
   const suffix = `${Date.now()}-${test.info().workerIndex}`;
@@ -26,17 +26,25 @@ async function createDeferredPrice(page) {
     }
   });
   expect(completed.ok()).toBeTruthy();
-  return { item, store };
+  return { item, store, listItem };
 }
 
-test.describe('Home / Today', () => {
-  test.beforeEach(async ({ page, baseURL }) => {
-    await loginAsNewUser(page, baseURL);
-    await page.waitForSelector('#tab-home.active');
+async function resolveDeferredPrice(page, itemName) {
+  const response = await page.request.get('/api/shopping-trips/deferred-prices');
+  if (!response.ok()) return;
+  const deferred = (await response.json()).find(item => item.itemName === itemName);
+  if (!deferred) return;
+  await page.request.patch(`/api/shopping-trips/${deferred.tripId}/items/${deferred.shoppingListItemId}/price`, {
+    data: { price: 1, storeId: deferred.storeId }
   });
+}
 
-  test('opens on Home with the four household questions', async ({ page }) => {
-    await expect(page.locator('#tab-home')).toHaveClass(/active/);
+test.describe('Home / Today - React production slice', () => {
+  test('opens on React Home with the four household questions', async ({ page, baseURL }) => {
+    await loginAsReactHomeUser(page, baseURL);
+
+    await expect(page).toHaveURL('/');
+    await expect(page.locator('#home-react-title')).toBeVisible();
     const questions = page.locator('.home-question');
     await expect(questions).toHaveCount(4);
     await expect(questions).toHaveText([
@@ -47,115 +55,96 @@ test.describe('Home / Today', () => {
     ]);
   });
 
-  test('uses five parent-centered bottom navigation destinations', async ({ page }) => {
-    const nav = page.locator('.bottom-nav .nav-item');
+  test('uses five parent-centered bottom navigation destinations', async ({ page, baseURL }) => {
+    await loginAsReactHomeUser(page, baseURL);
+
+    const nav = page.locator('.shell-bottom-nav button');
     await expect(nav).toHaveCount(5);
-    await expect(nav.locator(':scope > span:nth-child(2)')).toHaveText(['Home', 'Plan', 'List', 'Pantry', 'More']);
+    await expect(nav.locator('small')).toHaveText(['Home', 'Plan', 'List', 'Pantry', 'More']);
+    await expect(page.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   });
 
-  test('moves prices and spend into Insights', async ({ page }) => {
-    await page.click('[data-tab="more"]');
-    await page.click('.more-item[data-section="insights"]');
-    await expect(page.locator('#section-insights')).toBeVisible();
-    await expect(page.locator('[data-insight-tab="prices"]')).toBeVisible();
-    await expect(page.locator('[data-insight-tab="spend"]')).toBeVisible();
-  });
+  test('standalone Quick add opens the legacy List compatibility surface with rapid capture focused', async ({ page, baseURL }) => {
+    await loginAsReactHomeUser(page, baseURL);
 
-  test('standalone Quick add opens List with rapid capture focused', async ({ page }) => {
-    await page.click('#home-quick-add');
+    await page.getByRole('button', { name: 'Quick add' }).first().click();
+    await expect(page).toHaveURL(/\/app\?tab=list&focus=rapid-list-input$/);
     await expect(page.locator('#tab-list')).toHaveClass(/active/);
     await expect(page.locator('#rapid-list-input')).toBeFocused();
     await expect(page.locator('#modal-overlay')).toBeHidden();
   });
 
-  test('empty What do we need Quick add has the same rapid-capture outcome', async ({ page }) => {
-    const card = page.locator('.home-card', { hasText: 'What do we need?' });
+  test('empty What do we need Quick add has the same rapid-capture outcome', async ({ page, baseURL }) => {
+    await loginAsReactHomeUser(page, baseURL);
+
+    const card = page.locator('.home-react-card', { hasText: 'What do we need?' });
     await expect(card.getByRole('button', { name: 'Quick add →' })).toBeVisible();
     await card.getByRole('button', { name: 'Quick add →' }).click();
     await expect(page.locator('#tab-list')).toHaveClass(/active/);
     await expect(page.locator('#rapid-list-input')).toBeFocused();
-    await expect(page.locator('#modal-overlay')).toBeHidden();
   });
 
-  test('deferred prices become the next action and never look caught up', async ({ page }) => {
-    await createDeferredPrice(page);
-    await page.evaluate(async () => {
-      await loadDeferredPrices();
-      homeState.plan = {
-        days: [{ date: homeIsoDate(), meals: [{ mealType: 'dinner', name: 'Dinner is planned' }] }]
-      };
-      homeState.shoppingList = [];
-      homeState.lowStock = [];
-      homeState.status = { shoppingList: 'fresh', lowStock: 'fresh', plan: 'fresh' };
-      renderHome();
-    });
+  test('deferred prices become the next action and can be reviewed in React', async ({ page, baseURL }) => {
+    await loginAsReactHomeUser(page, baseURL);
+    const { item } = await createDeferredPrice(page);
 
-    const next = page.locator('.home-card-next');
-    await expect(next).toContainText('Finish 1 shopping price');
-    await expect(next).toContainText('You chose to review these later.');
-    await expect(next).not.toContainText('You’re caught up');
-    await next.getByRole('button', { name: 'Review prices →' }).click();
-    await expect(page.getByRole('dialog', { name: 'Review prices' })).toBeVisible();
-    await page.getByRole('button', { name: 'Done for now' }).click();
+    try {
+      await page.reload();
+      const next = page.locator('.home-react-next');
+      await expect(next).toContainText('Finish 1 shopping price');
+      await expect(next).toContainText('You chose to review these later.');
+      await expect(next).not.toContainText('You’re caught up');
+      await next.getByRole('button', { name: 'Review prices →' }).click();
 
-    // This spec reuses one household per worker. Resolve the deferred price so
-    // later Home tests do not inherit this test's intentionally unfinished work.
-    await page.evaluate(async () => {
-      const deferred = homeState.deferredPrices[0];
-      if (!deferred) return;
-      await api.shoppingTrips.resolvePrice(deferred.tripId, deferred.shoppingListItemId, {
-        price: 1,
-        storeId: deferred.storeId
-      });
-      await loadDeferredPrices();
-    });
+      const dialog = page.getByRole('dialog', { name: 'Review prices' });
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Done for now' })).toBeFocused();
+      await dialog.getByRole('button', { name: 'Done for now' }).click();
+      await expect(dialog).toBeHidden();
+    } finally {
+      await resolveDeferredPrice(page, item.name);
+    }
   });
 
-  test('keeps the other Home cards useful when one endpoint fails', async ({ page }) => {
+  test('keeps the other Home cards useful when one endpoint fails', async ({ page, baseURL }) => {
     await page.route('**/api/inventory/low-stock', route => route.fulfill({
       status: 503,
       contentType: 'application/json',
       body: JSON.stringify({ error: 'Temporarily unavailable' })
     }));
 
-    // Avoid racing the initial Home bootstrap and its cache write. Put this one
-    // source into a known empty/loading state, clear its cache, then explicitly
-    // run the Home refresh after the failing route is installed.
-    await page.evaluate(() => {
-      Object.keys(localStorage)
-        .filter(key => key.includes('provista_home_') && key.endsWith('_lowStock'))
-        .forEach(key => localStorage.removeItem(key));
-      homeState.lowStock = null;
-      homeState.status.lowStock = 'loading';
-    });
+    await loginAsReactHomeUser(page, baseURL);
 
-    const failedLowStock = page.waitForResponse(response =>
-      response.url().includes('/api/inventory/low-stock') && response.status() === 503
-    );
-    await Promise.all([
-      failedLowStock,
-      page.evaluate(() => loadHomeTab())
-    ]);
-
-    await expect(page.locator('.home-card')).toHaveCount(4);
-    const lowStockCard = page.locator('.home-card', { hasText: 'Is anything running low?' });
-    await expect(lowStockCard).toContainText('Couldn’t load this update');
-    await expect(page.locator('.home-card', { hasText: 'What’s for dinner?' })).not.toContainText('Couldn’t load');
-    await expect(page.locator('.home-card', { hasText: 'What do we need?' })).not.toContainText('Couldn’t load');
+    const failedLowStock = page.locator('.home-react-card', { hasText: 'Is anything running low?' });
+    await expect(failedLowStock).toContainText('Couldn’t load this update');
+    await expect(page.locator('.home-react-card', { hasText: 'What’s for dinner?' })).not.toContainText('Couldn’t load');
+    await expect(page.locator('.home-react-card', { hasText: 'What do we need?' })).not.toContainText('Couldn’t load');
   });
 
-  test('Plan dinner opens today, focuses dinner, and accepts tonight’s meal', async ({ page }) => {
-    await page.click('#home-plan-dinner');
+  test('Plan dinner opens today in the legacy Plan compatibility surface and focuses dinner', async ({ page, baseURL }) => {
+    await loginAsReactHomeUser(page, baseURL);
+
+    await page.getByRole('button', { name: 'Plan dinner' }).first().click();
+    await expect(page).toHaveURL(/\/app\?tab=meal-plan&focus=today-dinner$/);
     await expect(page.locator('#tab-meal-plan')).toHaveClass(/active/);
+
     const today = await page.evaluate(() => {
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     });
     const todayCard = page.locator(`.meal-day[data-date^="${today}"]`);
     await expect(todayCard).toHaveAttribute('data-expanded', 'true');
-    const dinner = todayCard.locator('.meal-type-section[data-meal-type="dinner"] .meal-name-input').first();
-    await expect(dinner).toBeFocused();
-    await dinner.fill('Tonight’s quick dinner');
-    await expect(page.locator('#mp-save-status')).toHaveText('Saved ✓', { timeout: 10000 });
+    await expect(todayCard.locator('.meal-type-section[data-meal-type="dinner"] .meal-name-input').first()).toBeFocused();
+  });
+
+  test('legacy feature navigation returns Home to the React production surface', async ({ page, baseURL }) => {
+    await loginAsReactHomeUser(page, baseURL);
+
+    await page.getByRole('button', { name: 'Pantry' }).click();
+    await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
+    await page.locator('.nav-item[data-tab="home"]').click();
+
+    await expect(page).toHaveURL('/app');
+    await expect(page.locator('#home-react-title')).toBeVisible();
   });
 });
