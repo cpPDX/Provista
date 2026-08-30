@@ -11,7 +11,7 @@
   }
 
   function tourIsActive() {
-    return Boolean(document.querySelector('.tour-tooltip'));
+    return Boolean(document.querySelector('.tour-tooltip.visible'));
   }
 
   function openReactHome() {
@@ -29,8 +29,8 @@
   }, true);
 
   // Some legacy workflows call switchTab('home') directly instead of clicking
-  // the nav. Preserve those calls for onboarding/tours while routing normal
-  // programmatic Home navigation back to the migrated React surface.
+  // the nav. Preserve those calls while an onboarding/tour step is visibly
+  // active, then return to React Home when the workflow closes or completes.
   const legacySwitchTab = window.switchTab;
   if (typeof legacySwitchTab === 'function') {
     window.switchTab = async function bridgedSwitchTab(tabId, ...args) {
