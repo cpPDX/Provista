@@ -130,7 +130,8 @@ export function useShoppingCheckout({
     setCartEntries(current => {
       const next = { ...current };
       checkedItems.forEach(item => {
-        const entry = next[item._id] || makeCartEntry(item, storeId);
+        const existing = next[item._id] || makeCartEntry(item, storeId);
+        const entry = { ...existing };
         const known = knownLinePriceForStore(item, storeId);
         if (entry.priceDecision === 'existing') {
           entry.suggestedPrice = known;
@@ -139,7 +140,7 @@ export function useShoppingCheckout({
         }
         entry.storeId = storeId;
         entry.priceControlsExpanded = false;
-        next[item._id] = { ...entry };
+        next[item._id] = entry;
       });
       return next;
     });
