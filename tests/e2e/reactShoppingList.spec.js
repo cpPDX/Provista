@@ -27,12 +27,14 @@ test.describe('React Shopping List migration', () => {
 
     await expect(page.locator('#react-list-title')).toHaveText('Shopping list');
     await expect(page.locator(`.list-item[data-id="${listItem._id}"]`)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'List' })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('button', { name: 'List', exact: true })).toHaveAttribute('aria-current', 'page');
   });
 
   test('shows optimistic check-off feedback before a slow write finishes', async ({ page }) => {
     const listItem = await createListItem(page, `React Latency ${Date.now()}`);
     await page.goto('/app/list');
+    const card = page.locator(`.list-item[data-id="${listItem._id}"]`);
+    await expect(card).toBeVisible();
     await page.route(`**/api/shopping-list/${listItem._id}`, async route => {
       if (route.request().method() === 'PUT') await new Promise(resolve => setTimeout(resolve, 1100));
       await route.continue();
@@ -40,11 +42,12 @@ test.describe('React Shopping List migration', () => {
 
     const feedback = await page.evaluate(id => {
       const button = document.querySelector(`.list-item[data-id="${id}"] .list-item-check-wrap`);
+      if (!button) throw new Error(`List item ${id} was not rendered before the latency assertion`);
       const start = performance.now();
       button.click();
       return new Promise(resolve => requestAnimationFrame(() => {
-        const card = document.querySelector(`.list-item[data-id="${id}"]`);
-        resolve({ elapsed: performance.now() - start, checked: card.classList.contains('checked') });
+        const renderedCard = document.querySelector(`.list-item[data-id="${id}"]`);
+        resolve({ elapsed: performance.now() - start, checked: renderedCard?.classList.contains('checked') === true });
       }));
     }, listItem._id);
 
