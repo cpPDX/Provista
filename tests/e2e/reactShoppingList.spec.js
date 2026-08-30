@@ -115,6 +115,31 @@ test.describe('React Shopping List migration', () => {
     await expect(page.locator('.react-list-item', { hasText: missing })).toBeVisible();
   });
 
+  test('edits a List store preference in React', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const storeResponse = await page.request.post('/api/stores', { data: { name: `React Preferred Store ${suffix}` } });
+    expect(storeResponse.ok()).toBeTruthy();
+    const store = await storeResponse.json();
+    const { item, listItem } = await createListItem(page, `React Store Preference ${suffix}`);
+
+    await page.goto('/app/list');
+    const card = page.locator(`.list-item[data-id="${listItem._id}"]`);
+    await card.getByRole('button', { name: `Store preference for ${item.name}: Any store` }).click();
+    const dialog = page.getByRole('dialog', { name: 'Store preference' });
+    await expect(dialog).toBeVisible();
+    await dialog.locator('select').selectOption(store._id);
+    await dialog.getByRole('button', { name: 'Save preference' }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(card.getByRole('button', { name: `Store preference for ${item.name}: ${store.name}` })).toBeVisible();
+    await expect.poll(async () => {
+      const response = await page.request.get('/api/shopping-list');
+      const list = await response.json();
+      const saved = list.find(entry => entry._id === listItem._id);
+      return saved?.storeId?._id || saved?.storeId;
+    }).toBe(store._id);
+  });
+
   test('shows optimistic check-off feedback before a slow write finishes', async ({ page }) => {
     const { listItem } = await createListItem(page, `React Latency ${Date.now()}`);
     await page.goto('/app/list');
@@ -143,6 +168,26 @@ test.describe('React Shopping List migration', () => {
       const response = await page.request.get('/api/shopping-list');
       return (await response.json()).find(item => item._id === listItem._id)?.checked;
     }, { timeout: 5000 }).toBe(true);
+  });
+
+  test('queues a supported List check-off offline and syncs it after reconnecting', async ({ page, context }) => {
+    const { listItem } = await createListItem(page, `React Offline Check ${Date.now()}`);
+    await page.goto('/app/list');
+    const card = page.locator(`.list-item[data-id="${listItem._id}"]`);
+    await expect(card).toBeVisible();
+
+    await context.setOffline(true);
+    await expect(page.locator('.react-list-offline')).toBeVisible();
+    await card.locator('.list-item-check-wrap').click();
+    await expect(card).toHaveClass(/checked/);
+    await expect(page.locator('.shell-toast-region')).toContainText('Saved offline');
+
+    await context.setOffline(false);
+    await expect(page.locator('.react-list-offline')).toHaveCount(0);
+    await expect.poll(async () => {
+      const response = await page.request.get('/api/shopping-list');
+      return (await response.json()).find(item => item._id === listItem._id)?.checked;
+    }, { timeout: 10000 }).toBe(true);
   });
 
   test('rolls an optimistic check-off back when persistence fails', async ({ page }) => {
