@@ -1,6 +1,6 @@
-// Temporary strangler bridge for PRO-52.
-// Legacy feature screens stay intact, but Home navigation returns to the React
-// production surface. Remove this file when the legacy shell is retired.
+// Temporary strangler bridge for the React migration.
+// Legacy feature screens stay intact, but migrated navigation returns to the
+// React production surface. Remove this file when the legacy shell is retired.
 (() => {
   function wizardIsActive() {
     try {
@@ -57,9 +57,11 @@
     return day?.querySelector('.meal-type-section[data-meal-type="dinner"] .meal-name-input') || null;
   }
 
-  async function applyRequestedFocus() {
-    const focus = new URLSearchParams(window.location.search).get('focus');
-    if (!focus) return;
+  async function applyRequestedFocusOrAction() {
+    const params = new URLSearchParams(window.location.search);
+    const focus = params.get('focus');
+    const action = params.get('action');
+    if (!focus && !action) return;
 
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
@@ -77,11 +79,27 @@
         return;
       }
 
+      if (action === 'scan-list-item') {
+        const button = document.getElementById('btn-scan-list-item');
+        if (button) {
+          button.click();
+          return;
+        }
+      }
+
+      if (action === 'review-low-stock') {
+        const button = document.getElementById('btn-low-stock');
+        if (button && button.style.display !== 'none') {
+          button.click();
+          return;
+        }
+      }
+
       await new Promise(resolve => setTimeout(resolve, 50));
     }
   }
 
   window.addEventListener('load', () => {
-    void applyRequestedFocus();
+    void applyRequestedFocusOrAction();
   });
 })();
