@@ -1,0 +1,63 @@
+name: Apply favorite meal stale-state fix
+
+on:
+  push:
+    branches: [fix/favorite-meal-stale-state]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[apply-favorite-fix]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/favorite-meal-stale-state
+
+      - name: Patch favorite meal state handling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('public/js/mealPlan.js')
+          text = path.read_text()
+
+          old_apply = """    applyMealValue(row, {
+              ...latestCurrent,
+              name: favorite.name,
+              notes: favorite.notes || ''
+            });"""
+          new_apply = """    applyMealValue(row, {
+              ...latestCurrent,
+              name: used.name,
+              notes: used.notes || ''
+            });"""
+
+          old_picker = "const favorites = await loadMealFavorites();"
+          new_picker = "const favorites = await loadMealFavorites(true);"
+
+          old_toast = "showToast(`${favorite.name} planned`);"
+          new_toast = "showToast(`${used.name} planned`);"
+
+          for old, new, label in [
+              (old_apply, new_apply, 'apply server-returned favorite'),
+              (old_picker, new_picker, 'refresh favorites picker'),
+              (old_toast, new_toast, 'toast fresh favorite name'),
+          ]:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one {label} target, found {count}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/js/mealPlan.js
+          git commit -m "fix: use fresh favorite meal state"
+          git push origin HEAD:fix/favorite-meal-stale-state
