@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { HomePage } from '../home/HomePage';
+import '../home/home.css';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
 import { useToast } from './ToastProvider';
