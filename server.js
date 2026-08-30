@@ -33,6 +33,7 @@ const publicDirectory = path.join(__dirname, 'public');
 const reactAppIndex = path.join(publicDirectory, 'react-preview', 'index.html');
 const legacyAppIndex = path.join(publicDirectory, 'index.html');
 const landingTemplate = fs.readFileSync(path.join(publicDirectory, 'landing.html'), 'utf8');
+const legacyAppTemplate = fs.readFileSync(legacyAppIndex, 'utf8');
 const SEO_TITLE = 'Provista — Shared Grocery List, Meal Planner & Pantry Tracker';
 const SEO_DESCRIPTION = 'A shared grocery list and meal planning app for households. Organize shopping by store section, track pantry needs, and keep grocery spending together.';
 
@@ -154,7 +155,11 @@ app.get('/reset-password', (req, res) => {
 });
 
 function serveLegacyApp(req, res) {
-  return res.sendFile(legacyAppIndex);
+  const html = legacyAppTemplate.replace(
+    '</body>',
+    '  <script src="/js/reactHomeBridge.js"></script>\n</body>'
+  );
+  return res.type('html').send(html);
 }
 
 function serveReactApp(req, res) {
