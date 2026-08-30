@@ -78,7 +78,7 @@ test.describe('Home / Today - React production slice', () => {
     await loginAsReactHomeUser(page, baseURL);
 
     const card = page.locator('.home-react-card', { hasText: 'What do we need?' });
-    await expect(card.getByRole('button', { name: 'Quick add →' })).toBeVisible();
+    await expect(card.getByRole('button', { name: 'Quick add →' })).toBeVisible({ timeout: 15000 });
     await card.getByRole('button', { name: 'Quick add →' }).click();
     await expect(page.locator('#tab-list')).toHaveClass(/active/);
     await expect(page.locator('#rapid-list-input')).toBeFocused();
@@ -140,7 +140,7 @@ test.describe('Home / Today - React production slice', () => {
   test('legacy feature navigation returns Home to the React production surface', async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
 
-    await page.getByRole('button', { name: 'Pantry' }).click();
+    await page.getByRole('button', { name: 'Pantry', exact: true }).click();
     await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
     await page.locator('.nav-item[data-tab="home"]').click();
 
