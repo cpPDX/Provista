@@ -540,8 +540,8 @@ async function useFavoriteInRow(row, favorite, { returnToManager = false } = {})
     const latestCurrent = mealRowValue(row);
     applyMealValue(row, {
       ...latestCurrent,
-      name: favorite.name,
-      notes: favorite.notes || ''
+      name: used.name,
+      notes: used.notes || ''
     });
     if (Array.isArray(mealPlanState.favorites)) {
       mealPlanState.favorites = mealPlanState.favorites.map(entry => entry._id === used._id ? used : entry);
@@ -552,7 +552,7 @@ async function useFavoriteInRow(row, favorite, { returnToManager = false } = {})
     if (section) expandMealTypeSection(section);
     if (day) setMealDayExpanded(day, true);
     scheduleSave();
-    showToast(`${favorite.name} planned`);
+    showToast(`${used.name} planned`);
     row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return true;
   } catch (err) {
@@ -564,7 +564,7 @@ async function useFavoriteInRow(row, favorite, { returnToManager = false } = {})
 
 async function openFavoritePicker(row) {
   try {
-    const favorites = await loadMealFavorites();
+    const favorites = await loadMealFavorites(true);
     openModal('Use favorite meal', `
       <p class="text-muted text-sm">Choose a saved meal for this slot. Its usual shopping needs come with it.</p>
       <div class="meal-favorites-list">${favoritePickerCards(favorites)}</div>
