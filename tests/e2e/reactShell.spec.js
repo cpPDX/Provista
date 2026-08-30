@@ -23,10 +23,10 @@ test.describe('React migration shell', () => {
 
     await page.goto('/react-preview/');
     await expect(page.locator('#home-react-title')).toHaveText('Hi, React');
-    await expect(page.getByText('Shell Household Navigation')).toBeVisible();
+    await expect(page.locator('.shell-brand span')).toHaveText('Shell Household Navigation');
     await expect(page.locator('.home-question')).toHaveCount(4);
 
-    await page.getByRole('button', { name: 'Pantry' }).click();
+    await page.getByRole('button', { name: 'Pantry', exact: true }).click();
     await expect(page).toHaveURL(/\/app\?tab=inventory$/);
     await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
     await expect(page.locator('#tab-inventory').getByRole('heading', { name: 'Pantry' })).toBeVisible();
