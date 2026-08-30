@@ -18,7 +18,9 @@ test.describe('React migration shell', () => {
     await createHouseholdSession(page, 'Navigation');
 
     await page.goto('/react-preview/');
-    await expect(page.getByRole('heading', { name: 'Welcome, React Shell Navigation' })).toBeVisible();
+    // The authenticated shell intentionally prefers the user's display name.
+    // Registration currently derives that from the first token of the full name.
+    await expect(page.getByRole('heading', { name: 'Welcome, React' })).toBeVisible();
     await expect(page.getByText('Shell Household Navigation')).toBeVisible();
     await expect(page.getByText('React now owns this shell’s authenticated session')).toBeVisible();
 
