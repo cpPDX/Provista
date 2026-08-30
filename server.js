@@ -195,6 +195,10 @@ app.get('/app', (req, res) => {
   return serveReactApp(req, res);
 });
 
+// PRO-53 List migration route. The legacy List remains reachable through
+// `/app?tab=list` until checkout and capture parity are complete.
+app.get('/app/list', serveReactApp);
+
 // New-household onboarding still depends on legacy DOM targets until PRO-55.
 app.get('/legacy-app', serveLegacyApp);
 

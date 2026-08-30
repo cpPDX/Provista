@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { HomePage } from '../home/HomePage';
 import '../home/home.css';
+import { ShoppingListPage } from '../list/ShoppingListPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
 import { useToast } from './ToastProvider';
@@ -19,6 +21,8 @@ export function AppShell() {
   const confirm = useConfirm();
   const { requestNavigation } = useDirtyState();
   const { showToast } = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!session?.offlineSession) return;
@@ -31,9 +35,15 @@ export function AppShell() {
   if (!session) return null;
 
   const householdName = session.household?.name || 'Your household';
+  const currentTab = location.pathname === '/app/list' ? 'list' : 'home';
 
-  const openLegacyTab = (tab: string) => {
-    if (tab === 'home') return;
+  const openTab = (tab: string) => {
+    if (tab === 'home' || tab === 'list') {
+      const destination = tab === 'home' ? '/app' : '/app/list';
+      if (location.pathname === destination) return;
+      void requestNavigation(() => navigate(destination));
+      return;
+    }
     void requestNavigation(() => {
       window.location.assign(`/app?tab=${encodeURIComponent(tab)}`);
     });
@@ -71,7 +81,7 @@ export function AppShell() {
       </header>
 
       <main className="shell-content">
-        <HomePage />
+        {currentTab === 'list' ? <ShoppingListPage /> : <HomePage />}
       </main>
 
       <nav className="shell-bottom-nav" aria-label="Provista sections">
@@ -79,10 +89,10 @@ export function AppShell() {
           <button
             key={item.tab}
             type="button"
-            onClick={() => openLegacyTab(item.tab)}
+            onClick={() => openTab(item.tab)}
             aria-label={item.label}
-            aria-current={item.tab === 'home' ? 'page' : undefined}
-            className={item.tab === 'home' ? 'active' : undefined}
+            aria-current={item.tab === currentTab ? 'page' : undefined}
+            className={item.tab === currentTab ? 'active' : undefined}
           >
             <span aria-hidden="true">{item.icon}</span>
             <small>{item.label}</small>
