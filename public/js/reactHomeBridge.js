@@ -14,14 +14,21 @@
     return Boolean(document.querySelector('.tour-tooltip.visible'));
   }
 
+  function legacyShellIsPinned() {
+    const params = new URLSearchParams(window.location.search);
+    return window.location.pathname === '/legacy-app' || params.get('legacy') === '1';
+  }
+
   function openReactHome() {
     window.location.assign('/app');
   }
 
   // Catch direct bottom-nav clicks before the legacy handler mutates the DOM.
+  // Explicit legacy contexts are pinned so onboarding and regression coverage
+  // can continue using the legacy shell until those flows migrate.
   document.addEventListener('click', event => {
     const homeNav = event.target.closest?.('.nav-item[data-tab="home"]');
-    if (!homeNav || wizardIsActive() || tourIsActive()) return;
+    if (!homeNav || legacyShellIsPinned() || wizardIsActive() || tourIsActive()) return;
 
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -30,11 +37,11 @@
 
   // Some legacy workflows call switchTab('home') directly instead of clicking
   // the nav. Preserve those calls while an onboarding/tour step is visibly
-  // active, then return to React Home when the workflow closes or completes.
+  // active or the current legacy surface is explicitly pinned.
   const legacySwitchTab = window.switchTab;
   if (typeof legacySwitchTab === 'function') {
     window.switchTab = async function bridgedSwitchTab(tabId, ...args) {
-      if (tabId === 'home' && !wizardIsActive() && !tourIsActive()) {
+      if (tabId === 'home' && !legacyShellIsPinned() && !wizardIsActive() && !tourIsActive()) {
         openReactHome();
         return;
       }
