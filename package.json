@@ -6,6 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "postinstall": "npm --prefix client install --include=dev --no-package-lock --no-audit --no-fund",
+    "client:dev": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build",
+    "client:typecheck": "npm --prefix client run typecheck",
+    "build": "npm run client:build",
     "test": "jest --runInBand --forceExit",
     "test:api": "jest tests/api --runInBand --forceExit",
     "test:e2e": "playwright test",

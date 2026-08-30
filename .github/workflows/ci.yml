@@ -36,6 +36,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Build React migration client
+        run: npm run client:build
+
       - name: Check JavaScript syntax
         run: |
           node --check public/sw.js
