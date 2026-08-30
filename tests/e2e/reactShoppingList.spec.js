@@ -242,6 +242,7 @@ test.describe('React Shopping List migration', () => {
         data: { name: `React Trip Item ${suffix} ${index + 1}`, category: 'Other', unit: 'each' }
       })
     ));
+    expect(itemResponses.every(response => response.ok())).toBeTruthy();
     const items = await Promise.all(itemResponses.map(response => response.json()));
     const priceResponses = await Promise.all(items.slice(0, 17).map((item, index) =>
       page.request.post('/api/prices', {
@@ -252,6 +253,7 @@ test.describe('React Shopping List migration', () => {
     const listResponses = await Promise.all(items.map(item =>
       page.request.post('/api/shopping-list', { data: { itemId: item._id, quantity: 1 } })
     ));
+    expect(listResponses.every(response => response.ok())).toBeTruthy();
     const listItems = await Promise.all(listResponses.map(response => response.json()));
 
     await page.goto('/app/list');
