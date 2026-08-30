@@ -310,7 +310,7 @@ export function useShoppingCheckout({
           <button
             type="button"
             className="price-choice-link"
-            onClick={() => isLater && !hasKnown ? choosePriceDecision(item, 'updated') : togglePriceControls(item._id)}
+            onClick={() => isLater ? choosePriceDecision(item, 'updated') : togglePriceControls(item._id)}
           >
             {isLater ? 'Add price' : 'Change'}
           </button>
