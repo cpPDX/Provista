@@ -219,6 +219,194 @@
   color: #667085;
 }
 
+.react-rapid-capture {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid rgba(33, 171, 205, 0.25);
+  border-radius: 1rem;
+  background: #fff;
+  padding: 0.9rem;
+}
+
+.react-rapid-capture > label {
+  font-weight: 800;
+}
+
+.react-rapid-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
+.react-rapid-row textarea,
+.react-list-modal input,
+.react-list-modal select {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid #d0d5dd;
+  border-radius: 0.75rem;
+  background: #fff;
+  padding: 0.7rem 0.8rem;
+  color: #101828;
+  font: inherit;
+  font-size: 16px;
+}
+
+.react-rapid-row textarea {
+  min-height: 48px;
+  max-height: 9rem;
+  resize: vertical;
+}
+
+.react-rapid-meta {
+  display: grid;
+  gap: 0.25rem;
+  color: #667085;
+  font-size: 0.8rem;
+}
+
+#react-rapid-status[data-state='success'] {
+  color: #067647;
+  font-weight: 700;
+}
+
+#react-rapid-status[data-state='warning'] {
+  color: #b54708;
+  font-weight: 700;
+}
+
+.react-rapid-preview {
+  display: grid;
+  gap: 0.7rem;
+  border-top: 1px solid #eaecf0;
+  padding-top: 0.75rem;
+}
+
+.react-rapid-preview ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.react-rapid-preview li {
+  display: grid;
+  gap: 0.1rem;
+  border: 1px solid #eaecf0;
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.react-rapid-preview li small {
+  color: #667085;
+}
+
+.react-rapid-preview li.react-rapid-ambiguous,
+.react-rapid-preview li.react-rapid-unmatched {
+  border-color: #f7c97c;
+  background: #fffaf0;
+}
+
+.react-rapid-actions,
+.react-list-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.react-list-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(16, 24, 40, 0.55);
+}
+
+.react-list-modal {
+  width: min(100%, 560px);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(16, 24, 40, 0.3);
+  padding: 1rem;
+}
+
+.react-list-modal form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.react-list-modal form > label,
+.react-list-detail-grid label {
+  display: grid;
+  gap: 0.35rem;
+  color: #344054;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.react-list-modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.react-list-modal-heading h2,
+.react-list-modal-heading p {
+  margin: 0;
+}
+
+.react-list-modal-close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: #475467;
+  font-size: 1rem;
+}
+
+.react-list-product-options {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  border: 1px solid #eaecf0;
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+}
+
+.react-list-product-options legend {
+  padding: 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.react-list-product-options label {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+}
+
+.react-list-product-options input[type='radio'] {
+  width: 20px;
+  height: 20px;
+}
+
+.react-list-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
 @media (max-width: 620px) {
   .react-list-heading {
     align-items: stretch;
@@ -242,5 +430,23 @@
   .react-list-cart {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .react-rapid-row,
+  .react-list-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .react-rapid-actions,
+  .react-list-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .react-list-modal {
+    align-self: end;
+    max-height: 92vh;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 }
