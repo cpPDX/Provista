@@ -1,13 +1,14 @@
 // Provista Service Worker
 // Network-first for navigations, JS/CSS, and API data; cache-first for static assets.
 
-const SHELL_CACHE = 'provista-shell-v13';
+const SHELL_CACHE = 'provista-shell-v14';
 const API_CACHE = 'provista-api-v5';
 
 const SHELL_ASSETS = [
   '/',
   '/landing.html',
   '/index.html',
+  '/legacy-app',
   '/login.html',
   '/css/landing.css',
   '/css/style.css',
@@ -143,7 +144,7 @@ function navigationFallbackPath(request) {
   const url = new URL(request.url);
   const legacyFeature = url.pathname === '/legacy-app' ||
     (url.pathname === '/app' && (url.searchParams.has('tab') || url.searchParams.get('legacy') === '1'));
-  return legacyFeature ? '/index.html' : '/app';
+  return legacyFeature ? '/legacy-app' : '/app';
 }
 
 // Cache-first: serve from cache immediately, fall back to network
