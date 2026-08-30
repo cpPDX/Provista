@@ -30,6 +30,7 @@ app.use('/api/auth/forgot-password', passwordLimiter);
 app.use('/api/auth/reset-password', passwordLimiter);
 
 const publicDirectory = path.join(__dirname, 'public');
+const reactPreviewIndex = path.join(publicDirectory, 'react-preview', 'index.html');
 const landingTemplate = fs.readFileSync(path.join(publicDirectory, 'landing.html'), 'utf8');
 const SEO_TITLE = 'Provista — Shared Grocery List, Meal Planner & Pantry Tracker';
 const SEO_DESCRIPTION = 'A shared grocery list and meal planning app for households. Organize shopping by store section, track pantry needs, and keep grocery spending together.';
@@ -164,6 +165,24 @@ app.get('/', (req, res) => {
 
 app.get('/app', (req, res) => {
   res.sendFile(path.join(publicDirectory, 'index.html'));
+});
+
+function serveReactPreview(req, res) {
+  if (!fs.existsSync(reactPreviewIndex)) {
+    return res.status(404).type('text/plain').send('React migration preview has not been built');
+  }
+  return res.sendFile(reactPreviewIndex);
+}
+
+// Vite's output lives under public/react-preview, but static directory indexes are
+// intentionally disabled for the rest of Provista. Serve only extensionless
+// React shell routes through the generated index while normal assets continue
+// through express.static above.
+app.get('/react-preview', serveReactPreview);
+app.get('/react-preview/', serveReactPreview);
+app.get('/react-preview/*', (req, res, next) => {
+  if (path.extname(req.path)) return next();
+  return serveReactPreview(req, res);
 });
 
 // SPA fallback
