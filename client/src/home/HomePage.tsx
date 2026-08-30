@@ -319,20 +319,20 @@ export function HomePage() {
   };
 
   const next = useMemo(() => {
-    if (planStatus !== 'error' && plan && !dinners.length) {
-      return {
-        title: 'Plan tonight’s dinner',
-        detail: 'One choice can shape the rest of the week.',
-        action: 'Plan dinner',
-        onAction: () => openLegacy('meal-plan', 'today-dinner')
-      };
-    }
     if (deferredPrices.length) {
       return {
         title: `Finish ${deferredPrices.length} shopping price${deferredPrices.length === 1 ? '' : 's'}`,
         detail: 'You chose to review these later.',
         action: 'Review prices',
         onAction: openPriceReview
+      };
+    }
+    if (planStatus !== 'error' && plan && !dinners.length) {
+      return {
+        title: 'Plan tonight’s dinner',
+        detail: 'One choice can shape the rest of the week.',
+        action: 'Plan dinner',
+        onAction: () => openLegacy('meal-plan', 'today-dinner')
       };
     }
     if (lowStock.length) {
