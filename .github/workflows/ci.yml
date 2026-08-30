@@ -99,6 +99,7 @@ jobs:
           node --check tests/e2e/accessibility.spec.js
           node --check tests/e2e/uxBatch1.spec.js
           node --check tests/e2e/releaseFeedback.spec.js
+          node --check tests/e2e/reactShell.spec.js
 
       - name: Run API test suite
         run: npm run test:api
@@ -133,8 +134,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build React migration client
+        run: npm run client:build
+
       - name: Install Chromium and WebKit
         run: npx playwright install --with-deps chromium webkit
 
       - name: Run critical household, latency, and mobile accessibility tests
-        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/household.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js tests/e2e/releaseFeedback.spec.js
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/household.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js tests/e2e/releaseFeedback.spec.js tests/e2e/reactShell.spec.js

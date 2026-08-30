@@ -2,6 +2,7 @@
 
 let rapidShoppingCaptureLoadPromise = null;
 let storeSectionsLoadPromise = null;
+const LEGACY_TAB_IDS = new Set(['home', 'prices', 'list', 'spend', 'inventory', 'meal-plan', 'more']);
 
 async function ensureStoreSections() {
   if (window.openStoreSectionPicker) return;
@@ -50,6 +51,11 @@ async function ensureRapidShoppingCapture() {
     rapidShoppingCaptureLoadPromise = null;
     console.error('Rapid shopping capture failed to load', err);
   }
+}
+
+function requestedInitialTab() {
+  const tab = new URLSearchParams(window.location.search).get('tab');
+  return tab && LEGACY_TAB_IDS.has(tab) ? tab : 'home';
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -115,8 +121,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMoreTabV2();
   initHomeTab();
 
-  // Load default tab
+  // Load Home first so legacy initialization remains stable, then honor a
+  // validated deep link from the React migration shell when one is present.
   await loadHomeTab();
+  const initialTab = requestedInitialTab();
+  if (initialTab !== 'home') await switchTab(initialTab);
 
   // Initialize offline support AFTER UI is interactive (non-blocking)
   if (features?.offlineAccess) {
