@@ -41,6 +41,7 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
+          node --check server.js
           node --check public/sw.js
           node --check public/js/api.js
           node --check public/js/app.js
@@ -58,6 +59,7 @@ jobs:
           node --check public/js/mealPlan.js
           node --check public/js/home.js
           node --check public/js/onboarding.js
+          node --check public/js/reactHomeBridge.js
           node --check public/js/prices.js
           node --check public/js/spend.js
           node --check public/js/shoppingList.js
