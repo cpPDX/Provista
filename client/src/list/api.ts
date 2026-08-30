@@ -6,7 +6,7 @@ import {
   readCachedShoppingList,
   replaceCachedShoppingList
 } from './storage';
-import type { ProductRef, ShoppingListItem } from './types';
+import type { ProductRef, ShoppingListItem, StoreRef } from './types';
 
 export interface ShoppingMutationResult {
   data: ShoppingListItem;
@@ -36,6 +36,21 @@ export interface ShoppingMatchResult {
   ambiguousCount: number;
   unmatchedCount: number;
   suggestions: ShoppingMatchSuggestion[];
+}
+
+export interface ShoppingTripResult {
+  tripId: string;
+  completedAt: string;
+  total: number;
+  itemCount: number;
+  pricedItemCount: number;
+  missingPriceCount: number;
+  pantryUpdated: boolean;
+  pantryItemCount: number;
+  approvedPriceCount: number;
+  pendingPriceCount: number;
+  lowStockCount: number;
+  idempotent: boolean;
 }
 
 function shouldUseOfflineFallback(error: unknown): boolean {
@@ -175,5 +190,21 @@ export async function addCatalogAlias(itemId: string, text: string): Promise<voi
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text, source: 'user-entry' })
+  });
+}
+
+export async function loadStores(): Promise<StoreRef[]> {
+  return apiFetch<StoreRef[]>('/api/stores');
+}
+
+export async function completeShoppingTrip(input: {
+  idempotencyKey: string;
+  purchases: Array<{ listItemId: string; price: number | null; storeId: string }>;
+  addToPantry: boolean;
+}): Promise<ShoppingTripResult> {
+  return apiFetch<ShoppingTripResult>('/api/shopping-list/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
   });
 }
