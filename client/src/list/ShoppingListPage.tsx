@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useConfirm } from '../shell/DialogProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
+import { useShoppingCheckout } from './checkout';
 import { RapidCapture } from './RapidCapture';
 import { processShoppingQueue } from './storage';
 import {
@@ -192,6 +193,17 @@ export function ShoppingListPage() {
     return results.every(Boolean);
   };
 
+  const checkout = useShoppingCheckout({
+    items,
+    online,
+    activeStoreId,
+    setActiveStoreId,
+    settleChecks,
+    onCompleted: async () => {
+      await queryClient.invalidateQueries();
+    }
+  });
+
   const removeItem = async (item: ShoppingListItem) => {
     const confirmed = await confirm({
       title: 'Remove from list?',
@@ -243,19 +255,6 @@ export function ShoppingListPage() {
   const savings = Number(context?.estimatedAdditionalStopSavings || 0);
   const threshold = Number(context?.savingsThreshold || 0);
   const showStoreSuggestion = Boolean(context?.additionalStore?.name && savings >= threshold);
-
-  const openLegacyList = async () => {
-    if (!(await settleChecks())) return;
-    window.location.assign('/app?tab=list');
-  };
-
-  const finishShopping = async () => {
-    if (!online) {
-      showToast('Reconnect before finishing shopping so Pantry, Spending, and prices can update.', { tone: 'error', durationMs: 5000 });
-      return;
-    }
-    await openLegacyList();
-  };
 
   return (
     <section className="react-list-page" aria-labelledby="react-list-title">
@@ -345,7 +344,7 @@ export function ShoppingListPage() {
                     <div className="react-list-item-body">
                       <h3>{productName(item)}</h3>
                       <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'} · qty {item.quantity}</p>
-                      <small>{item.checked ? 'Bought' : householdPrice(item)}</small>
+                      {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
                     </div>
                     <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
                   </article>
@@ -359,14 +358,16 @@ export function ShoppingListPage() {
       {checkedItems.length > 0 && (
         <div className="react-list-cart" role="region" aria-label="Shopping progress">
           <div>
-            <strong id="cart-bar-label">{checkedItems.length} bought{activeStoreId ? ` · ${storeName(items, activeStoreId)}` : ''}</strong>
-            <span>{online ? 'Finish this stop to update Pantry and Spending.' : 'Reconnect to finish this shopping stop.'}</span>
+            <strong id="cart-bar-label">{checkout.cartLabel}</strong>
+            <span>{checkout.cartDetail}</span>
           </div>
-          <button id="btn-done-shopping" type="button" className="shell-button shell-button-primary" onClick={() => void finishShopping()}>
+          <button id="btn-done-shopping" type="button" className="shell-button shell-button-primary" onClick={() => void checkout.beginCheckout()}>
             Finish shopping
           </button>
         </div>
       )}
+
+      {checkout.dialogs}
     </section>
   );
 }
