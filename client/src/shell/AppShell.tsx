@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { HomePage } from '../home/HomePage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
 import { useToast } from './ToastProvider';
@@ -28,10 +29,10 @@ export function AppShell() {
 
   if (!session) return null;
 
-  const displayName = session.user.displayName || session.user.name;
   const householdName = session.household?.name || 'Your household';
 
   const openLegacyTab = (tab: string) => {
+    if (tab === 'home') return;
     void requestNavigation(() => {
       window.location.assign(`/app?tab=${encodeURIComponent(tab)}`);
     });
@@ -60,7 +61,7 @@ export function AppShell() {
           <img src="/brand/provista-mark.svg" width="34" height="34" alt="" />
           <div>
             <strong>Provista</strong>
-            <span>React shell migration</span>
+            <span>{householdName}</span>
           </div>
         </div>
         <button type="button" className="shell-button shell-button-secondary" onClick={() => void handleLogout()}>
@@ -69,39 +70,19 @@ export function AppShell() {
       </header>
 
       <main className="shell-content">
-        <section className="shell-welcome" aria-labelledby="shell-heading">
-          <p className="shell-eyebrow">PRO-51 · authenticated application shell</p>
-          <h1 id="shell-heading">Welcome, {displayName}</h1>
-          <p><strong>{householdName}</strong> is loaded through the new React session context.</p>
-        </section>
-
-        <section className="shell-card" aria-labelledby="shell-status-heading">
-          <h2 id="shell-status-heading">Migration boundary</h2>
-          <p>
-            React now owns this shell’s authenticated session, navigation contract, confirmation dialogs,
-            toast feedback, dirty-state guard, and error/loading states. Feature screens still open in the
-            existing application until each one is migrated and covered by regression tests.
-          </p>
-          <dl className="shell-session-grid">
-            <div>
-              <dt>Role</dt>
-              <dd>{session.user.role}</dd>
-            </div>
-            <div>
-              <dt>Session</dt>
-              <dd>{session.offlineSession ? 'Cached / offline' : 'Online'}</dd>
-            </div>
-            <div>
-              <dt>Offline access</dt>
-              <dd>{session.features.offlineAccess ? 'Enabled' : 'Unavailable'}</dd>
-            </div>
-          </dl>
-        </section>
+        <HomePage />
       </main>
 
       <nav className="shell-bottom-nav" aria-label="Provista sections">
         {navItems.map((item) => (
-          <button key={item.tab} type="button" onClick={() => openLegacyTab(item.tab)} aria-label={item.label}>
+          <button
+            key={item.tab}
+            type="button"
+            onClick={() => openLegacyTab(item.tab)}
+            aria-label={item.label}
+            aria-current={item.tab === 'home' ? 'page' : undefined}
+            className={item.tab === 'home' ? 'active' : undefined}
+          >
             <span aria-hidden="true">{item.icon}</span>
             <small>{item.label}</small>
           </button>
