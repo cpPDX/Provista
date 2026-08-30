@@ -24,33 +24,29 @@ jobs:
           path = Path('public/js/mealPlan.js')
           text = path.read_text()
 
-          old_apply = """    applyMealValue(row, {
-              ...latestCurrent,
-              name: favorite.name,
-              notes: favorite.notes || ''
-            });"""
-          new_apply = """    applyMealValue(row, {
-              ...latestCurrent,
-              name: used.name,
-              notes: used.notes || ''
-            });"""
+          use_start = text.index('async function useFavoriteInRow')
+          picker_start = text.index('async function openFavoritePicker', use_start)
+          use_block = text[use_start:picker_start]
 
-          old_picker = "const favorites = await loadMealFavorites();"
-          new_picker = "const favorites = await loadMealFavorites(true);"
-
-          old_toast = "showToast(`${favorite.name} planned`);"
-          new_toast = "showToast(`${used.name} planned`);"
-
-          for old, new, label in [
-              (old_apply, new_apply, 'apply server-returned favorite'),
-              (old_picker, new_picker, 'refresh favorites picker'),
-              (old_toast, new_toast, 'toast fresh favorite name'),
-          ]:
-              count = text.count(old)
+          replacements = [
+              ('name: favorite.name,', 'name: used.name,'),
+              ("notes: favorite.notes || ''", "notes: used.notes || ''"),
+              ('showToast(`${favorite.name} planned`);', 'showToast(`${used.name} planned`);'),
+          ]
+          for old, new in replacements:
+              count = use_block.count(old)
               if count != 1:
-                  raise SystemExit(f'Expected exactly one {label} target, found {count}')
-              text = text.replace(old, new, 1)
+                  raise SystemExit(f'Expected one useFavoriteInRow target for {old!r}, found {count}')
+              use_block = use_block.replace(old, new, 1)
 
+          picker_end = text.index('function favoriteDestinationChoices', picker_start)
+          picker_block = text[picker_start:picker_end]
+          old_picker = 'const favorites = await loadMealFavorites();'
+          if picker_block.count(old_picker) != 1:
+              raise SystemExit('Expected one picker favorites load target')
+          picker_block = picker_block.replace(old_picker, 'const favorites = await loadMealFavorites(true);', 1)
+
+          text = text[:use_start] + use_block + picker_block + text[picker_end:]
           path.write_text(text)
           PY
 
