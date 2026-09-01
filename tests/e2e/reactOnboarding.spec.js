@@ -68,9 +68,9 @@ test.describe('React action-based onboarding', () => {
     const input = page.locator('#react-rapid-list-input');
     await input.fill('Milk');
     await page.getByRole('button', { name: 'Add to list' }).click();
-    await expect(page.locator('.react-rapid-preview')).toBeVisible();
-    await page.locator('.react-rapid-preview').getByRole('button', { name: /Add 1 item/ }).click();
 
+    // A single clear catalog match is intentionally added immediately. The
+    // review surface is reserved for batches, ambiguous matches, and unknowns.
     await expect(page).toHaveURL(/\/app$/, { timeout: 10000 });
     const needs = page.locator('.home-react-card', { hasText: 'What do we need?' });
     await expect(needs).toContainText('Milk');
