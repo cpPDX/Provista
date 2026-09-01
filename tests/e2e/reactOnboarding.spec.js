@@ -2,7 +2,8 @@ const { test, expect } = require('@playwright/test');
 
 async function registerHousehold(page, label) {
   const suffix = `${Date.now()}-${test.info().workerIndex}`;
-  const email = `react-onboarding-${label}-${suffix}@test.com`;
+  const emailLabel = label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const email = `react-onboarding-${emailLabel}-${suffix}@test.com`;
   const password = 'password123';
 
   await page.goto('/login.html');
