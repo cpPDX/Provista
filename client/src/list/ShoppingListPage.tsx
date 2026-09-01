@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { useOnlineStatus } from '../app/useOnlineStatus';
 import { useConfirm } from '../shell/DialogProvider';
+import { useDirtyState } from '../shell/DirtyStateProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
 import { useShoppingCheckout } from './checkout';
@@ -72,7 +74,9 @@ function householdPrice(item: ShoppingListItem): string {
 
 export function ShoppingListPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const confirm = useConfirm();
+  const { requestNavigation } = useDirtyState();
   const { showToast } = useToast();
   const online = useOnlineStatus();
   const listQuery = useQuery({ queryKey, queryFn: loadShoppingList });
@@ -251,7 +255,7 @@ export function ShoppingListPage() {
 
   const openShoppingTool = (action: 'review-low-stock' | 'scan-list-item') => {
     if (action === 'review-low-stock') {
-      window.location.assign('/app/pantry');
+      void requestNavigation(() => navigate('/app/pantry'));
       return;
     }
     const params = new URLSearchParams({ tab: 'list', action });
