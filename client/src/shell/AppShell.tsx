@@ -5,6 +5,7 @@ import { HomePage } from '../home/HomePage';
 import '../home/home.css';
 import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
+import { PlanPage } from '../plan/PlanPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
 import { useToast } from './ToastProvider';
@@ -40,11 +41,14 @@ export function AppShell() {
     ? 'list'
     : location.pathname === '/app/pantry'
       ? 'inventory'
-      : 'home';
+      : location.pathname === '/app/plan'
+        ? 'meal-plan'
+        : 'home';
 
   const openTab = (tab: string) => {
     const reactDestinations: Record<string, string> = {
       home: '/app',
+      'meal-plan': '/app/plan',
       list: '/app/list',
       inventory: '/app/pantry'
     };
@@ -95,7 +99,9 @@ export function AppShell() {
           ? <ShoppingListPage />
           : currentTab === 'inventory'
             ? <PantryPage />
-            : <HomePage />}
+            : currentTab === 'meal-plan'
+              ? <PlanPage />
+              : <HomePage />}
       </main>
 
       <nav className="shell-bottom-nav" aria-label="Provista sections">
