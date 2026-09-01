@@ -18,7 +18,7 @@ async function createHouseholdSession(page, suffix) {
 }
 
 test.describe('React migration shell', () => {
-  test('bootstraps the authenticated household and deep-links legacy feature tabs', async ({ page }) => {
+  test('bootstraps the authenticated household and routes migrated feature tabs in React', async ({ page }) => {
     await createHouseholdSession(page, 'Navigation');
 
     await page.goto('/react-preview/');
@@ -27,9 +27,9 @@ test.describe('React migration shell', () => {
     await expect(page.locator('.home-question')).toHaveCount(4);
 
     await page.getByRole('button', { name: 'Pantry', exact: true }).click();
-    await expect(page).toHaveURL(/\/app\?tab=inventory$/);
-    await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
-    await expect(page.locator('#tab-inventory').getByRole('heading', { name: 'Pantry' })).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/pantry$/);
+    await expect(page.locator('#pantry-react-title')).toHaveText('Pantry');
+    await expect(page.getByRole('button', { name: 'Pantry', exact: true })).toHaveAttribute('aria-current', 'page');
   });
 
   test('signs out through the shared React confirmation dialog', async ({ page }) => {

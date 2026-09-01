@@ -140,8 +140,8 @@ test.describe('Home / Today - React production slice', () => {
   test('legacy feature navigation returns Home to the React production surface', async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
 
-    await page.getByRole('button', { name: 'Pantry', exact: true }).click();
-    await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+    await expect(page.locator('#tab-meal-plan')).toHaveClass(/active/);
     await page.locator('.nav-item[data-tab="home"]').click();
 
     await expect(page).toHaveURL('/app');

@@ -1,4 +1,5 @@
 import { ApiError, apiFetch } from '../api/http';
+export { createCatalogProduct, searchCatalog } from '../products/api';
 import {
   cacheShoppingItem,
   deleteCachedShoppingItem,
@@ -165,23 +166,6 @@ export async function matchShoppingText(text: string): Promise<ShoppingMatchResu
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text })
-  });
-}
-
-export async function searchCatalog(search: string): Promise<ProductRef[]> {
-  const query = new URLSearchParams({ search });
-  return apiFetch<ProductRef[]>(`/api/items?${query.toString()}`);
-}
-
-export async function createCatalogProduct(input: {
-  name: string;
-  category: string;
-  unit: string;
-}): Promise<ProductRef> {
-  return apiFetch<ProductRef>('/api/items', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input)
   });
 }
 
