@@ -10,6 +10,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Provista" />
+    <script>
+      try {
+        const cachedSession = JSON.parse(localStorage.getItem('provista_auth') || 'null');
+        const user = cachedSession && cachedSession.user;
+        const accountTheme = user && user.preferences && user.preferences.theme;
+        const cachedTheme = user && localStorage.getItem(`provista_theme_${user._id}`);
+        const theme = cachedTheme === 'dark' || accountTheme === 'dark' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]')
+          ?.setAttribute('content', theme === 'dark' ? '#1A1C20' : '#F5FAFB');
+      } catch {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icons/icon-192.svg" />

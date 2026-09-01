@@ -8,14 +8,16 @@ import { PantryPage } from '../pantry/PantryPage';
 import { PlanPage } from '../plan/PlanPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
+import { NavIcon } from './NavIcon';
+import { ThemeToggle } from './ThemeToggle';
 import { useToast } from './ToastProvider';
 
 const navItems = [
-  { label: 'Home', tab: 'home', icon: '⌂' },
-  { label: 'Plan', tab: 'meal-plan', icon: '◷' },
-  { label: 'List', tab: 'list', icon: '✓' },
-  { label: 'Pantry', tab: 'inventory', icon: '▦' },
-  { label: 'More', tab: 'more', icon: '☰' }
+  { label: 'Home', tab: 'home', icon: 'home' },
+  { label: 'Plan', tab: 'meal-plan', icon: 'plan' },
+  { label: 'List', tab: 'list', icon: 'list' },
+  { label: 'Pantry', tab: 'inventory', icon: 'pantry' },
+  { label: 'More', tab: 'more', icon: 'more' }
 ] as const;
 
 export function AppShell() {
@@ -89,9 +91,12 @@ export function AppShell() {
             <span>{householdName}</span>
           </div>
         </div>
-        <button type="button" className="shell-button shell-button-secondary" onClick={() => void handleLogout()}>
-          Sign out
-        </button>
+        <div className="shell-header-actions">
+          <ThemeToggle />
+          <button type="button" className="shell-button shell-button-secondary" onClick={() => void handleLogout()}>
+            Sign out
+          </button>
+        </div>
       </header>
 
       <main className="shell-content">
@@ -114,7 +119,7 @@ export function AppShell() {
             aria-current={item.tab === currentTab ? 'page' : undefined}
             className={item.tab === currentTab ? 'active' : undefined}
           >
-            <span aria-hidden="true">{item.icon}</span>
+            <span className="shell-nav-icon" aria-hidden="true"><NavIcon name={item.icon} /></span>
             <small>{item.label}</small>
           </button>
         ))}

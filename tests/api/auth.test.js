@@ -256,6 +256,31 @@ describe('PUT /api/auth/profile', () => {
     expect(res.status).toBe(400);
   });
 
+  it('stores a validated per-user theme preference', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const update = await request(app)
+      .put('/api/auth/profile')
+      .set('Cookie', cookie)
+      .send({ theme: 'dark' });
+
+    expect(update.status).toBe(200);
+    expect(update.body.user.preferences.theme).toBe('dark');
+
+    const session = await request(app).get('/api/auth/me').set('Cookie', cookie);
+    expect(session.body.user.preferences.theme).toBe('dark');
+  });
+
+  it('rejects unknown theme preferences', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const res = await request(app)
+      .put('/api/auth/profile')
+      .set('Cookie', cookie)
+      .send({ theme: 'sepia' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Theme must be light or dark');
+  });
+
   it('returns 409 when new email is already taken', async () => {
     await createOwnerSession(app, { email: 'taken@test.com' });
     const { cookie } = await createOwnerSession(app, { email: 'owner2@test.com' });
