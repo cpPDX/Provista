@@ -30,6 +30,12 @@ test.describe('React migration shell', () => {
     await expect(page).toHaveURL(/\/app\/pantry$/);
     await expect(page.locator('#pantry-react-title')).toHaveText('Pantry');
     await expect(page.getByRole('button', { name: 'Pantry', exact: true })).toHaveAttribute('aria-current', 'page');
+
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/plan$/);
+    await expect(page.locator('#plan-title')).toHaveText('Plan');
+    await expect(page.getByRole('button', { name: 'Plan', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#tab-meal-plan')).toHaveCount(0);
   });
 
   test('signs out through the shared React confirmation dialog', async ({ page }) => {
