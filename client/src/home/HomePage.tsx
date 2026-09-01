@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/http';
 import { useOnlineStatus } from '../app/useOnlineStatus';
 import { useAuth } from '../auth/AuthProvider';
@@ -183,6 +184,7 @@ export function HomePage() {
   const { requestNavigation } = useDirtyState();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const online = useOnlineStatus();
   const [reviewOpen, setReviewOpen] = useState(false);
   const [prices, setPrices] = useState<Record<string, string>>({});
@@ -245,7 +247,7 @@ export function HomePage() {
   };
 
   const openReact = (path: string) => {
-    void requestNavigation(() => window.location.assign(path));
+    void requestNavigation(() => navigate(path));
   };
 
   const openPriceReview = () => {
