@@ -126,8 +126,9 @@ app.use('/api/health', require('./routes/health'));
 // Auth routes
 app.use('/api/auth', require('./routes/auth'));
 
-// Household management
+// Household management + first-run orchestration
 app.use('/api/household', require('./routes/household'));
+app.use('/api/onboarding', require('./routes/onboarding'));
 
 // Data routes (all require auth via route-level middleware)
 app.use('/api/items', require('./routes/items'));
@@ -195,15 +196,14 @@ app.get('/app', (req, res) => {
   return serveReactApp(req, res);
 });
 
-// PRO-53 List migration route. The legacy List remains reachable through
-// `/app?tab=list` until checkout and capture parity are complete.
+// Migrated authenticated feature routes. The matching legacy `?tab=` deep
+// links remain available until PRO-56 retires the compatibility renderer.
 app.get('/app/list', serveReactApp);
-
-// PRO-54 Pantry migration route. Keep the legacy `?tab=inventory` deep link
-// available until the authenticated legacy renderer is retired under PRO-56.
 app.get('/app/pantry', serveReactApp);
+app.get('/app/plan', serveReactApp);
 
-// New-household onboarding still depends on legacy DOM targets until PRO-55.
+// Compatibility surface remains available while More/Insights/scanner and
+// legacy authenticated JavaScript are retired under PRO-56.
 app.get('/legacy-app', serveLegacyApp);
 
 // Vite's output lives under public/react-preview, but static directory indexes are
