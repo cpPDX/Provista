@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { ProductPickerField } from '../products/ProductPickerField';
 import { useToast } from '../shell/ToastProvider';
 import {
   addCatalogAlias,
   addShoppingListItem,
   createCatalogProduct,
   matchShoppingText,
-  searchCatalog,
   updateShoppingListItem,
   type ShoppingMatchResult,
   type ShoppingMatchSuggestion
@@ -34,10 +34,6 @@ interface AddBatchResult {
 
 function serializeToken(token: ReviewToken) {
   return token.quantity === 1 ? token.name : `${token.name} x${token.quantity}`;
-}
-
-function productName(product: ProductRef) {
-  return [product.name, product.brand].filter(Boolean).join(' · ');
 }
 
 function aggregateMatchedSuggestions(suggestions: ShoppingMatchSuggestion[]) {
@@ -83,8 +79,7 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
   const [detailQuantity, setDetailQuantity] = useState(1);
   const [detailCategory, setDetailCategory] = useState('Other');
   const [detailUnit, setDetailUnit] = useState('each');
-  const [catalogMatches, setCatalogMatches] = useState<ProductRef[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedProduct, setSelectedProduct] = useState<ProductRef | null>(null);
   const [detailSaving, setDetailSaving] = useState(false);
 
   const currentToken = reviewTokens[0] || null;
@@ -95,25 +90,9 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
     setDetailQuantity(currentToken.quantity);
     setDetailCategory('Other');
     setDetailUnit('each');
-    setSelectedProductId('');
-    setCatalogMatches(currentToken.candidates || []);
+    setSelectedProduct(null);
     window.setTimeout(() => detailNameRef.current?.focus(), 0);
   }, [currentToken?.name, currentToken?.quantity]);
-
-  useEffect(() => {
-    if (!currentToken || !online || detailName.trim().length < 2) return;
-    const timer = window.setTimeout(() => {
-      void searchCatalog(detailName.trim())
-        .then(results => {
-          const merged = new Map<string, ProductRef>();
-          (currentToken.candidates || []).forEach(product => merged.set(product._id, product));
-          results.forEach(product => merged.set(product._id, product));
-          setCatalogMatches([...merged.values()].slice(0, 8));
-        })
-        .catch(error => console.info('Catalog search unavailable:', error));
-    }, 200);
-    return () => window.clearTimeout(timer);
-  }, [currentToken, detailName, online]);
 
   const addProductQuantity = async (product: ProductRef, quantity: number) => {
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY) {
@@ -242,7 +221,7 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
 
     setDetailSaving(true);
     try {
-      let product = catalogMatches.find(candidate => candidate._id === selectedProductId) || null;
+      let product = selectedProduct;
       if (!product) {
         const name = detailName.trim();
         if (!name) throw new Error('Product name is required');
@@ -394,36 +373,20 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
                 <button type="button" className="react-list-modal-close" aria-label="Close Add with details" onClick={closeDetails}>✕</button>
               </div>
 
-              <label>
-                <span>What do you need?</span>
-                <input ref={detailNameRef} value={detailName} onChange={event => { setDetailName(event.target.value); setSelectedProductId(''); }} />
-              </label>
-
-              {catalogMatches.length > 0 && (
-                <fieldset className="react-list-product-options">
-                  <legend>Use an existing product</legend>
-                  {catalogMatches.map(product => (
-                    <label key={product._id}>
-                      <input type="radio" name="catalog-product" value={product._id} checked={selectedProductId === product._id} onChange={() => setSelectedProductId(product._id)} />
-                      <span>{productName(product)}{product.category ? ` · ${product.category}` : ''}</span>
-                    </label>
-                  ))}
-                  <button type="button" className="react-list-clear-filter" onClick={() => setSelectedProductId('')}>Create a new product instead</button>
-                </fieldset>
-              )}
-
-              {!selectedProductId && (
-                <div className="react-list-detail-grid">
-                  <label>
-                    <span>Category</span>
-                    <input value={detailCategory} onChange={event => setDetailCategory(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>Unit</span>
-                    <input value={detailUnit} onChange={event => setDetailUnit(event.target.value)} />
-                  </label>
-                </div>
-              )}
+              <ProductPickerField
+                idPrefix="react-list-detail-product"
+                inputRef={detailNameRef}
+                name={detailName}
+                onNameChange={setDetailName}
+                selectedProduct={selectedProduct}
+                onSelectedProductChange={setSelectedProduct}
+                category={detailCategory}
+                onCategoryChange={setDetailCategory}
+                unit={detailUnit}
+                onUnitChange={setDetailUnit}
+                online={online}
+                initialCandidates={currentToken.candidates || []}
+              />
 
               <label>
                 <span>Quantity</span>
@@ -433,7 +396,7 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
               <div className="react-list-modal-actions">
                 <button type="button" className="shell-button shell-button-secondary" onClick={closeDetails}>Cancel</button>
                 <button type="submit" className="shell-button shell-button-primary" disabled={detailSaving || !detailName.trim()}>
-                  {detailSaving ? 'Adding…' : selectedProductId ? 'Add selected product' : 'Create & add'}
+                  {detailSaving ? 'Adding…' : selectedProduct ? 'Add selected product' : 'Create & add'}
                 </button>
               </div>
             </form>
