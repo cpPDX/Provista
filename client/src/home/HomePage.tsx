@@ -323,7 +323,7 @@ export function HomePage() {
         title: 'Plan tonight’s dinner',
         detail: 'One choice can shape the rest of the week.',
         action: 'Plan dinner',
-        onAction: () => openLegacy('meal-plan', 'today-dinner')
+        onAction: () => openReact('/app/plan?focus=today-dinner')
       };
     }
     if (lowStock.length) {
@@ -339,14 +339,14 @@ export function HomePage() {
         title: 'Review the shopping list',
         detail: `${needed.length} item${needed.length === 1 ? '' : 's'} left to get.`,
         action: 'Open list',
-        onAction: () => openLegacy('list')
+        onAction: () => openReact('/app/list')
       };
     }
     return {
       title: 'You’re caught up',
       detail: 'Nothing urgent needs your attention.',
       action: 'Open your plan',
-      onAction: () => openLegacy('meal-plan')
+      onAction: () => openReact('/app/plan')
     };
   }, [deferredPrices.length, dinners.length, lowStock.length, needed.length, plan, planStatus]);
 
@@ -367,8 +367,8 @@ export function HomePage() {
           <h1 id="home-react-title">{displayName ? `Hi, ${displayName}` : 'Today'}</h1>
         </div>
         <div className="home-react-quick-actions" aria-label="Quick actions">
-          <button type="button" className="shell-button shell-button-secondary" onClick={() => openLegacy('list', 'rapid-list-input')}>Quick add</button>
-          <button type="button" className="shell-button shell-button-primary" onClick={() => openLegacy('meal-plan', 'today-dinner')}>Plan dinner</button>
+          <button type="button" className="shell-button shell-button-secondary" onClick={() => openReact('/app/list')}>Quick add</button>
+          <button type="button" className="shell-button shell-button-primary" onClick={() => openReact('/app/plan?focus=today-dinner')}>Plan dinner</button>
         </div>
       </section>
 
@@ -378,7 +378,7 @@ export function HomePage() {
           title={dinners.length ? dinners.map(meal => meal.name).join(' · ') : 'Dinner isn’t planned yet'}
           emptyText={dinners.length ? 'Tonight’s plan is ready.' : 'Choose a meal in a few taps.'}
           action={dinners.length ? 'View tonight' : 'Plan dinner'}
-          onAction={() => openLegacy('meal-plan', 'today-dinner')}
+          onAction={() => openReact('/app/plan?focus=today-dinner')}
           status={planStatus}
           tone="home-react-featured"
           onRetry={() => void planQuery.refetch()}
@@ -389,7 +389,7 @@ export function HomePage() {
           items={needed}
           emptyText="Add an item whenever it comes to mind."
           action={needed.length ? 'Open list' : 'Quick add'}
-          onAction={() => openLegacy('list', needed.length ? undefined : 'rapid-list-input')}
+          onAction={() => openReact('/app/list')}
           status={shoppingStatus}
           onRetry={() => void shoppingQuery.refetch()}
         />
