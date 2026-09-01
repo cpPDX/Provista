@@ -123,6 +123,28 @@ test.describe('React Pantry migration', () => {
     }).toBe(false);
   });
 
+  test('keeps Pantry visible but disables mutations while offline', async ({ page, context }) => {
+    const name = `React Offline Pantry ${Date.now()}`;
+    const product = await createItem(page, name);
+    const pantry = await createPantryItem(page, product, {
+      trackingMode: 'simple',
+      stockStatus: 'have'
+    });
+    await openReactPantry(page);
+
+    const card = page.locator(`.pantry-card[data-inv-id="${pantry._id}"]`);
+    try {
+      await context.setOffline(true);
+      await expect(page.locator('.pantry-offline')).toContainText('read-only');
+      await expect(page.getByRole('button', { name: 'Track item', exact: true })).toBeDisabled();
+      await expect(card.getByRole('button', { name: 'Edit details' })).toBeDisabled();
+      await expect(card.getByRole('button', { name: 'Remove' })).toBeDisabled();
+      await expect(card.getByRole('button', { name: 'Running low' })).toBeDisabled();
+    } finally {
+      await context.setOffline(false);
+    }
+  });
+
   test('opens low-stock review from React List without falling back to legacy', async ({ page }) => {
     await page.goto('/app/list');
     await page.getByText('More shopping tools').click();
