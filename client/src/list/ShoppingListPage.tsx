@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useOnlineStatus } from '../app/useOnlineStatus';
 import { useConfirm } from '../shell/DialogProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
@@ -67,21 +68,6 @@ function householdPrice(item: ShoppingListItem): string {
     return `Last paid ${formatCurrency(Number(item.latestSeenPrice.pricePerUnit))}${unit}${item.latestSeenPrice.store?.name ? ` at ${item.latestSeenPrice.store.name}` : ''} · Price may have changed`;
   }
   return 'No recent household price';
-}
-
-function useOnlineStatus() {
-  const [online, setOnline] = useState(() => navigator.onLine);
-  useEffect(() => {
-    const onOnline = () => setOnline(true);
-    const onOffline = () => setOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
-  return online;
 }
 
 export function ShoppingListPage() {
@@ -263,7 +249,11 @@ export function ShoppingListPage() {
   const threshold = Number(context?.savingsThreshold || 0);
   const showStoreSuggestion = Boolean(context?.additionalStore?.name && savings >= threshold);
 
-  const openCompatibilityTool = (action: 'review-low-stock' | 'scan-list-item') => {
+  const openShoppingTool = (action: 'review-low-stock' | 'scan-list-item') => {
+    if (action === 'review-low-stock') {
+      window.location.assign('/app/pantry');
+      return;
+    }
     const params = new URLSearchParams({ tab: 'list', action });
     window.location.assign(`/app?${params.toString()}`);
   };
@@ -309,9 +299,9 @@ export function ShoppingListPage() {
         <details className="react-list-more-tools">
           <summary>More shopping tools</summary>
           <div>
-            <button type="button" onClick={() => openCompatibilityTool('review-low-stock')}>Review low stock</button>
-            <button type="button" onClick={() => openCompatibilityTool('scan-list-item')}>Scan item</button>
-            <small>These tools stay on the compatibility screen until Pantry and scanner migration work is complete.</small>
+            <button type="button" onClick={() => openShoppingTool('review-low-stock')}>Review low stock</button>
+            <button type="button" onClick={() => openShoppingTool('scan-list-item')}>Scan item</button>
+            <small>Low-stock review now opens React Pantry. Scanner support remains on the compatibility screen until its migration work is complete.</small>
           </div>
         </details>
       </div>
