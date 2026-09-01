@@ -30,8 +30,9 @@ test.describe('Authentication', () => {
     await page.fill('#landing-household-name', 'Splash Household');
     await page.locator('#landing-create-household-form').getByRole('button', { name: 'Create household' }).click();
 
-    await expect(page).toHaveURL(/\/legacy-app\?onboarding=1$/, { timeout: 10000 });
-    await expect(page.locator('.bottom-nav')).toBeVisible();
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Who are we planning for?' })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('.bottom-nav')).toHaveCount(0);
   });
 
   test('shows Sign In form by default', async ({ page }) => {
@@ -125,7 +126,7 @@ test.describe('Authentication', () => {
     await expect(page.locator('#step-household')).not.toContainText('share prices and shopping lists');
   });
 
-  test('registers and lands on main app', async ({ page }) => {
+  test('registers and lands in action-based household setup', async ({ page }) => {
     await page.goto('/login.html');
     await page.click('.auth-tab[data-mode="register"]');
     const ts = Date.now();
@@ -134,14 +135,13 @@ test.describe('Authentication', () => {
     await page.fill('#register-password', 'password123');
     await page.click('#btn-register-continue');
 
-    // Household setup step
     await page.click('[data-action="create"]');
     await page.fill('#household-name', 'E2E Household');
     await page.click('#btn-create-household');
 
-    // New household owners stay on the legacy onboarding surface until PRO-55.
-    await expect(page).toHaveURL(/\/legacy-app\?onboarding=1$/, { timeout: 10000 });
-    await expect(page.locator('.bottom-nav')).toBeVisible();
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Who are we planning for?' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('A useful household, not a setup marathon')).toBeVisible();
   });
 
   test('recovers a forgotten password from the visible sign-in flow', async ({ page }) => {
