@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthProvider';
 import { HomePage } from '../home/HomePage';
 import '../home/home.css';
 import { ShoppingListPage } from '../list/ShoppingListPage';
+import { PantryPage } from '../pantry/PantryPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
 import { useToast } from './ToastProvider';
@@ -35,11 +36,20 @@ export function AppShell() {
   if (!session) return null;
 
   const householdName = session.household?.name || 'Your household';
-  const currentTab = location.pathname === '/app/list' ? 'list' : 'home';
+  const currentTab = location.pathname === '/app/list'
+    ? 'list'
+    : location.pathname === '/app/pantry'
+      ? 'inventory'
+      : 'home';
 
   const openTab = (tab: string) => {
-    if (tab === 'home' || tab === 'list') {
-      const destination = tab === 'home' ? '/app' : '/app/list';
+    const reactDestinations: Record<string, string> = {
+      home: '/app',
+      list: '/app/list',
+      inventory: '/app/pantry'
+    };
+    const destination = reactDestinations[tab];
+    if (destination) {
       if (location.pathname === destination) return;
       void requestNavigation(() => navigate(destination));
       return;
@@ -81,7 +91,11 @@ export function AppShell() {
       </header>
 
       <main className="shell-content">
-        {currentTab === 'list' ? <ShoppingListPage /> : <HomePage />}
+        {currentTab === 'list'
+          ? <ShoppingListPage />
+          : currentTab === 'inventory'
+            ? <PantryPage />
+            : <HomePage />}
       </main>
 
       <nav className="shell-bottom-nav" aria-label="Provista sections">
