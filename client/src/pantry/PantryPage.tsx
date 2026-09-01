@@ -194,17 +194,19 @@ export function PantryPage() {
       return;
     }
     if (item.trackingMode !== 'exact') return;
-    const nextQuantity = Math.max(0, (Number(item.quantity) || 0) + delta);
 
     let sync = quantitySync.current.get(item._id);
     if (!sync) {
+      const currentQuantity = Number(item.quantity) || 0;
       sync = {
-        serverQuantity: Number(item.quantity) || 0,
-        desiredQuantity: Number(item.quantity) || 0,
+        serverQuantity: currentQuantity,
+        desiredQuantity: currentQuantity,
         processing: false
       };
       quantitySync.current.set(item._id, sync);
     }
+
+    const nextQuantity = Math.max(0, sync.desiredQuantity + delta);
     sync.desiredQuantity = nextQuantity;
     patchItem(item._id, current => {
       const next = { ...current, quantity: nextQuantity };
