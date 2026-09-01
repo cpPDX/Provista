@@ -116,4 +116,14 @@ test.describe('React Pantry migration', () => {
       return items.some(entry => entry._id === pantry._id);
     }).toBe(false);
   });
+
+  test('opens low-stock review from React List without falling back to legacy', async ({ page }) => {
+    await page.goto('/app/list');
+    await page.getByText('More shopping tools').click();
+    await page.getByRole('button', { name: 'Review low stock' }).click();
+
+    await expect(page).toHaveURL(/\/app\/pantry$/);
+    await expect(page.locator('#pantry-react-title')).toHaveText('Pantry');
+    await expect(page.locator('#tab-inventory')).toHaveCount(0);
+  });
 });
