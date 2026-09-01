@@ -3,7 +3,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useOnlineStatus } from '../app/useOnlineStatus';
 import { useAuth } from '../auth/AuthProvider';
-import { completeFirstAction, loadOnboarding, onboardingQueryKey } from '../onboarding/api';
+import {
+  completeFirstAction,
+  goBackInOnboarding,
+  loadOnboarding,
+  onboardingQueryKey
+} from '../onboarding/api';
 import { useConfirm } from '../shell/DialogProvider';
 import { useDirtyState } from '../shell/DirtyStateProvider';
 import { useToast } from '../shell/ToastProvider';
@@ -145,7 +150,7 @@ export function PlanPage() {
   const { isAdmin } = useAuth();
   const online = useOnlineStatus();
   const confirm = useConfirm();
-  const { setDirty, requestNavigation } = useDirtyState();
+  const { setDirty } = useDirtyState();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -158,6 +163,7 @@ export function PlanPage() {
   const [dirty, setLocalDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('idle');
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
+  const [revealedSpecialDays, setRevealedSpecialDays] = useState<Set<number>>(new Set());
   const [favoriteTarget, setFavoriteTarget] = useState<string | null>(null);
   const [favoriteEditing, setFavoriteEditing] = useState<FavoriteMeal | null>(null);
   const [favoriteEditName, setFavoriteEditName] = useState('');
@@ -195,6 +201,7 @@ export function PlanPage() {
     setLocalDirty(false);
     setDirty('react-plan', false);
     setSaveStatus('saved');
+    setRevealedSpecialDays(new Set());
 
     const today = isoDate();
     const todayIndex = next.days.findIndex(day => day.date.slice(0, 10) === today);
@@ -295,6 +302,17 @@ export function PlanPage() {
     });
   };
 
+  const saveCurrentDraftIfNeeded = async () => {
+    if (!draft || !dirty) return true;
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    if (savingRef.current) {
+      showToast('Finishing the current Plan save…');
+      return false;
+    }
+    return persistDraft(clonePlan(draft), revisionRef.current);
+  };
+
   const findMeal = (plan: MealPlan, dayIndex: number, mealType: MealType, rowIndex: number) => {
     const rows = plan.days[dayIndex].meals.filter(meal => meal.mealType === mealType);
     return rows[rowIndex];
@@ -316,6 +334,13 @@ export function PlanPage() {
 
   const addSeparateMeal = (dayIndex: number, mealType: MealType) => {
     mutateDraft(plan => plan.days[dayIndex].meals.push(emptyMeal(mealType)));
+    setExpandedDays(current => new Set(current).add(dayIndex));
+  };
+
+  const revealSpecialMeal = (dayIndex: number) => {
+    const hasSpecialRow = Boolean(draft?.days[dayIndex]?.meals.some(meal => meal.mealType === 'special'));
+    if (!hasSpecialRow) mutateDraft(plan => plan.days[dayIndex].meals.push(emptyMeal('special')));
+    setRevealedSpecialDays(current => new Set(current).add(dayIndex));
     setExpandedDays(current => new Set(current).add(dayIndex));
   };
 
@@ -386,18 +411,19 @@ export function PlanPage() {
     updateMeal(dayIndex, mealType, rowIndex, { forEveryone: false, personIds: [...next], personName: '' });
   };
 
-  const navigateWeek = async (delta: number) => {
-    if (!weekStart || !draft) return;
-    if (dirty) {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-      const saved = await persistDraft(clonePlan(draft), revisionRef.current);
-      if (!saved) return;
-    }
+  const goToWeek = async (targetWeekStart: string) => {
+    if (!weekStart || !draft || targetWeekStart === weekStart) return;
+    if (!(await saveCurrentDraftIfNeeded())) return;
     setDraft(null);
-    setWeekStart(addWeeks(weekStart, delta));
+    setWeekStart(targetWeekStart);
     setExpandedDays(new Set());
+    setRevealedSpecialDays(new Set());
     firstFocusDoneRef.current = false;
+  };
+
+  const navigateWeek = async (delta: number) => {
+    if (!weekStart) return;
+    await goToWeek(addWeeks(weekStart, delta));
   };
 
   const copyLastWeek = async () => {
@@ -427,20 +453,36 @@ export function PlanPage() {
 
   const saveSettings = async () => {
     if (!settingsDraft || !isAdmin) return;
+    const nextWeekStart = normalizeWeekStart(new Date(), settingsDraft.weekStartDay);
+    if (nextWeekStart !== weekStart && !(await saveCurrentDraftIfNeeded())) return;
     try {
       const saved = await saveMealPlanSettings(settingsDraft);
       queryClient.setQueryData(mealPlanSettingsQueryKey, saved);
       setSettingsDraft(saved);
       setSettingsOpen(false);
       showToast('Plan settings updated', { tone: 'success' });
-      const nextWeekStart = normalizeWeekStart(new Date(), saved.weekStartDay);
       if (nextWeekStart !== weekStart) {
         setDraft(null);
         setWeekStart(nextWeekStart);
+        setExpandedDays(new Set());
+        setRevealedSpecialDays(new Set());
+        firstFocusDoneRef.current = false;
       }
     } catch (error) {
       console.error(error);
       showToast('Could not update Plan settings.', { tone: 'error' });
+    }
+  };
+
+  const changeFirstAction = async () => {
+    if (!(await saveCurrentDraftIfNeeded())) return;
+    try {
+      const next = await goBackInOnboarding();
+      queryClient.setQueryData(onboardingQueryKey, next);
+      navigate('/app', { replace: true });
+    } catch (error) {
+      console.error(error);
+      showToast('Could not change the first action.', { tone: 'error' });
     }
   };
 
@@ -596,6 +638,7 @@ export function PlanPage() {
   }
 
   const today = isoDate();
+  const thisWeekStart = normalizeWeekStart(new Date(), settingsQuery.data!.weekStartDay);
 
   return (
     <section className="plan-page" aria-labelledby="plan-title">
@@ -614,7 +657,7 @@ export function PlanPage() {
         <aside className="plan-onboarding-banner">
           <strong>First useful action: plan tonight</strong>
           <span>Put one real meal on today. Once it saves, Provista will take you to Home with the result visible.</span>
-          <button type="button" className="plan-link-button" onClick={() => void requestNavigation(() => navigate('/app'))}>Leave setup for now</button>
+          <button type="button" className="plan-link-button" disabled={!online || saveStatus === 'saving'} onClick={() => void changeFirstAction()}>Choose List instead</button>
         </aside>
       )}
 
@@ -624,7 +667,7 @@ export function PlanPage() {
         <button type="button" className="shell-button shell-button-secondary" onClick={() => void navigateWeek(-1)}>← Previous</button>
         <div>
           <strong>{weekLabel(weekStart)}</strong>
-          <button type="button" className="plan-link-button" onClick={() => { setWeekStart(normalizeWeekStart(new Date(), settingsQuery.data!.weekStartDay)); firstFocusDoneRef.current = false; }}>This week</button>
+          <button type="button" className="plan-link-button" disabled={thisWeekStart === weekStart} onClick={() => void goToWeek(thisWeekStart)}>This week</button>
         </div>
         <button type="button" className="shell-button shell-button-secondary" onClick={() => void navigateWeek(1)}>Next →</button>
       </div>
@@ -676,7 +719,7 @@ export function PlanPage() {
                     <option value={1}>Monday</option>
                   </select>
                 </label>
-                <button type="button" className="shell-button shell-button-primary" disabled={!online} onClick={() => void saveSettings()}>Save settings</button>
+                <button type="button" className="shell-button shell-button-primary" disabled={!online || saveStatus === 'saving'} onClick={() => void saveSettings()}>Save settings</button>
               </div>
             )}
           </details>
@@ -710,10 +753,10 @@ export function PlanPage() {
                   {visibleMealTypes.map(mealType => {
                     const rows = mealRows(day, mealType);
                     const isSpecial = mealType === 'special';
-                    const showSpecial = !isSpecial || rows.some(meal => meal.name || meal.notes) || onboardingActive;
+                    const showSpecial = !isSpecial || rows.some(meal => meal.name || meal.notes) || onboardingActive || revealedSpecialDays.has(dayIndex);
                     if (!showSpecial && settingsQuery.data?.mealPlanMode === 'dinner') {
                       return (
-                        <button key={mealType} type="button" className="plan-add-special" disabled={!online} onClick={() => addSeparateMeal(dayIndex, 'special')}>
+                        <button key={mealType} type="button" className="plan-add-special" disabled={!online} onClick={() => revealSpecialMeal(dayIndex)}>
                           + Add a separate meal
                         </button>
                       );
