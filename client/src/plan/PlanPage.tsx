@@ -177,7 +177,8 @@ export function PlanPage() {
   const revisionRef = useRef(0);
   const lastSavedRef = useRef<MealPlan | null>(null);
   const saveTimerRef = useRef<number | null>(null);
-  const savingRef = useRef(false);
+  const queuedSaveRef = useRef<{ snapshot: MealPlan; revision: number } | null>(null);
+  const saveRunRef = useRef<Promise<boolean> | null>(null);
   const firstFocusDoneRef = useRef(false);
 
   useEffect(() => {
@@ -237,36 +238,53 @@ export function PlanPage() {
     }
   };
 
-  const persistDraft = async (snapshot: MealPlan, revision: number): Promise<boolean> => {
-    if (!online || savingRef.current) return false;
-    savingRef.current = true;
-    setSaveStatus('saving');
-    try {
-      const saved = await saveMealPlan({
-        weekStart: snapshot.weekStart,
-        days: snapshot.days,
-        produceNotes: snapshot.produceNotes,
-        shoppingNotes: snapshot.shoppingNotes
-      });
-      const normalized = normalizePlan({ ...saved, people: snapshot.people });
-      lastSavedRef.current = clonePlan(normalized);
-      if (revisionRef.current === revision) {
-        setDraft(normalized);
-        setLocalDirty(false);
-        setDirty('react-plan', false);
-        setSaveStatus('saved');
+  const runSaveQueue = async (): Promise<boolean> => {
+    while (queuedSaveRef.current) {
+      const queued = queuedSaveRef.current;
+      queuedSaveRef.current = null;
+
+      try {
+        const saved = await saveMealPlan({
+          weekStart: queued.snapshot.weekStart,
+          days: queued.snapshot.days,
+          produceNotes: queued.snapshot.produceNotes,
+          shoppingNotes: queued.snapshot.shoppingNotes
+        });
+        const normalized = normalizePlan({ ...saved, people: queued.snapshot.people });
+        lastSavedRef.current = clonePlan(normalized);
+        await queryClient.invalidateQueries({ queryKey: ['home'], refetchType: 'none' });
+
+        if (!queuedSaveRef.current && revisionRef.current === queued.revision) {
+          setDraft(normalized);
+          setLocalDirty(false);
+          setDirty('react-plan', false);
+          setSaveStatus('saved');
+          await completeOnboardingIfReady(normalized);
+        }
+      } catch (error) {
+        queuedSaveRef.current = null;
+        console.error(error);
+        setSaveStatus('error');
+        showToast('Could not save the meal plan.', { tone: 'error' });
+        return false;
       }
-      await queryClient.invalidateQueries({ queryKey: ['home'], refetchType: 'none' });
-      await completeOnboardingIfReady(normalized);
-      return true;
-    } catch (error) {
-      console.error(error);
-      setSaveStatus('error');
-      showToast('Could not save the meal plan.', { tone: 'error' });
-      return false;
-    } finally {
-      savingRef.current = false;
     }
+
+    return true;
+  };
+
+  const queueDraftSave = (snapshot: MealPlan, revision: number): Promise<boolean> => {
+    if (!online) return Promise.resolve(false);
+    queuedSaveRef.current = { snapshot, revision };
+    setSaveStatus('saving');
+
+    if (!saveRunRef.current) {
+      saveRunRef.current = runSaveQueue().finally(() => {
+        saveRunRef.current = null;
+      });
+    }
+
+    return saveRunRef.current;
   };
 
   useEffect(() => {
@@ -276,7 +294,7 @@ export function PlanPage() {
     const revision = revisionRef.current;
     saveTimerRef.current = window.setTimeout(() => {
       saveTimerRef.current = null;
-      void persistDraft(snapshot, revision);
+      void queueDraftSave(snapshot, revision);
     }, 650);
     return () => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
@@ -303,14 +321,11 @@ export function PlanPage() {
   };
 
   const saveCurrentDraftIfNeeded = async () => {
-    if (!draft || !dirty) return true;
+    if (!draft) return true;
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = null;
-    if (savingRef.current) {
-      showToast('Finishing the current Plan save…');
-      return false;
-    }
-    return persistDraft(clonePlan(draft), revisionRef.current);
+    if (dirty) return queueDraftSave(clonePlan(draft), revisionRef.current);
+    return saveRunRef.current || true;
   };
 
   const findMeal = (plan: MealPlan, dayIndex: number, mealType: MealType, rowIndex: number) => {
@@ -435,6 +450,7 @@ export function PlanPage() {
       cancelLabel: 'Cancel'
     });
     if (!confirmed) return;
+    if (!(await saveCurrentDraftIfNeeded())) return;
     try {
       const copied = normalizePlan({ ...(await copyPreviousWeek(weekStart)), people: draft?.people || [] });
       setDraft(copied);

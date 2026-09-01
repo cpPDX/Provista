@@ -39,6 +39,69 @@ test.describe('React Plan migration', () => {
     }).toBe(mealName);
   });
 
+  test('serializes and coalesces autosaves while the previous write is slow', async ({ page }) => {
+    let releaseFirstSave = () => {};
+    const firstSaveGate = new Promise(resolve => {
+      releaseFirstSave = resolve;
+    });
+    const savePayloads = [];
+    let activeSaves = 0;
+    let maxActiveSaves = 0;
+
+    await page.route('**/api/meal-plan', async route => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() !== 'PUT' || url.pathname !== '/api/meal-plan') {
+        await route.continue();
+        return;
+      }
+
+      savePayloads.push(request.postDataJSON());
+      activeSaves += 1;
+      maxActiveSaves = Math.max(maxActiveSaves, activeSaves);
+      try {
+        if (savePayloads.length === 1) await firstSaveGate;
+        const response = await route.fetch();
+        await route.fulfill({ response });
+      } finally {
+        activeSaves -= 1;
+      }
+    });
+
+    await page.goto('/app/plan');
+    const dinner = page.locator('.plan-day-today input[data-meal-name="dinner-0"]');
+    const firstMeal = `Slow first meal ${Date.now()}`;
+    const intermediateMeal = `Intermediate meal ${Date.now()}`;
+    const finalMeal = `Final meal ${Date.now()}`;
+
+    await dinner.fill(firstMeal);
+    await expect.poll(() => savePayloads.length).toBe(1);
+
+    await dinner.fill(intermediateMeal);
+    await page.waitForTimeout(750);
+    await dinner.fill(finalMeal);
+    await page.waitForTimeout(750);
+
+    const requestsBeforeRelease = savePayloads.length;
+    releaseFirstSave();
+    expect(requestsBeforeRelease).toBe(1);
+
+    await expect.poll(() => savePayloads.length).toBe(2);
+    await expect(page.locator('.plan-save-status')).toContainText('Saved', { timeout: 8000 });
+    expect(maxActiveSaves).toBe(1);
+    expect(savePayloads).toHaveLength(2);
+
+    const latestPayload = savePayloads[1];
+    const latestDay = latestPayload.days.find(day => String(day.date).slice(0, 10) === todayIso());
+    expect(latestDay?.meals.find(meal => meal.mealType === 'dinner')?.name).toBe(finalMeal);
+
+    await expect.poll(async () => {
+      const plan = await (await page.request.get(`/api/meal-plan?weekStart=${latestPayload.weekStart}`)).json();
+      const day = plan.days.find(entry => String(entry.date).slice(0, 10) === todayIso());
+      return day?.meals.find(meal => meal.mealType === 'dinner')?.name;
+    }).toBe(finalMeal);
+  });
+
   test('shows household audience inline and saves planning-only people without accounts', async ({ page }) => {
     const personName = `Planner ${Date.now()}`;
     const personResponse = await page.request.post('/api/household/people', { data: { displayName: personName } });
