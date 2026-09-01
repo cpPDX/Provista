@@ -13,6 +13,24 @@ function generateInviteCode() {
   return code;
 }
 
+const onboardingSchema = new mongoose.Schema({
+  version: { type: Number, default: 1 },
+  status: { type: String, enum: ['in_progress', 'completed'], default: 'in_progress' },
+  step: { type: String, enum: ['household', 'action', 'first_action', 'completed'], default: 'household' },
+  peopleSkipped: { type: Boolean, default: false },
+  householdPeopleCompletedAt: { type: Date, default: null },
+  householdPeopleSkippedAt: { type: Date, default: null },
+  firstAction: { type: String, enum: ['plan', 'list', null], default: null },
+  firstActionSelectedAt: { type: Date, default: null },
+  firstUsefulAction: { type: String, enum: ['meal_planned', 'list_item_added', null], default: null },
+  firstUsefulActionAt: { type: Date, default: null },
+  startedAt: { type: Date, default: Date.now },
+  lastSeenAt: { type: Date, default: Date.now },
+  lastResumedAt: { type: Date, default: null },
+  resumeCount: { type: Number, default: 0, min: 0 },
+  completedAt: { type: Date, default: null }
+}, { _id: false });
+
 const householdSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -26,7 +44,11 @@ const householdSchema = new mongoose.Schema({
     usualStoreId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
     additionalStopSavingsThreshold: { type: Number, min: 0, default: 10 },
     priceFreshnessDays: { type: Number, min: 1, max: 365, default: 30 }
-  }
+  },
+  // Null for households that predate action-based onboarding. A new household
+  // opts into this durable state only when the React client consumes the
+  // existing first-run marker and POSTs /api/onboarding/start.
+  onboarding: { type: onboardingSchema, default: null }
 }, { timestamps: true });
 
 householdSchema.methods.refreshInviteCode = function () {

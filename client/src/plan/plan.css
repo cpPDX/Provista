@@ -1,0 +1,543 @@
+.plan-page {
+  display: grid;
+  gap: 1rem;
+  padding-bottom: 6rem;
+}
+
+.plan-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.plan-heading h1 {
+  margin: 0;
+  font-size: clamp(1.9rem, 6vw, 2.7rem);
+  line-height: 1.05;
+}
+
+.plan-heading p {
+  margin: 0.45rem 0 0;
+  color: var(--text-muted, #656862);
+}
+
+.plan-eyebrow {
+  margin: 0 0 0.35rem !important;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.plan-save-status {
+  flex: 0 0 auto;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  color: var(--text-muted, #64665f);
+  background: var(--surface-subtle, #f4f5f1);
+}
+
+.plan-save-saving { font-weight: 700; }
+.plan-save-error { color: var(--danger, #9d2a2a); }
+
+.plan-onboarding-banner,
+.plan-offline {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+}
+
+.plan-onboarding-banner {
+  background: #eef4ef;
+  border: 1px solid #c7d8cb;
+}
+
+.plan-onboarding-banner span,
+.plan-offline {
+  color: var(--text-muted, #5f625d);
+}
+
+.plan-offline {
+  background: #fff7e8;
+  border: 1px solid #ead7a6;
+}
+
+.plan-week-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, #d9dbd5);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+
+.plan-week-bar > div {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  text-align: center;
+}
+
+.plan-link-button {
+  min-height: 44px;
+  border: 0;
+  padding: 0.35rem 0.2rem;
+  background: transparent;
+  color: var(--primary, #315f4b);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.plan-link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.plan-danger-link { color: var(--danger, #9d2a2a); }
+
+.plan-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.plan-tools details {
+  min-width: min(100%, 240px);
+  border: 1px solid var(--border, #d9dbd5);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+
+.plan-tools summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0.55rem 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.plan-favorite-manager,
+.plan-settings {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.7rem;
+  border-top: 1px solid var(--border, #e0e1dc);
+}
+
+.plan-favorite-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem;
+  border-radius: 10px;
+  background: var(--surface-subtle, #f5f5f2);
+}
+
+.plan-favorite-card > div:first-child,
+.plan-dialog-choice {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.plan-favorite-card small,
+.plan-dialog-choice small,
+.plan-muted {
+  color: var(--text-muted, #666963);
+}
+
+.plan-favorite-card > div:last-child {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.plan-favorite-edit-form {
+  width: 100%;
+  display: grid !important;
+  gap: 0.55rem;
+}
+
+.plan-favorite-edit-form > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.plan-settings label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 650;
+}
+
+.plan-settings select,
+.plan-favorite-edit-form input,
+.plan-favorite-edit-form textarea,
+.plan-meal-row input,
+.plan-meal-row textarea,
+.plan-audience select,
+.plan-shopping-suggestion select,
+.plan-produce textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--border, #cfd2cb);
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+}
+
+.plan-days {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.plan-day {
+  overflow: clip;
+  border: 1px solid var(--border, #d9dbd5);
+  border-radius: 15px;
+  background: var(--surface, #fff);
+}
+
+.plan-day-today {
+  border-color: #9eb7a4;
+  box-shadow: 0 0 0 2px rgb(49 95 75 / 7%);
+}
+
+.plan-day-toggle {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: minmax(110px, auto) minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0.9rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.plan-day-toggle > span:first-child {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.plan-day-toggle em {
+  padding: 0.15rem 0.4rem;
+  border-radius: 999px;
+  background: #e7efe9;
+  color: #315f4b;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.plan-day-summary {
+  overflow: hidden;
+  color: var(--text-muted, #666963);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-day-content {
+  display: grid;
+  gap: 1rem;
+  padding: 0 0.9rem 0.9rem;
+  border-top: 1px solid var(--border, #e2e3df);
+}
+
+.plan-meal-section {
+  display: grid;
+  gap: 0.6rem;
+  padding-top: 0.9rem;
+}
+
+.plan-meal-section + .plan-meal-section {
+  border-top: 1px solid var(--border, #e2e3df);
+}
+
+.plan-meal-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.plan-meal-section-heading h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.plan-add-special {
+  min-height: 44px;
+  margin-top: 0.8rem;
+  border: 1px dashed var(--border, #cfd2cb);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--primary, #315f4b);
+  font: inherit;
+  font-weight: 700;
+}
+
+.plan-meal-row {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: var(--surface-subtle, #f6f6f3);
+}
+
+.plan-meal-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+  gap: 0.65rem;
+  align-items: end;
+}
+
+.plan-meal-topline > label,
+.plan-needs-field,
+.plan-produce {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 650;
+}
+
+.plan-audience {
+  position: relative;
+}
+
+.plan-audience summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border, #cfd2cb);
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.plan-audience > div {
+  position: absolute;
+  z-index: 8;
+  right: 0;
+  width: min(280px, 80vw);
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.35rem;
+  padding: 0.5rem;
+  border: 1px solid var(--border, #cfd2cb);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(0 0 0 / 12%);
+}
+
+.plan-audience label {
+  min-height: 44px;
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.3rem;
+}
+
+.plan-audience input[type='checkbox'],
+.plan-shopping-check input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+}
+
+.plan-needs-field textarea,
+.plan-produce textarea {
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.plan-meal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.75rem;
+}
+
+.plan-produce {
+  padding: 0.9rem;
+  border: 1px solid var(--border, #d9dbd5);
+  border-radius: 14px;
+  background: var(--surface, #fff);
+}
+
+.plan-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(0 0 0 / 46%);
+}
+
+.plan-dialog {
+  width: min(100%, 620px);
+  max-height: min(84dvh, 760px);
+  overflow: auto;
+  padding: 1rem;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 22%);
+}
+
+.plan-dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.plan-dialog-heading h2 { margin: 0; }
+
+.plan-dialog-heading button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 1.15rem;
+}
+
+.plan-dialog-list,
+.plan-shopping-suggestions {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+
+.plan-dialog-choice {
+  min-height: 58px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--border, #d7d9d3);
+  border-radius: 10px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+
+.plan-shopping-suggestion {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.7rem;
+  border: 1px solid var(--border, #d7d9d3);
+  border-radius: 10px;
+}
+
+.plan-shopping-suggestion > div,
+.plan-shopping-suggestion label,
+.plan-shopping-check span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.plan-shopping-suggestion small {
+  color: var(--text-muted, #666963);
+}
+
+.plan-shopping-check {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.plan-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.plan-state {
+  min-height: 240px;
+  display: grid;
+  place-items: center;
+  gap: 0.6rem;
+  text-align: center;
+  color: var(--text-muted, #62655f);
+}
+
+@media (max-width: 620px) {
+  .plan-heading {
+    align-items: center;
+  }
+
+  .plan-week-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .plan-week-bar > div {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .plan-week-bar > button:last-child {
+    justify-self: stretch;
+  }
+
+  .plan-week-bar > button:first-child {
+    justify-self: stretch;
+  }
+
+  .plan-tools {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .plan-tools > details,
+  .plan-tools > button {
+    width: 100%;
+  }
+
+  .plan-day-toggle {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .plan-day-summary {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    white-space: normal;
+  }
+
+  .plan-meal-topline {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-audience > div {
+    left: 0;
+    right: auto;
+    width: 100%;
+    position: static;
+    box-shadow: none;
+  }
+
+  .plan-dialog-actions {
+    flex-direction: column-reverse;
+  }
+
+  .plan-dialog-actions .shell-button {
+    width: 100%;
+  }
+}
