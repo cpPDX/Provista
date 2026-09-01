@@ -271,7 +271,7 @@ export function PantryPage() {
           <h1 id="pantry-react-title">Pantry</h1>
           <p id="pantry-page-help">Mark staples Running low or Out and Provista will surface them on Home and in List review.</p>
         </div>
-        <button id="btn-add-inventory" type="button" className="shell-button shell-button-primary" onClick={() => setDialog({ mode: 'add', prefill: search.trim() })}>
+        <button id="btn-add-inventory" type="button" className="shell-button shell-button-primary" disabled={!online} onClick={() => setDialog({ mode: 'add', prefill: search.trim() })}>
           Track item
         </button>
       </div>
@@ -318,7 +318,7 @@ export function PantryPage() {
             <>
               <strong>No Pantry items match “{search.trim()}”.</strong>
               <div className="pantry-empty-actions">
-                <button type="button" className="shell-button shell-button-primary" onClick={() => setDialog({ mode: 'add', prefill: search.trim() })}>
+                <button type="button" className="shell-button shell-button-primary" disabled={!online} onClick={() => setDialog({ mode: 'add', prefill: search.trim() })}>
                   Track “{search.trim()}”
                 </button>
                 <button type="button" className="shell-button shell-button-secondary" onClick={() => setSearch('')}>Clear search</button>
@@ -378,11 +378,11 @@ export function PantryPage() {
                 )}
 
                 <div className="pantry-card-actions">
-                  <button type="button" className="shell-button shell-button-secondary" onClick={() => setDialog({ mode: 'edit', itemId: item._id })}>
+                  <button type="button" className="shell-button shell-button-secondary" disabled={!online} onClick={() => setDialog({ mode: 'edit', itemId: item._id })}>
                     Edit details
                   </button>
                   {isAdmin && (
-                    <button type="button" className="shell-button pantry-remove-button" onClick={() => void removeItem(item)}>
+                    <button type="button" className="shell-button pantry-remove-button" disabled={!online} onClick={() => void removeItem(item)}>
                       Remove
                     </button>
                   )}
