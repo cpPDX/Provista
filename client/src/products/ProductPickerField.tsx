@@ -50,7 +50,10 @@ export function ProductPickerField({
 
   useEffect(() => {
     setMatches(initialCandidates);
-  }, [candidateKey, initialCandidates]);
+    // candidateKey intentionally represents candidate contents so callers can
+    // provide equivalent arrays without retriggering this effect by identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [candidateKey]);
 
   useEffect(() => {
     const query = name.trim();
