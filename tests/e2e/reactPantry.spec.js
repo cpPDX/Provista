@@ -35,6 +35,7 @@ test.describe('React Pantry migration', () => {
     await page.getByRole('button', { name: 'Track item', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Track an item' });
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel('What do you want to track?')).toBeFocused();
     await dialog.getByLabel('What do you want to track?').fill(name);
     await dialog.getByLabel('Category').fill('Pantry');
     await dialog.getByLabel('Unit').fill('each');
@@ -88,14 +89,17 @@ test.describe('React Pantry migration', () => {
     await openReactPantry(page);
 
     const card = page.locator(`.pantry-card[data-inv-id="${pantry._id}"]`);
-    await card.getByRole('button', { name: 'Edit details' }).click();
+    const editButton = card.getByRole('button', { name: 'Edit details' });
+    await editButton.click();
     const editDialog = page.getByRole('dialog', { name: `Track ${name}` });
+    await expect(editDialog.getByRole('button', { name: `Close Track ${name}` })).toBeFocused();
     await editDialog.getByLabel('Exact quantity').check();
     await editDialog.getByLabel('How many are left?').fill('3');
     await editDialog.getByLabel(/Mark Running low at or below/).fill('2');
     await editDialog.getByRole('button', { name: 'Save tracking' }).click();
 
     await expect(editDialog).toBeHidden();
+    await expect(editButton).toBeFocused();
     await expect(card).toHaveAttribute('data-tracking-mode', 'exact');
     await expect(card.locator('.qty-val')).toHaveText('3');
     await expect(card).toContainText('Provista marks low at 2');
