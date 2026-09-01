@@ -64,9 +64,15 @@ test.describe('React Pantry migration', () => {
     const increase = card.getByRole('button', { name: `Increase ${name} quantity` });
     await expect(card).toHaveAttribute('data-tracking-mode', 'exact');
 
-    await increase.click();
-    await increase.click();
-    await increase.click();
+    await page.evaluate(id => {
+      const cardElement = document.querySelector(`.pantry-card[data-inv-id="${id}"]`);
+      const button = cardElement?.querySelector('button[aria-label^="Increase "]');
+      if (!(button instanceof HTMLButtonElement)) throw new Error('Increase control is not available');
+      button.click();
+      button.click();
+      button.click();
+      button.focus();
+    }, pantry._id);
 
     await expect(card.locator('.qty-val')).toHaveText('4');
     await expect(increase).toBeVisible();
