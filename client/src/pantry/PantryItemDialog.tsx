@@ -28,6 +28,7 @@ function numericValue(value: string, label: string): number {
 
 export function PantryItemDialog({ mode, item = null, prefill = '', online, onClose, onSaved }: PantryItemDialogProps) {
   const nameRef = useRef<HTMLInputElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const [name, setName] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<ProductRef | null>(null);
   const [category, setCategory] = useState('Other');
@@ -68,7 +69,15 @@ export function PantryItemDialog({ mode, item = null, prefill = '', online, onCl
   }, [item?._id, mode, prefill]);
 
   useEffect(() => {
-    window.setTimeout(() => nameRef.current?.focus(), 0);
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => {
+      (nameRef.current || closeRef.current)?.focus();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
+    };
   }, []);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -157,7 +166,7 @@ export function PantryItemDialog({ mode, item = null, prefill = '', online, onCl
               <p className="pantry-eyebrow">Pantry tracking</p>
               <h2 id="pantry-dialog-title">{title}</h2>
             </div>
-            <button type="button" className="pantry-modal-close" aria-label={`Close ${title}`} disabled={saving} onClick={onClose}>✕</button>
+            <button ref={closeRef} type="button" className="pantry-modal-close" aria-label={`Close ${title}`} disabled={saving} onClick={onClose}>✕</button>
           </div>
 
           {mode === 'add' ? (
