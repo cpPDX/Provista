@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../api/http';
+import { useOnlineStatus } from '../app/useOnlineStatus';
 import { useAuth } from '../auth/AuthProvider';
 import { useDirtyState } from '../shell/DirtyStateProvider';
 import { useToast } from '../shell/ToastProvider';
@@ -177,22 +178,6 @@ function HomeCard({
   );
 }
 
-function useOnlineStatus() {
-  const [online, setOnline] = useState(() => navigator.onLine);
-
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
-    return () => {
-      window.removeEventListener('online', update);
-      window.removeEventListener('offline', update);
-    };
-  }, []);
-
-  return online;
-}
-
 export function HomePage() {
   const { session } = useAuth();
   const { requestNavigation } = useDirtyState();
@@ -257,6 +242,10 @@ export function HomePage() {
       if (focus) params.set('focus', focus);
       window.location.assign(`/app?${params.toString()}`);
     });
+  };
+
+  const openReact = (path: string) => {
+    void requestNavigation(() => window.location.assign(path));
   };
 
   const openPriceReview = () => {
@@ -340,7 +329,7 @@ export function HomePage() {
         title: 'Review low and out staples',
         detail: `${lowStock.length} item${lowStock.length === 1 ? '' : 's'} need attention.`,
         action: 'Open Pantry',
-        onAction: () => openLegacy('inventory')
+        onAction: () => openReact('/app/pantry')
       };
     }
     if (needed.length) {
@@ -408,7 +397,7 @@ export function HomePage() {
           items={lowStock}
           emptyText="No tracked staples are marked low or out."
           action="Open Pantry"
-          onAction={() => openLegacy('inventory')}
+          onAction={() => openReact('/app/pantry')}
           status={lowStockStatus}
           onRetry={() => void lowStockQuery.refetch()}
         />
