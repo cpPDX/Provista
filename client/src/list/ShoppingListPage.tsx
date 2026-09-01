@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useOnlineStatus } from '../app/useOnlineStatus';
 import {
   completeFirstAction,
@@ -80,6 +80,7 @@ function householdPrice(item: ShoppingListItem): string {
 
 export function ShoppingListPage() {
   const queryClient = useQueryClient();
+  const location = useLocation();
   const navigate = useNavigate();
   const confirm = useConfirm();
   const { requestNavigation } = useDirtyState();
@@ -108,6 +109,14 @@ export function ShoppingListPage() {
     }
     setActiveStoreId(current => current || inferActiveStore(checkedItems));
   }, [checkedItems.length]);
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('focus') !== 'rapid-list-input') return;
+    const timer = window.setTimeout(() => {
+      document.querySelector<HTMLTextAreaElement>('#react-rapid-list-input')?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [location.search]);
 
   useEffect(() => {
     if (!online) return;
