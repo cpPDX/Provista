@@ -11,7 +11,9 @@ async function registerHousehold(page, label) {
   await page.fill('#register-email', email);
   await page.fill('#register-password', password);
   await page.click('#btn-register-continue');
-  await page.click('[data-action="create"]');
+  await expect(page.locator('#step-household')).toBeVisible();
+  await page.click('#btn-choose-create-household');
+  await expect(page.locator('#step-create')).toBeVisible();
   await page.fill('#household-name', `${label} Household`);
   await page.click('#btn-create-household');
 
