@@ -95,14 +95,14 @@ test.describe('React Pantry migration', () => {
     await openReactPantry(page);
 
     const card = page.locator(`.pantry-card[data-inv-id="${pantry._id}"]`);
-    const editButton = card.getByRole('button', { name: 'Edit details' });
+    const editButton = card.getByRole('button', { name: 'Edit details', exact: true });
     await editButton.click();
     const editDialog = page.getByRole('dialog', { name: `Track ${name}` });
     await expect(editDialog.getByRole('button', { name: `Close Track ${name}` })).toBeFocused();
     await editDialog.getByLabel('Exact quantity').check();
     await editDialog.getByLabel('How many are left?').fill('3');
     await editDialog.getByLabel(/Mark Running low at or below/).fill('2');
-    await editDialog.getByRole('button', { name: 'Save tracking' }).click();
+    await editDialog.getByRole('button', { name: 'Save tracking', exact: true }).click();
 
     await expect(editDialog).toBeHidden();
     await expect(editButton).toBeFocused();
@@ -110,10 +110,10 @@ test.describe('React Pantry migration', () => {
     await expect(card.locator('.qty-val')).toHaveText('3');
     await expect(card).toContainText('Provista marks low at 2');
 
-    await card.getByRole('button', { name: 'Remove' }).click();
+    await card.getByRole('button', { name: 'Remove', exact: true }).click();
     const confirm = page.getByRole('alertdialog');
     await expect(confirm).toContainText('Remove from Pantry?');
-    await confirm.getByRole('button', { name: 'Remove from Pantry' }).click();
+    await confirm.getByRole('button', { name: 'Remove from Pantry', exact: true }).click();
     await expect(card).toHaveCount(0);
 
     await expect.poll(async () => {
@@ -137,9 +137,9 @@ test.describe('React Pantry migration', () => {
       await context.setOffline(true);
       await expect(page.locator('.pantry-offline')).toContainText('read-only');
       await expect(page.getByRole('button', { name: 'Track item', exact: true })).toBeDisabled();
-      await expect(card.getByRole('button', { name: 'Edit details' })).toBeDisabled();
-      await expect(card.getByRole('button', { name: 'Remove' })).toBeDisabled();
-      await expect(card.getByRole('button', { name: 'Running low' })).toBeDisabled();
+      await expect(card.getByRole('button', { name: 'Edit details', exact: true })).toBeDisabled();
+      await expect(card.getByRole('button', { name: 'Remove', exact: true })).toBeDisabled();
+      await expect(card.getByRole('button', { name: 'Running low', exact: true })).toBeDisabled();
     } finally {
       await context.setOffline(false);
     }
@@ -148,7 +148,7 @@ test.describe('React Pantry migration', () => {
   test('opens low-stock review from React List without falling back to legacy', async ({ page }) => {
     await page.goto('/app/list');
     await page.getByText('More shopping tools').click();
-    await page.getByRole('button', { name: 'Review low stock' }).click();
+    await page.getByRole('button', { name: 'Review low stock', exact: true }).click();
 
     await expect(page).toHaveURL(/\/app\/pantry$/);
     await expect(page.locator('#pantry-react-title')).toHaveText('Pantry');
