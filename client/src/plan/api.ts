@@ -1,4 +1,5 @@
 import { apiFetch } from '../api/http';
+import { queryClient } from '../app/queryClient';
 import type {
   FavoriteMeal,
   MealPlan,
@@ -11,21 +12,30 @@ export const mealPlanQueryKey = (weekStart: string) => ['meal-plan', weekStart] 
 export const mealPlanSettingsQueryKey = ['meal-plan-settings'] as const;
 export const favoriteMealsQueryKey = ['meal-plan-favorites'] as const;
 
+function invalidateMealPlanCache(weekStart: string) {
+  return queryClient.invalidateQueries({
+    queryKey: mealPlanQueryKey(weekStart),
+    refetchType: 'none'
+  });
+}
+
 export function loadMealPlan(weekStart: string) {
   return apiFetch<MealPlan>(`/api/meal-plan?weekStart=${encodeURIComponent(weekStart)}`);
 }
 
-export function saveMealPlan(payload: {
+export async function saveMealPlan(payload: {
   weekStart: string;
   days: PlanDay[];
   produceNotes: string;
   shoppingNotes: string;
 }) {
-  return apiFetch<MealPlan>('/api/meal-plan', {
+  const saved = await apiFetch<MealPlan>('/api/meal-plan', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   });
+  await invalidateMealPlanCache(payload.weekStart);
+  return saved;
 }
 
 export function loadMealPlanSettings() {
@@ -40,12 +50,14 @@ export function saveMealPlanSettings(settings: Partial<MealPlanSettings>) {
   });
 }
 
-export function copyPreviousWeek(weekStart: string) {
-  return apiFetch<MealPlan>('/api/meal-plan/copy-previous', {
+export async function copyPreviousWeek(weekStart: string) {
+  const copied = await apiFetch<MealPlan>('/api/meal-plan/copy-previous', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ weekStart })
   });
+  await invalidateMealPlanCache(weekStart);
+  return copied;
 }
 
 export function loadFavoriteMeals() {
