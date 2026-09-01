@@ -199,6 +199,10 @@ app.get('/app', (req, res) => {
 // `/app?tab=list` until checkout and capture parity are complete.
 app.get('/app/list', serveReactApp);
 
+// PRO-54 Pantry migration route. Keep the legacy `?tab=inventory` deep link
+// available until the authenticated legacy renderer is retired under PRO-56.
+app.get('/app/pantry', serveReactApp);
+
 // New-household onboarding still depends on legacy DOM targets until PRO-55.
 app.get('/legacy-app', serveLegacyApp);
 
