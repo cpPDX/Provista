@@ -50,8 +50,8 @@ test.describe('React Plan migration', () => {
     const audience = today.locator('.plan-meal-section[data-meal-type="dinner"] .plan-audience').first();
     await expect(audience.locator('summary')).toContainText('Everyone');
     await audience.locator('summary').click();
-    await audience.getByLabel(personName).check();
     await audience.getByLabel('Everyone').uncheck();
+    await audience.getByLabel(personName).check();
 
     await expect(audience.locator('summary')).toContainText(personName);
     await expect(page.locator('.plan-save-status')).toContainText('Saved', { timeout: 8000 });
