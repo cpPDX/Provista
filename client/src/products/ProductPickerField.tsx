@@ -3,6 +3,8 @@ import { searchCatalog } from './api';
 import type { ProductRef } from './types';
 import './product-picker.css';
 
+const EMPTY_CANDIDATES: ProductRef[] = [];
+
 interface ProductPickerFieldProps {
   idPrefix: string;
   name: string;
@@ -34,7 +36,7 @@ export function ProductPickerField({
   unit,
   onUnitChange,
   online,
-  initialCandidates = [],
+  initialCandidates = EMPTY_CANDIDATES,
   inputRef,
   nameLabel = 'What do you need?'
 }: ProductPickerFieldProps) {
@@ -48,7 +50,7 @@ export function ProductPickerField({
 
   useEffect(() => {
     setMatches(initialCandidates);
-  }, [candidateKey]);
+  }, [candidateKey, initialCandidates]);
 
   useEffect(() => {
     const query = name.trim();
@@ -81,7 +83,7 @@ export function ProductPickerField({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [candidateKey, initialCandidates, name, online]);
+  }, [candidateKey, name, online]);
 
   return (
     <div className="product-picker">
