@@ -108,6 +108,13 @@ jobs:
           node --check tests/e2e/reactPantry.spec.js
           node --check tests/e2e/reactPlan.spec.js
           node --check tests/e2e/reactOnboarding.spec.js
+          node --check .github/scripts/staging-deployment-policy.cjs
+          node --check .github/scripts/prepare-staging-deployment.cjs
+          node --check tests/ci/prepareStagingDeployment.test.js
+          node --check tests/ci/stagingDeploymentPolicy.test.js
+
+      - name: Test deployment policy
+        run: npm run test:ci-policy
 
       - name: Run API test suite
         run: npm run test:api

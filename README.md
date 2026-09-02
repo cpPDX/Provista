@@ -261,6 +261,12 @@ The server begins listening before MongoDB finishes connecting so the process ca
 /api/health/ready
 ```
 
+Staging deploy intent is preserved by the GitHub-managed Railway queue during
+the plan's 8:00 AM–8:00 PM Pacific blackout. One environment-scoped repository
+secret, `RAILWAY_STAGING_TOKEN`, is required before activating it on the default
+branch. Setup, reconciliation behavior, status states, and recovery steps are in
+[`docs/deployment.md`](docs/deployment.md).
+
 ---
 
 ## Environment Variables
@@ -350,7 +356,7 @@ Provista/
 │   ├── api/                   Jest / Supertest coverage
 │   └── e2e/                   Playwright household workflows
 ├── docs/                      Architecture, external pricing, release guidance
-└── .github/workflows/         CI
+└── .github/workflows/         CI and staging deployment reconciliation
 ```
 
 ---
