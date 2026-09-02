@@ -102,7 +102,7 @@ test.describe('React Plan migration', () => {
     }).toBe(finalMeal);
   });
 
-  test('returns to Plan without entering a render loop', async ({ page }) => {
+  test('repeatedly returns to a cached Plan without entering a render loop', async ({ page }) => {
     const renderLoopErrors = [];
     page.on('console', message => {
       if (message.type() === 'error' && message.text().includes('Maximum update depth exceeded')) {
@@ -112,13 +112,15 @@ test.describe('React Plan migration', () => {
 
     await page.goto('/app/plan');
     await expect(page.locator('#plan-title')).toHaveText('Plan');
-    await page.getByRole('button', { name: 'List', exact: true }).click();
-    await expect(page).toHaveURL(/\/app\/list$/);
-    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await page.getByRole('button', { name: 'List', exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/list$/);
+      await page.getByRole('button', { name: 'Plan', exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/plan$/);
+      await expect(page.locator('#plan-title')).toHaveText('Plan');
+    }
 
-    await expect(page).toHaveURL(/\/app\/plan$/);
-    await expect(page.locator('#plan-title')).toHaveText('Plan');
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(1000);
     expect(renderLoopErrors).toEqual([]);
   });
 

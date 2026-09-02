@@ -180,6 +180,7 @@ export function PlanPage() {
   const queuedSaveRef = useRef<{ snapshot: MealPlan; revision: number } | null>(null);
   const saveRunRef = useRef<Promise<boolean> | null>(null);
   const firstFocusDoneRef = useRef(false);
+  const appliedPlanUpdateRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!settingsQuery.data || weekStart) return;
@@ -195,6 +196,10 @@ export function PlanPage() {
 
   useEffect(() => {
     if (!planQuery.data) return;
+    const updateKey = `${weekStart}:${planQuery.dataUpdatedAt}`;
+    if (appliedPlanUpdateRef.current === updateKey) return;
+    appliedPlanUpdateRef.current = updateKey;
+
     const next = normalizePlan(planQuery.data);
     setDraft(next);
     lastSavedRef.current = clonePlan(next);
@@ -213,7 +218,7 @@ export function PlanPage() {
     });
     if (todayIndex >= 0) initial.add(todayIndex);
     setExpandedDays(initial);
-  }, [planQuery.data, setDirty]);
+  }, [planQuery.data, planQuery.dataUpdatedAt, setDirty, weekStart]);
 
   useEffect(() => () => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
