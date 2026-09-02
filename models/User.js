@@ -10,7 +10,8 @@ const userSchema = new mongoose.Schema({
   passwordResetTokenHash: { type: String, default: null, select: false },
   passwordResetExpiresAt: { type: Date, default: null, select: false },
   preferences: {
-    barcodeAutoAccept: { type: Boolean, default: null }  // null = inherit household setting
+    barcodeAutoAccept: { type: Boolean, default: null },  // null = inherit household setting
+    theme: { type: String, enum: ['light', 'dark'], default: 'light' }
   }
 }, { timestamps: true });
 

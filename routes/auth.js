@@ -222,8 +222,8 @@ router.get('/me', requireSession, async (req, res) => {
 // PUT /api/auth/profile - update account/profile fields
 router.put('/profile', requireSession, async (req, res) => {
   try {
-    const { name, displayName, email, barcodeAutoAccept } = req.body;
-    if (name === undefined && displayName === undefined && email === undefined && barcodeAutoAccept === undefined) {
+    const { name, displayName, email, barcodeAutoAccept, theme } = req.body;
+    if (name === undefined && displayName === undefined && email === undefined && barcodeAutoAccept === undefined && theme === undefined) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
 
@@ -247,6 +247,10 @@ router.put('/profile', requireSession, async (req, res) => {
     }
     if (barcodeAutoAccept !== undefined) {
       update['preferences.barcodeAutoAccept'] = barcodeAutoAccept === null ? null : Boolean(barcodeAutoAccept);
+    }
+    if (theme !== undefined) {
+      if (!['light', 'dark'].includes(theme)) return res.status(400).json({ error: 'Theme must be light or dark' });
+      update['preferences.theme'] = theme;
     }
 
     const user = await User.findByIdAndUpdate(req.user._id, update, { new: true, runValidators: true }).select('-passwordHash');

@@ -53,6 +53,37 @@ test.describe('React migration shell', () => {
     await expect(page.getByText('Grocery planning for real households')).toBeVisible();
   });
 
+  test('restores branded navigation icons and persists theme per user', async ({ page }) => {
+    await createHouseholdSession(page, 'Theme');
+
+    await page.goto('/app');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('.shell-bottom-nav [data-nav-icon]')).toHaveCount(5);
+    await expect(page.locator('[data-nav-icon="home"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="plan"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="list"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="pantry"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="more"]')).toBeVisible();
+
+    const session = await page.request.get('/api/auth/me').then(response => response.json());
+    const themeKey = `provista_theme_${session.user._id}`;
+    const toggle = page.getByRole('button', { name: 'Switch to dark theme' });
+    await toggle.click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.getByRole('button', { name: 'Switch to light theme' })).toBeVisible();
+    await expect.poll(() => page.evaluate(key => localStorage.getItem(key), themeKey)).toBe('dark');
+    await expect.poll(async () => {
+      const response = await page.request.get('/api/auth/me');
+      return (await response.json()).user.preferences.theme;
+    }).toBe('dark');
+
+    await page.evaluate(key => localStorage.removeItem(key), themeKey);
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect.poll(() => page.evaluate(key => localStorage.getItem(key), themeKey)).toBe('dark');
+  });
+
   test('keeps the production React Home shell available after going offline', async ({ page, context }) => {
     await createHouseholdSession(page, 'Offline');
 
