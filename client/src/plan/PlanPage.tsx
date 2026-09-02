@@ -252,6 +252,7 @@ export function PlanPage() {
         });
         const normalized = normalizePlan({ ...saved, people: queued.snapshot.people });
         lastSavedRef.current = clonePlan(normalized);
+        queryClient.setQueryData(mealPlanQueryKey(normalized.weekStart), normalized);
         await queryClient.invalidateQueries({ queryKey: ['home'], refetchType: 'none' });
 
         if (!queuedSaveRef.current && revisionRef.current === queued.revision) {
