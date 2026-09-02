@@ -194,7 +194,7 @@ export function PlanPage() {
   });
 
   useEffect(() => {
-    if (!planQuery.data || draft) return;
+    if (!planQuery.data || draft || String(planQuery.data.weekStart).slice(0, 10) !== weekStart) return;
     const next = normalizePlan(planQuery.data);
     setDraft(next);
     lastSavedRef.current = clonePlan(next);
