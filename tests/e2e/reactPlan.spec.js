@@ -161,9 +161,11 @@ test.describe('React Plan migration', () => {
     await page.locator('.plan-day-today input[data-meal-name="dinner-0"]').fill(mealName);
 
     await page.getByRole('button', { name: 'Next →' }).click();
+    await expect(page.getByRole('button', { name: 'This week', exact: true })).toBeEnabled();
     await expect(page.locator('.plan-day')).toHaveCount(7);
 
     await page.getByRole('button', { name: '← Previous' }).click();
+    await expect(page.getByRole('button', { name: 'This week', exact: true })).toBeDisabled();
     await expect(page.locator('.plan-day-today input[data-meal-name="dinner-0"]')).toHaveValue(mealName, { timeout: 8000 });
   });
 

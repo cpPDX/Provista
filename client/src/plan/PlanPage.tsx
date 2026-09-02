@@ -180,7 +180,6 @@ export function PlanPage() {
   const queuedSaveRef = useRef<{ snapshot: MealPlan; revision: number } | null>(null);
   const saveRunRef = useRef<Promise<boolean> | null>(null);
   const firstFocusDoneRef = useRef(false);
-  const appliedPlanUpdateRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!settingsQuery.data || weekStart) return;
@@ -195,11 +194,7 @@ export function PlanPage() {
   });
 
   useEffect(() => {
-    if (!planQuery.data) return;
-    const updateKey = `${weekStart}:${planQuery.dataUpdatedAt}`;
-    if (appliedPlanUpdateRef.current === updateKey) return;
-    appliedPlanUpdateRef.current = updateKey;
-
+    if (!planQuery.data || draft || String(planQuery.data.weekStart).slice(0, 10) !== weekStart) return;
     const next = normalizePlan(planQuery.data);
     setDraft(next);
     lastSavedRef.current = clonePlan(next);
@@ -218,7 +213,7 @@ export function PlanPage() {
     });
     if (todayIndex >= 0) initial.add(todayIndex);
     setExpandedDays(initial);
-  }, [planQuery.data, planQuery.dataUpdatedAt, setDirty, weekStart]);
+  }, [draft, planQuery.data, setDirty]);
 
   useEffect(() => () => {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
@@ -257,6 +252,7 @@ export function PlanPage() {
         });
         const normalized = normalizePlan({ ...saved, people: queued.snapshot.people });
         lastSavedRef.current = clonePlan(normalized);
+        queryClient.setQueryData(mealPlanQueryKey(normalized.weekStart), normalized);
         await queryClient.invalidateQueries({ queryKey: ['home'], refetchType: 'none' });
 
         if (!queuedSaveRef.current && revisionRef.current === queued.revision) {
