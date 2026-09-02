@@ -102,6 +102,26 @@ test.describe('React Plan migration', () => {
     }).toBe(finalMeal);
   });
 
+  test('returns to Plan without entering a render loop', async ({ page }) => {
+    const renderLoopErrors = [];
+    page.on('console', message => {
+      if (message.type() === 'error' && message.text().includes('Maximum update depth exceeded')) {
+        renderLoopErrors.push(message.text());
+      }
+    });
+
+    await page.goto('/app/plan');
+    await expect(page.locator('#plan-title')).toHaveText('Plan');
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/list$/);
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+
+    await expect(page).toHaveURL(/\/app\/plan$/);
+    await expect(page.locator('#plan-title')).toHaveText('Plan');
+    await page.waitForTimeout(250);
+    expect(renderLoopErrors).toEqual([]);
+  });
+
   test('shows household audience inline and saves planning-only people without accounts', async ({ page }) => {
     const personName = `Planner ${Date.now()}`;
     const personResponse = await page.request.post('/api/household/people', { data: { displayName: personName } });
