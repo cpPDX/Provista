@@ -19,12 +19,12 @@
 .pantry-page-heading p {
   max-width: 44rem;
   margin: 0.35rem 0 0;
-  color: var(--shell-muted, #667085);
+  color: var(--shell-muted, var(--text-muted));
 }
 
 .pantry-eyebrow {
   margin: 0 0 0.2rem;
-  color: var(--shell-muted, #667085);
+  color: var(--shell-muted, var(--text-muted));
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -33,10 +33,10 @@
 
 .pantry-offline {
   padding: 0.7rem 0.85rem;
-  border: 1px solid #d7b96d;
+  border: 1px solid var(--warning-border);
   border-radius: 0.8rem;
-  background: #fff8e5;
-  color: #6a4c00;
+  background: var(--warning-bg);
+  color: var(--warning-text);
   font-weight: 650;
 }
 
@@ -60,7 +60,7 @@
   width: 100%;
   min-height: 44px;
   padding: 0.65rem 0.75rem;
-  border: 1px solid var(--shell-border, #d6d6d6);
+  border: 1px solid var(--shell-border, var(--border));
   border-radius: 0.7rem;
   background: var(--shell-surface, #fff);
   color: inherit;
@@ -76,7 +76,7 @@
   display: grid;
   gap: 0.8rem;
   padding: 0.95rem;
-  border: 1px solid var(--shell-border, #dedede);
+  border: 1px solid var(--shell-border, var(--border));
   border-left-width: 4px;
   border-radius: 0.9rem;
   background: var(--shell-surface, #fff);
@@ -103,7 +103,7 @@
 .pantry-card-notes,
 .pantry-mode-help {
   margin: 0.25rem 0 0;
-  color: var(--shell-muted, #667085);
+  color: var(--shell-muted, var(--text-muted));
   font-size: 0.86rem;
 }
 
@@ -125,7 +125,7 @@
 .pantry-status-actions button,
 .pantry-qty-controls button {
   min-height: 44px;
-  border: 1px solid var(--shell-border, #cfd4dc);
+  border: 1px solid var(--shell-border, var(--border));
   border-radius: 0.7rem;
   background: var(--shell-surface, #fff);
   color: inherit;
@@ -135,9 +135,9 @@
 }
 
 .pantry-status-actions button.active {
-  border-color: #216750;
+  border-color: var(--feature-accent);
   background: rgba(33, 103, 80, 0.1);
-  color: #174a3a;
+  color: var(--feature-accent);
 }
 
 .pantry-status-actions button:disabled,
@@ -168,9 +168,9 @@
 }
 
 .pantry-remove-button {
-  border: 1px solid #d9a5a5;
-  background: #fff7f7;
-  color: #8b2727;
+  border: 1px solid var(--danger);
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .pantry-state,
@@ -179,9 +179,9 @@
   justify-items: center;
   gap: 0.55rem;
   padding: 2rem 1rem;
-  border: 1px dashed var(--shell-border, #d6d6d6);
+  border: 1px dashed var(--shell-border, var(--border));
   border-radius: 0.9rem;
-  color: var(--shell-muted, #667085);
+  color: var(--shell-muted, var(--text-muted));
   text-align: center;
 }
 
@@ -259,7 +259,7 @@
   gap: 0.45rem;
   margin: 0;
   padding: 0.75rem;
-  border: 1px solid var(--shell-border, #d6d6d6);
+  border: 1px solid var(--shell-border, var(--border));
   border-radius: 0.8rem;
 }
 
@@ -294,7 +294,7 @@
 
 .pantry-tracking-choice small,
 .pantry-field small {
-  color: var(--shell-muted, #667085);
+  color: var(--shell-muted, var(--text-muted));
   font-weight: 500;
 }
 
@@ -320,13 +320,13 @@
 }
 
 .pantry-dialog-warning {
-  background: #fff8e5;
-  color: #6a4c00;
+  background: var(--warning-bg);
+  color: var(--warning-text);
 }
 
 .pantry-dialog-error {
-  background: #fff0f0;
-  color: #8b2727;
+  background: var(--danger-bg);
+  color: var(--danger);
 }
 
 .pantry-modal-actions {

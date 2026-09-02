@@ -5,8 +5,13 @@ export interface ProvistaUser {
   email: string;
   role: 'owner' | 'admin' | 'member' | string;
   householdId?: string | null;
-  preferences?: unknown;
+  preferences?: {
+    barcodeAutoAccept?: boolean | null;
+    theme?: ThemePreference;
+  };
 }
+
+export type ThemePreference = 'light' | 'dark';
 
 export interface ProvistaHousehold {
   _id: string;

@@ -1,7 +1,7 @@
 .shell-bottom-nav button.active,
 .shell-bottom-nav button[aria-current="page"] {
-  color: #0d7188;
-  background: #eef9fb;
+  color: var(--accent-strong);
+  background: var(--accent-subtle);
 }
 
 .home-react-heading {
@@ -20,7 +20,7 @@
 
 .home-react-date {
   margin: 0;
-  color: #61767c;
+  color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 700;
 }
@@ -43,32 +43,32 @@
   flex-direction: column;
   min-height: 220px;
   padding: 20px;
-  border: 1px solid #d7e8eb;
+  border: 1px solid var(--border);
   border-radius: 18px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 12px 32px rgb(24 52 59 / 6%);
 }
 
 .home-react-featured {
   grid-column: 1 / -1;
   min-height: 190px;
-  background: linear-gradient(145deg, #ffffff 0%, #eef9fb 100%);
+  background: linear-gradient(145deg, var(--surface) 0%, var(--accent-subtle) 100%);
 }
 
 .home-react-next {
   grid-column: 1 / -1;
   min-height: 190px;
-  border-color: #bcdde4;
+  border-color: var(--border-strong);
 }
 
 .home-react-price-card {
-  border-color: #ecd9aa;
-  background: #fffaf0;
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
 }
 
 .home-question {
   margin: 0 0 9px;
-  color: #157f98;
+  color: var(--accent-strong);
   font-size: 0.78rem;
   font-weight: 800;
   letter-spacing: 0.045em;
@@ -91,7 +91,7 @@
 .home-react-detail,
 .home-react-empty {
   margin: 0 0 12px;
-  color: #5f747a;
+  color: var(--text-muted);
   line-height: 1.5;
 }
 
@@ -109,7 +109,7 @@
   padding: 8px 0;
   border: 0;
   background: transparent;
-  color: #0d7188;
+  color: var(--accent-strong);
   font-weight: 800;
   text-align: left;
   cursor: pointer;
@@ -118,8 +118,8 @@
 .home-react-stale {
   padding: 4px 8px;
   border-radius: 999px;
-  background: #fff3cd;
-  color: #6b5100;
+  background: var(--warning-surface);
+  color: var(--warning-text);
   font-size: 0.72rem;
   font-weight: 800;
   white-space: nowrap;
@@ -129,7 +129,7 @@
   width: 100%;
   height: 108px;
   border-radius: 12px;
-  background: linear-gradient(90deg, #eef4f5 25%, #f8fbfb 50%, #eef4f5 75%);
+  background: linear-gradient(90deg, var(--surface-muted) 25%, var(--surface-subtle) 50%, var(--surface-muted) 75%);
   background-size: 200% 100%;
   animation: home-react-pulse 1.2s ease-in-out infinite;
 }
@@ -156,7 +156,7 @@
   justify-content: space-between;
   gap: 14px;
   padding: 12px 0;
-  border-bottom: 1px solid #e3edef;
+  border-bottom: 1px solid var(--border);
 }
 
 .home-react-price-row > span:first-child {
@@ -165,7 +165,7 @@
 }
 
 .home-react-price-row small {
-  color: #61767c;
+  color: var(--text-muted);
 }
 
 .home-react-price-input-wrap {
@@ -179,7 +179,7 @@
   width: 96px;
   min-height: 44px;
   padding: 8px 10px;
-  border: 1px solid #bcd4d9;
+  border: 1px solid var(--border-strong);
   border-radius: 9px;
   font: inherit;
   font-size: 1rem;
