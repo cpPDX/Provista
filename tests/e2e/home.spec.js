@@ -130,11 +130,16 @@ test.describe('Home / Today - React production slice', () => {
     await expect(page.locator('.plan-day-today input[data-meal-name="dinner-0"]')).toBeFocused({ timeout: 5000 });
   });
 
-  test('remaining legacy feature navigation returns Home to the React production surface', async ({ page, baseURL }) => {
+  test('remaining legacy More tools return Home to the React production surface', async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
 
     await page.getByRole('button', { name: 'More', exact: true }).click();
-    await expect(page.locator('.nav-item[data-tab="more"]')).toHaveClass(/active/);
+    await expect(page).toHaveURL('/app/more');
+    await expect(page.locator('#more-title')).toBeVisible();
+
+    await page.getByRole('link', { name: /My Account/ }).click();
+    await expect(page).toHaveURL('/app?tab=more&section=account');
+    await expect(page.locator('#section-account')).toBeVisible();
     await page.locator('.nav-item[data-tab="home"]').click();
 
     await expect(page).toHaveURL('/app');

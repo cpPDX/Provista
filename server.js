@@ -201,9 +201,10 @@ app.get('/app', (req, res) => {
 app.get('/app/list', serveReactApp);
 app.get('/app/pantry', serveReactApp);
 app.get('/app/plan', serveReactApp);
+app.get('/app/more', serveReactApp);
 
-// Compatibility surface remains available while More/Insights/scanner and
-// legacy authenticated JavaScript are retired under PRO-56.
+// Compatibility surface remains available while secondary More tools,
+// Insights, scanner, and legacy authenticated JavaScript are retired under PRO-56.
 app.get('/legacy-app', serveLegacyApp);
 
 // Vite's output lives under public/react-preview, but static directory indexes are

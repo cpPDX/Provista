@@ -84,6 +84,24 @@ test.describe('React migration shell', () => {
     await expect.poll(() => page.evaluate(key => localStorage.getItem(key), themeKey)).toBe('dark');
   });
 
+  test('keeps More in the React shell and preserves theme for legacy tools', async ({ page }) => {
+    await createHouseholdSession(page, 'More');
+
+    await page.goto('/app');
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/more$/);
+    await expect(page.locator('#more-title')).toHaveText('More');
+    await expect(page.locator('.shell-brand')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveAttribute('aria-current', 'page');
+
+    await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+    await page.getByRole('link', { name: /My Account/ }).click();
+    await expect(page).toHaveURL(/\/app\?tab=more&section=account$/);
+    await expect(page.locator('#section-account')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
+
   test('keeps the production React Home shell available after going offline', async ({ page, context }) => {
     await createHouseholdSession(page, 'Offline');
 
