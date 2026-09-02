@@ -29,6 +29,7 @@ import {
 import './list.css';
 
 const queryKey = ['shopping-list'] as const;
+const EMPTY_ITEMS: ShoppingListItem[] = [];
 
 interface CheckSync {
   serverChecked: boolean;
@@ -94,7 +95,7 @@ export function ShoppingListPage() {
   const [storePreferenceItem, setStorePreferenceItem] = useState<ShoppingListItem | null>(null);
   const checkSync = useRef(new Map<string, CheckSync>());
 
-  const items = listQuery.data || [];
+  const items = listQuery.data || EMPTY_ITEMS;
   const checkedItems = items.filter(item => item.checked);
   const onboardingActive = Boolean(
     onboardingQuery.data?.required &&
