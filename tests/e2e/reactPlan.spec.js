@@ -109,6 +109,10 @@ test.describe('React Plan migration', () => {
         renderLoopErrors.push(message.text());
       }
     });
+    await page.route('**/api/shopping-list', async route => {
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      await route.continue();
+    });
 
     await page.goto('/app/plan');
     await expect(page.locator('#plan-title')).toHaveText('Plan');
