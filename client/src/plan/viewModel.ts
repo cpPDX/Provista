@@ -1,6 +1,7 @@
 import type { MealAllocationProjection, MealType, PlanDay, PlanMeal } from './types';
 
 export type PlanningStatus = 'unplanned' | 'partial' | 'planned';
+type StandardMealType = Exclude<MealType, 'special'>;
 
 export interface MealContextStatus {
   meal: PlanMeal;
@@ -76,8 +77,10 @@ export function nextPlanningTarget(
   currentDayIndex: number,
   currentMealType: MealType
 ): PlanningTarget | null {
-  const mealTypes = enabledMealTypes.filter(type => type !== 'special');
-  const currentMealIndex = Math.max(0, mealTypes.indexOf(currentMealType));
+  const mealTypes = enabledMealTypes.filter((type): type is StandardMealType => type !== 'special');
+  const currentMealIndex = currentMealType === 'special'
+    ? mealTypes.length - 1
+    : Math.max(0, mealTypes.indexOf(currentMealType));
 
   for (let dayIndex = currentDayIndex; dayIndex < days.length; dayIndex += 1) {
     const startMealIndex = dayIndex === currentDayIndex ? currentMealIndex + 1 : 0;
