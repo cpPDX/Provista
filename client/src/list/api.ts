@@ -169,7 +169,9 @@ export async function updateShoppingListItem(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     });
-    const merged = { ...snapshot, ...response, ...patch };
+    // The patch is useful for optimistic/offline state, but a successful server
+    // response is canonical (for example, populated Store refs rather than IDs).
+    const merged = { ...snapshot, ...patch, ...response };
     await cacheShoppingItem(merged).catch(() => undefined);
     return { data: merged, queued: false };
   } catch (error) {
