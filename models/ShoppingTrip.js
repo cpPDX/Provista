@@ -10,8 +10,11 @@ const shoppingTripItemSchema = new mongoose.Schema({
   // actually purchased for completed trips.
   quantity: { type: Number, required: true, min: 0 },
   requiredQuantity: { type: Number, default: null, min: 0 },
-  intendedPurchaseQuantity: { type: Number, required: true, min: 0 },
-  actualPurchasedQuantity: { type: Number, required: true, min: 0 },
+  // Nullable for legacy completed trips that predate PRO-75. New trips always
+  // populate these fields; older trip documents can still be saved later when
+  // a deferred price is resolved without failing nested-schema validation.
+  intendedPurchaseQuantity: { type: Number, default: null, min: 0 },
+  actualPurchasedQuantity: { type: Number, default: null, min: 0 },
   quantitySource: { type: String, enum: ['system', 'user'], default: 'user' },
   storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
   storeName: { type: String, trim: true, default: '' },
