@@ -119,13 +119,14 @@ describe('weekly meal allocation projection', () => {
     const result = buildMealAllocationProjection({
       plan: plan([[meal('Dinner', 'Chicken Breast x5')]]),
       items,
-      inventoryItems: [{ itemId: 'chicken', quantity: 1, checked: true }]
+      inventoryItems: [{ itemId: 'chicken', trackingMode: 'exact', quantity: 4 }],
+      listItems: [{ itemId: 'chicken', quantity: 1, checked: true }]
     });
 
     expect(result.itemSummaries[0]).toMatchObject({
-      shortageQuantity: 4,
+      shortageQuantity: 1,
       listQuantity: 0,
-      shoppingQuantity: 4
+      shoppingQuantity: 1
     });
   });
 
