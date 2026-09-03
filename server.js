@@ -5,7 +5,8 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
-const { securityHeaders, createRateLimiter } = require('./middleware/security');
+const { rateLimit } = require('express-rate-limit');
+const { securityHeaders } = require('./middleware/security');
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required');
@@ -20,12 +21,18 @@ app.use(cookieParser());
 
 // Keep brute-force / account abuse bounded. These stores are process-local,
 // which matches the current single-replica deployment.
-const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'login' });
-const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'register' });
-const passwordLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'password' });
+const commonLimiterOptions = {
+  standardHeaders: 'draft-6',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test'
+};
+const loginLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 15 * 60 * 1000, limit: 20 });
+const registerLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 60 * 60 * 1000, limit: 10 });
+const passwordLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 15 * 60 * 1000, limit: 10 });
 // These routes only return the small React HTML shell. The generous ceiling
 // blocks abusive filesystem traffic while staying invisible during normal use.
-const appShellLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyPrefix: 'app-shell' });
+const appShellLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 60 * 1000, limit: 240 });
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/password', passwordLimiter);

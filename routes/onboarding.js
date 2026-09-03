@@ -4,14 +4,17 @@ const Household = require('../models/Household');
 const MealPlan = require('../models/MealPlan');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { createRateLimiter } = require('../middleware/security');
+const { rateLimit } = require('express-rate-limit');
 
 // Onboarding writes are infrequent by design. Keep accidental retries and
 // automated abuse bounded without limiting normal progress through the flow.
-const onboardingMutationLimiter = createRateLimiter({
+const onboardingMutationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
-  keyPrefix: 'onboarding-write'
+  limit: 30,
+  standardHeaders: 'draft-6',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test'
 });
 
 const isProd = process.env.NODE_ENV === 'production';
