@@ -5,6 +5,7 @@ import { PantryItemDialog } from '../pantry/PantryItemDialog';
 import { pantryProduct, pantryUnit, type PantryItem } from '../pantry/types';
 import type { ProductRef } from '../products/types';
 import { ListItemEditDialog } from './ListItemEditDialog';
+import { updateShoppingListItem } from './api';
 import { intendedPurchaseQuantity, productFor, type ShoppingListItem } from './types';
 import '../pantry/pantry.css';
 import './contextual-setup.css';
@@ -27,6 +28,14 @@ function pantrySummary(item: PantryItem): string {
   return `Pantry: ${label}`;
 }
 
+function adjustedRequiredQuantity(required: number | null, saved: PantryItem): number | null {
+  if (required == null) return null;
+  if (saved.trackingMode === 'exact') {
+    return Math.max(0, required - Math.max(0, Number(saved.quantity) || 0));
+  }
+  return saved.stockStatus === 'have' ? 0 : required;
+}
+
 export function ListItemContextControls({ item, online }: ListItemContextControlsProps) {
   const queryClient = useQueryClient();
   const pantryQuery = useQuery({ queryKey: ['pantry'], queryFn: loadPantry });
@@ -40,11 +49,24 @@ export function ListItemContextControls({ item, online }: ListItemContextControl
   const intended = intendedPurchaseQuantity(item);
   const remainder = required == null ? 0 : Math.max(0, required - intended);
 
-  const handlePantrySaved = async () => {
+  const handlePantrySaved = async (saved: PantryItem) => {
+    const nextRequired = adjustedRequiredQuantity(required, saved);
+    if (nextRequired != null && nextRequired !== required) {
+      try {
+        const result = await updateShoppingListItem(item._id, { requiredQuantity: nextRequired }, item);
+        queryClient.setQueryData<ShoppingListItem[]>(['shopping-list'], current =>
+          current?.map(entry => entry._id === item._id ? { ...entry, ...result.data } : entry) || []
+        );
+      } catch (error) {
+        // Pantry tracking succeeded and remains trustworthy. A requirement refresh
+        // failure should not roll back or hide that stock update; a List refetch can
+        // retry/reconcile the derived requirement later.
+        console.info('Could not refresh List requirement after Pantry tracking:', error);
+      }
+    }
+
     setTrackingProduct(null);
     await queryClient.invalidateQueries({ queryKey: ['pantry'] });
-    // Pantry context can change system-derived shortage calculations elsewhere,
-    // so refresh List/Plan data without discarding an explicit quantity override.
     await queryClient.invalidateQueries({ queryKey: ['shopping-list'] });
     await queryClient.invalidateQueries({ queryKey: ['meal-plan'] });
   };
