@@ -1,17 +1,27 @@
 // Shared login helper for E2E tests.
 //
-// Registration is cached at module level so seedHousehold() only runs once
-// per Playwright worker (= once per spec file). Subsequent beforeEach calls
-// skip the slow API registration and only do the fast browser UI login.
-const { request } = require('@playwright/test');
+// Registration is cached at module level, but the cache is keyed by Playwright
+// project + spec file + repeat iteration. A CI worker can execute many spec
+// files in one process, so a single module-level credential value would leak
+// household state between otherwise unrelated specs. Subsequent beforeEach
+// calls within the same spec still skip the slow API registration and only do
+// the fast browser UI login.
+const { request, test } = require('@playwright/test');
 
 let _counter = 0;
 function uid() { return `${Date.now()}-${process.pid}-${++_counter}`; }
 
-let _credentials = null; // cached per worker / spec file
+const _credentialsBySpec = new Map();
+
+function credentialScope() {
+  const info = test.info();
+  return `${info.project.name}:${info.file}:${info.repeatEachIndex}`;
+}
 
 async function ensureCredentials(baseURL) {
-  if (_credentials) return _credentials;
+  const scope = credentialScope();
+  const cached = _credentialsBySpec.get(scope);
+  if (cached) return cached;
 
   const email = `e2e-${uid()}@test.com`;
   const password = 'password123';
@@ -22,8 +32,9 @@ async function ensureCredentials(baseURL) {
   if (!res.ok()) throw new Error(`API register failed: ${await res.text()}`);
   await apiReq.dispose();
 
-  _credentials = { email, password };
-  return _credentials;
+  const credentials = { email, password };
+  _credentialsBySpec.set(scope, credentials);
+  return credentials;
 }
 
 async function loginThroughBrowser(page, baseURL) {
