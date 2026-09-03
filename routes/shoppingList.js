@@ -177,8 +177,9 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/shopping-list/from-meal - add reviewed meal-note matches in one
-// household-scoped batch, skipping anything already on the list.
+// POST /api/shopping-list/from-meal - add reviewed system needs in one
+// household-scoped batch. Existing List items absorb the requirement without
+// overwriting a parent's explicit intended-purchase quantity.
 router.post('/from-meal', requireAuth, async (req, res) => {
   try {
     if (!Array.isArray(req.body.items) || req.body.items.length === 0) {
@@ -214,8 +215,9 @@ router.post('/from-meal', requireAuth, async (req, res) => {
     const existingListItems = await ShoppingListItem.find({
       householdId,
       itemId: { $in: itemIds }
-    }).select('itemId').lean();
-    const existingIds = new Set(existingListItems.map(entry => String(entry.itemId)));
+    }).select('itemId quantity requiredQuantity quantitySource checked').lean();
+    const existingById = new Map(existingListItems.map(entry => [String(entry.itemId), entry]));
+    const existingIds = new Set(existingById.keys());
     const now = new Date();
     const documents = itemIds
       .filter(itemId => !existingIds.has(itemId))
@@ -234,10 +236,32 @@ router.post('/from-meal', requireAuth, async (req, res) => {
       });
 
     if (documents.length) await ShoppingListItem.insertMany(documents);
+
+    const requirementUpdates = [];
+    for (const [itemId, existing] of existingById) {
+      const requested = requestedById.get(itemId);
+      const previousRequired = existing.requiredQuantity == null ? 0 : Number(existing.requiredQuantity) || 0;
+      const nextRequired = Math.max(previousRequired, requested);
+      const set = { requiredQuantity: nextRequired };
+      if (existing.quantitySource === 'system' && !existing.checked) {
+        set.quantity = Math.max(Number(existing.quantity) || 0, nextRequired);
+      }
+      requirementUpdates.push({
+        updateOne: {
+          filter: { _id: existing._id, householdId },
+          update: { $set: set }
+        }
+      });
+    }
+    if (requirementUpdates.length) {
+      await ShoppingListItem.bulkWrite(requirementUpdates, { ordered: true });
+    }
+
     const catalogById = new Map(catalogItems.map(item => [String(item._id), item]));
     res.status(documents.length ? 201 : 200).json({
       addedCount: documents.length,
       skippedCount: existingIds.size,
+      requirementUpdatedCount: requirementUpdates.length,
       addedItems: documents.map(document => ({
         itemId: String(document.itemId),
         name: catalogById.get(String(document.itemId))?.name,
