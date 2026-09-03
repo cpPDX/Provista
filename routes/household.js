@@ -8,6 +8,7 @@ const User = require('../models/User');
 const PriceEntry = require('../models/PriceEntry');
 const Item = require('../models/Item');
 const Store = require('../models/Store');
+const InventoryEvent = require('../models/InventoryEvent');
 const InventoryItem = require('../models/InventoryItem');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const ShoppingTrip = require('../models/ShoppingTrip');
@@ -283,6 +284,7 @@ router.delete('/', requireAuth, requireOwner, async (req, res) => {
       PriceEntry.deleteMany({ householdId }),
       Item.deleteMany({ householdId }),
       Store.deleteMany({ householdId }),
+      InventoryEvent.deleteMany({ householdId }),
       InventoryItem.deleteMany({ householdId }),
       ShoppingListItem.deleteMany({ householdId }),
       ShoppingTrip.deleteMany({ householdId }),
