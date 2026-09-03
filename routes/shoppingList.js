@@ -325,8 +325,6 @@ router.put('/:id', requireAuth, async (req, res) => {
         'quantity'
       );
       update.quantity = quantity;
-      // An explicit List edit is a parent-owned override. System recalculation is
-      // allowed only while this remains `system`.
       update.quantitySource = 'user';
     }
 
@@ -342,7 +340,7 @@ router.put('/:id', requireAuth, async (req, res) => {
         update.actualPurchasedQuantity = null;
         update.shoppingStoreId = null;
       } else if (current.actualPurchasedQuantity == null && req.body.actualPurchasedQuantity === undefined) {
-        update.actualPurchasedQuantity = update.quantity ?? Number(current.quantity) || 1;
+        update.actualPurchasedQuantity = (update.quantity ?? Number(current.quantity)) || 1;
       }
     }
 
