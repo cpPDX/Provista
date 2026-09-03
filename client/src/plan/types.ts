@@ -93,6 +93,17 @@ export interface MealAllocationSummary {
 export interface MealAllocationProjection {
   weekStart: string | null;
   itemSummaries: MealAllocationSummary[];
-  mealAllocations: Array<Record<string, unknown>>;
+  mealAllocations: Array<{
+    date: string;
+    dayIndex: number;
+    mealIndex: number;
+    mealType: MealType;
+    mealName: string;
+    itemId: string;
+    name: string;
+    quantity: number;
+    shoppingQuantity: number;
+    coverageStatus: string;
+  }>;
   unresolvedNeeds: Array<Record<string, unknown>>;
 }
