@@ -202,9 +202,52 @@
   outline-offset: 3px;
 }
 
+.react-rapid-scan-row,
+.pantry-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.react-rapid-scan-row span {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.pantry-heading-actions {
+  justify-content: flex-end;
+}
+
+.pantry-scanned-product {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--surface);
+  padding: 0.8rem;
+}
+
+.pantry-scanned-product span,
+.pantry-scanned-product small {
+  color: var(--text-muted);
+}
+
 @media (min-width: 640px) {
   .barcode-resolver-backdrop {
     place-items: center;
+  }
+}
+
+@media (max-width: 620px) {
+  .pantry-heading-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .pantry-heading-actions > * {
+    flex: 1 1 9rem;
   }
 }
 
@@ -227,6 +270,15 @@
 
   .barcode-review-fields {
     grid-template-columns: 1fr;
+  }
+
+  .react-rapid-scan-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .react-rapid-scan-row button {
+    width: 100%;
   }
 }
 
