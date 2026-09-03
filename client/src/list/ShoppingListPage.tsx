@@ -99,6 +99,13 @@ export function ShoppingListPage() {
   const items = listQuery.data || EMPTY_ITEMS;
   const checkedItems = items.filter(item => item.checked);
   const storeSections = useStoreSections(items);
+  const searchParams = new URLSearchParams(location.search);
+  const fromPlan = searchParams.get('from') === 'plan';
+  const planDetailName = searchParams.get('detail')?.trim() || '';
+  const planDetailQuantity = Math.max(1, Number(searchParams.get('quantity')) || 1);
+  const initialPlanDetail = fromPlan && planDetailName
+    ? { name: planDetailName, quantity: planDetailQuantity }
+    : null;
   const onboardingActive = Boolean(
     onboardingQuery.data?.required &&
     onboardingQuery.data.firstAction === 'list' &&
@@ -330,9 +337,23 @@ export function ShoppingListPage() {
         </aside>
       )}
 
+      {fromPlan && (
+        <aside className="react-list-store-suggestion react-list-plan-return">
+          <strong>Adding a need from Plan</strong>
+          <span>{planDetailName ? `${planDetailName} is prefilled with quantity ${planDetailQuantity}. ` : ''}Your exact day, meal, and household group are preserved.</span>
+          <button type="button" className="shell-button shell-button-secondary" onClick={() => navigate('/app/plan')}>Back to Plan</button>
+        </aside>
+      )}
+
       {!online && <div className="react-list-offline" role="status">Offline · check-offs and simple List changes will sync when you reconnect.</div>}
 
-      <RapidCapture items={items} online={online} onListChanged={handleListChanged} />
+      <RapidCapture
+        items={items}
+        online={online}
+        onListChanged={handleListChanged}
+        initialDetail={initialPlanDetail}
+        onInitialDetailResolved={() => navigate('/app/list?from=plan', { replace: true })}
+      />
 
       <div className="react-list-toolbar">
         <div className="react-list-controls" aria-label="List filters">
