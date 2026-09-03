@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Household = require('../models/Household');
+const Item = require('../models/Item');
+const PriceEntry = require('../models/PriceEntry');
 const PriceObservation = require('../models/PriceObservation');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const Store = require('../models/Store');
@@ -34,6 +36,22 @@ function serializeObservation(observation) {
     expiresAt: observation.expiresAt,
     confidence: observation.confidence,
     sourceUrl: observation.sourceUrl
+  };
+}
+
+function serializeHouseholdPrice(price) {
+  if (!price) return null;
+  return {
+    regularPrice: price.regularPrice,
+    salePrice: price.salePrice,
+    finalPrice: price.finalPrice,
+    quantity: price.quantity,
+    pricePerUnit: price.pricePerUnit,
+    date: price.date,
+    store: price.storeId ? {
+      _id: price.storeId._id || price.storeId,
+      name: price.storeId.name || ''
+    } : null
   };
 }
 
@@ -74,6 +92,17 @@ async function refreshOne({ householdId, item, store }) {
   return { observation, cached: false };
 }
 
+async function resolveStoreContext(householdId, requestedStoreId) {
+  if (requestedStoreId) {
+    const requested = await Store.findOne({ _id: requestedStoreId, householdId });
+    if (requested) return requested;
+  }
+
+  const household = await Household.findById(householdId).select('settings.usualStoreId').lean();
+  const usualStoreId = household?.settings?.usualStoreId || null;
+  return usualStoreId ? Store.findOne({ _id: usualStoreId, householdId }) : null;
+}
+
 async function mapWithConcurrency(values, limit, worker) {
   const results = new Array(values.length);
   let cursor = 0;
@@ -96,6 +125,89 @@ router.get('/providers', requireAuth, (req, res) => {
     id: provider.id,
     displayName: provider.displayName || provider.id
   })));
+});
+
+// Return household-paid and already-cached public price context without making
+// an external network request. Barcode/product flows can show this immediately
+// and then refresh public observations independently.
+router.get('/context/:itemId', requireAuth, async (req, res) => {
+  try {
+    const householdId = req.user.householdId;
+    const item = await Item.findOne({ _id: req.params.itemId, householdId })
+      .select('name brand category unit size upc')
+      .lean();
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    const store = await resolveStoreContext(householdId, req.query.storeId || null);
+    const [householdPrice, externalObservation] = await Promise.all([
+      PriceEntry.findOne({ householdId, itemId: item._id, status: 'approved' })
+        .populate('storeId', 'name')
+        .sort({ date: -1 })
+        .lean(),
+      store?._id
+        ? latestCachedObservation(householdId, item._id, store._id)
+        : PriceObservation.findOne({
+            householdId,
+            itemId: item._id,
+            provider: 'open-prices',
+            expiresAt: { $gt: new Date() }
+          }).sort({ observedAt: -1, fetchedAt: -1 })
+    ]);
+
+    res.json({
+      itemId: item._id,
+      upc: item.upc || null,
+      store: store ? { _id: store._id, name: store.name } : null,
+      householdPrice: serializeHouseholdPrice(householdPrice),
+      externalObservation: serializeObservation(externalObservation)
+    });
+  } catch (err) {
+    if (err?.name === 'CastError') return res.status(404).json({ error: 'Item not found' });
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// Refresh one resolved product after the initiating workflow has already been
+// allowed to continue. Missing UPC/store context and provider failures are
+// normal advisory outcomes, not product-creation failures.
+router.post('/refresh-item/:itemId', requireAuth, async (req, res) => {
+  try {
+    const householdId = req.user.householdId;
+    const item = await Item.findOne({ _id: req.params.itemId, householdId })
+      .select('name brand category unit size upc');
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+
+    if (!item.upc) {
+      return res.json({ status: 'skipped', reason: 'no-upc', observation: null, store: null });
+    }
+
+    const store = await resolveStoreContext(householdId, req.body?.storeId || null);
+    if (!store) {
+      return res.json({ status: 'skipped', reason: 'no-store-context', observation: null, store: null });
+    }
+
+    try {
+      const refreshed = await refreshOne({ householdId, item, store });
+      return res.json({
+        status: refreshed.observation ? 'found' : 'not-found',
+        reason: null,
+        cached: refreshed.cached,
+        store: { _id: store._id, name: store.name },
+        observation: serializeObservation(refreshed.observation)
+      });
+    } catch (providerError) {
+      console.error('External product price refresh failed:', providerError?.message || providerError);
+      return res.json({
+        status: 'unavailable',
+        reason: 'provider-error',
+        observation: null,
+        store: { _id: store._id, name: store.name }
+      });
+    }
+  } catch (err) {
+    if (err?.name === 'CastError') return res.status(404).json({ error: 'Item not found' });
+    res.status(500).json({ error: serverErr(err) });
+  }
 });
 
 // Refresh external observations for the current shopping list without blocking
