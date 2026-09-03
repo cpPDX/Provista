@@ -310,13 +310,8 @@ export function ShoppingListPage() {
   const threshold = Number(context?.savingsThreshold || 0);
   const showStoreSuggestion = Boolean(context?.additionalStore?.name && savings >= threshold);
 
-  const openShoppingTool = (action: 'review-low-stock' | 'scan-list-item') => {
-    if (action === 'review-low-stock') {
-      void requestNavigation(() => navigate('/app/pantry'));
-      return;
-    }
-    const params = new URLSearchParams({ tab: 'list', action });
-    window.location.assign(`/app?${params.toString()}`);
+  const reviewLowStock = () => {
+    void requestNavigation(() => navigate('/app/pantry'));
   };
 
   return (
@@ -350,6 +345,7 @@ export function ShoppingListPage() {
       <RapidCapture
         items={items}
         online={online}
+        storeId={activeStoreId}
         onListChanged={handleListChanged}
         initialDetail={initialPlanDetail}
         onInitialDetailResolved={() => navigate('/app/list?from=plan', { replace: true })}
@@ -378,9 +374,8 @@ export function ShoppingListPage() {
         <details className="react-list-more-tools">
           <summary>More shopping tools</summary>
           <div>
-            <button type="button" onClick={() => openShoppingTool('review-low-stock')}>Review low stock</button>
-            <button type="button" onClick={() => openShoppingTool('scan-list-item')}>Scan item</button>
-            <small>Low-stock review opens React Pantry. Scanner support remains on the compatibility screen until its migration work is complete.</small>
+            <button type="button" onClick={reviewLowStock}>Review low stock</button>
+            <small>Barcode scanning is available directly with Add groceries so the primary capture tools stay together.</small>
           </div>
         </details>
       </div>

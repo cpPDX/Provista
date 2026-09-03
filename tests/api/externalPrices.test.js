@@ -98,3 +98,80 @@ describe('Open Prices shopping list refresh', () => {
     expect(list.body).toHaveLength(1);
   });
 });
+
+describe('scan-time product price context', () => {
+  it('returns household-paid context without contacting an external provider', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const item = await request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name: 'Known Price Milk', category: 'Dairy', unit: 'each', upc: '012345678905', upcSource: 'manual' });
+    const store = await request(app).post('/api/stores').set('Cookie', cookie)
+      .send({ name: 'Household Market', location: 'Portland' });
+    await request(app).patch('/api/household/settings').set('Cookie', cookie)
+      .send({ usualStoreId: store.body._id });
+
+    const price = await request(app).post('/api/prices').set('Cookie', cookie).send({
+      itemId: item.body._id,
+      storeId: store.body._id,
+      regularPrice: 4.29,
+      quantity: 1,
+      date: new Date().toISOString().slice(0, 10)
+    });
+    expect(price.status).toBe(201);
+
+    global.fetch = jest.fn();
+    const context = await request(app)
+      .get(`/api/external-prices/context/${item.body._id}`)
+      .set('Cookie', cookie);
+
+    expect(context.status).toBe(200);
+    expect(context.body.store).toMatchObject({ _id: store.body._id, name: 'Household Market' });
+    expect(context.body.householdPrice).toMatchObject({
+      regularPrice: 4.29,
+      finalPrice: 4.29,
+      pricePerUnit: 4.29,
+      store: expect.objectContaining({ _id: store.body._id, name: 'Household Market' })
+    });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('skips public price lookup cleanly when a resolved product has no UPC', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const item = await request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name: 'No UPC Produce', category: 'Produce', unit: 'each' });
+
+    global.fetch = jest.fn();
+    const refresh = await request(app)
+      .post(`/api/external-prices/refresh-item/${item.body._id}`)
+      .set('Cookie', cookie)
+      .send({});
+
+    expect(refresh.status).toBe(200);
+    expect(refresh.body).toMatchObject({ status: 'skipped', reason: 'no-upc', observation: null });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns an advisory unavailable result when public pricing fails', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const item = await request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name: 'Provider Failure Cereal', category: 'Pantry', unit: 'each', upc: '098765432109', upcSource: 'manual' });
+    const store = await request(app).post('/api/stores').set('Cookie', cookie)
+      .send({ name: 'Provider Failure Market', location: 'Portland' });
+    await Store.updateOne({ _id: store.body._id }, { $set: { 'externalIds.open-prices': '88' } });
+    await request(app).patch('/api/household/settings').set('Cookie', cookie)
+      .send({ usualStoreId: store.body._id });
+
+    global.fetch = jest.fn().mockRejectedValue(new Error('provider offline'));
+    const refresh = await request(app)
+      .post(`/api/external-prices/refresh-item/${item.body._id}`)
+      .set('Cookie', cookie)
+      .send({});
+
+    expect(refresh.status).toBe(200);
+    expect(refresh.body).toMatchObject({
+      status: 'unavailable',
+      reason: 'provider-error',
+      observation: null,
+      store: expect.objectContaining({ _id: store.body._id, name: 'Provider Failure Market' })
+    });
+  });
+});
