@@ -197,4 +197,30 @@ test.describe('React Plan migration', () => {
     const inventory = await (await page.request.get('/api/inventory')).json();
     expect(inventory.find(entry => entry.itemId?._id === item._id)?.quantity).toBe(5);
   });
+
+  test('shows the saved weekly Pantry projection without deducting on-hand quantity', async ({ page }) => {
+    const name = `Projected Pantry Item ${Date.now()}`;
+    const itemResponse = await page.request.post('/api/items', { data: { name, category: 'Pantry', unit: 'each' } });
+    expect(itemResponse.ok()).toBeTruthy();
+    const item = await itemResponse.json();
+    const inventoryResponse = await page.request.post('/api/inventory', {
+      data: { itemId: item._id, trackingMode: 'exact', quantity: 4, lowStockThreshold: 1, unit: 'each' }
+    });
+    expect(inventoryResponse.ok()).toBeTruthy();
+
+    await page.goto('/app/plan');
+    const today = page.locator('.plan-day-today');
+    await today.locator('textarea').first().fill(`5 ${name}`);
+    await expect(page.locator('.plan-save-status')).toContainText('Saved', { timeout: 8000 });
+
+    const outlook = page.getByRole('region', { name: 'Pantry outlook' });
+    await expect(outlook).toContainText(name);
+    await expect(outlook).toContainText('On hand 4 each');
+    await expect(outlook).toContainText('Planned 5 each');
+    await expect(outlook).toContainText('Projected 0 each');
+    await expect(outlook).toContainText('Buy 1 each');
+
+    const inventory = await (await page.request.get('/api/inventory')).json();
+    expect(inventory.find(entry => entry.itemId?._id === item._id)?.quantity).toBe(4);
+  });
 });

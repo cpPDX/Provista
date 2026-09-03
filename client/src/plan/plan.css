@@ -113,6 +113,43 @@
   align-items: flex-start;
 }
 
+.plan-pantry-outlook {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.plan-pantry-outlook h2,
+.plan-pantry-outlook p {
+  margin: 0;
+}
+
+.plan-pantry-outlook p,
+.plan-pantry-outlook small,
+.plan-pantry-outlook-items span {
+  color: var(--muted);
+}
+
+.plan-pantry-outlook-items {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.plan-pantry-outlook-items > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.plan-pantry-outlook-shortage span {
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .plan-tools details {
   min-width: min(100%, 240px);
   border: 1px solid var(--border, var(--border));
