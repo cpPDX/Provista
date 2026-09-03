@@ -10,7 +10,7 @@ on:
 # Push validation is reserved for persistent integration branches so a PR update
 # does not start a second, immediately-cancelled workflow run for the same commit.
 concurrency:
-  group: app-ci-${{ github.head_ref || github.ref_name }}
+  group: app-ci-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:

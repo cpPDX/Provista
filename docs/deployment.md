@@ -27,16 +27,19 @@ boundary follows daylight-saving changes:
 3. Ensure `.github/workflows/deploy-staging.yml` exists on `main`, the repository's
    default branch. GitHub runs scheduled and `workflow_run` workflows from the
    default branch only.
+4. Disable Railway's native GitHub autodeploy for the Staging service. Keep the
+   service, environment, domain, variables, and healthcheck intact. The GitHub
+   `Railway Staging Queue` workflow is the sole staging deployment authority.
 
 The workflow already identifies the current Provista staging project,
 environment, service, and health endpoint. Update those non-secret values in the
 workflow if the Railway service is recreated or its domain changes.
 
-Railway's native GitHub autodeploy can remain enabled with **Wait for CI**. It
-handles deployments normally when Railway accepts them. The GitHub workflow is
-a reconciler: before uploading anything, it checks both GitHub's deployment
-record and Railway's deployment history for the exact staging SHA. It adopts an
-active or successful native deployment instead of creating a duplicate.
+The single-deployer model is intentional. A merge to `staging` may start `App CI`,
+but it must not start a Railway deployment directly. Only a successful `App CI`
+push run makes the current staging SHA eligible for the GitHub-managed queue.
+This avoids duplicate deployment paths and prevents Railway's native status from
+appearing successful before end-to-end validation has finished.
 
 ### Normal staging path
 
@@ -46,11 +49,12 @@ active or successful native deployment instead of creating a duplicate.
 4. During the blackout, no Railway command runs.
 5. During the allowed window, a scheduled or manually dispatched run resolves
    the current `staging` head and confirms that exact SHA has successful push CI.
-6. If Railway is already processing it, GitHub leaves it pending. If Railway
-   already completed it, GitHub verifies readiness and adopts it. Otherwise,
-   GitHub checks out and uploads that exact SHA with the pinned Railway CLI.
-   Deployment-control scripts always come from trusted `main`; staging source is
-   checked out separately and is never executed with the Railway token.
+6. GitHub checks Railway deployment history for the exact SHA. If that SHA is
+   already active, GitHub leaves it pending. If it already succeeded, GitHub
+   verifies readiness and adopts it. Otherwise GitHub checks out and uploads the
+   exact SHA with the pinned Railway CLI. Deployment-control scripts always come
+   from trusted `main`; staging source is checked out separately and is never
+   executed with the Railway token.
 7. `/api/health/ready` must report a connected database before GitHub marks the
    deployment successful.
 
@@ -73,6 +77,8 @@ superseded states with the staging SHA.
   the SHA remains retryable after the service is healthy.
 - Newer staging commit: do not retry the older SHA. The workflow automatically
   marks it superseded and reconciles the current green head.
+- Unexpected native Railway deployment/status check: confirm Staging autodeploy
+  is still disabled before investigating the GitHub queue.
 - Emergency production work: use the separate production promotion process.
   This workflow cannot deploy to production.
 

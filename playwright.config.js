@@ -6,6 +6,13 @@ module.exports = defineConfig({
   reporter: process.env.CI ? 'line' : 'list',
   timeout: 90000,
   retries: 1,
+  // The browser suite shares one local Node server and one Mongo database.
+  // Running multiple CI workers has repeatedly produced cross-file readiness
+  // failures in otherwise unrelated auth, onboarding, Home, and accessibility
+  // journeys. Keep CI deterministic instead of masking contention with larger
+  // locator timeouts; local development can still use Playwright's default
+  // worker count.
+  workers: process.env.CI ? 1 : undefined,
   use: {
     actionTimeout: 15000,
     baseURL: 'http://127.0.0.1:3000',
