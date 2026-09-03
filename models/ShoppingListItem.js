@@ -15,7 +15,12 @@ const shoppingListItemSchema = new mongoose.Schema({
   // What was actually obtained. It becomes meaningful once the item is checked
   // and remains editable until Finish shopping.
   actualPurchasedQuantity: { type: Number, default: null, min: 0, max: 99 },
+  // Future/default preference. This must not be rewritten merely because the
+  // parent bought the item somewhere else on the current trip.
   storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
+  // Store associated with the currently checked purchase. Keeping this separate
+  // prevents preference edits from moving or rewriting an in-progress purchase.
+  shoppingStoreId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
   checked: { type: Boolean, default: false },
   addedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   addedAt: { type: Date, default: Date.now },
