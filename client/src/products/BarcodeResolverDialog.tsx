@@ -330,16 +330,16 @@ export function BarcodeResolverDialog({
             </div>
             <p className="barcode-resolver-status" role="status" aria-live="polite">{status}</p>
 
-            {!manualOpen ? (
-              <button type="button" className="shell-button shell-button-secondary barcode-manual-toggle" disabled={stage === 'lookup'} onClick={() => {
-                stopCamera();
-                setManualOpen(true);
-                setStatus('Enter the UPC/EAN printed under the barcode.');
-                window.setTimeout(() => manualRef.current?.focus(), 0);
-              }}>
-                Enter UPC instead
-              </button>
-            ) : (
+            <button type="button" className="shell-button shell-button-secondary barcode-manual-toggle" disabled={stage === 'lookup'} onClick={() => {
+              stopCamera();
+              setManualOpen(true);
+              setStatus('Enter the UPC/EAN printed under the barcode.');
+              window.setTimeout(() => manualRef.current?.focus(), 0);
+            }}>
+              Enter UPC instead
+            </button>
+
+            {manualOpen && (
               <form className="barcode-manual-form" onSubmit={submitManual}>
                 <label htmlFor="barcode-manual-upc">
                   <span>UPC / EAN</span>
