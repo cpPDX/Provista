@@ -19,6 +19,10 @@ export function DirtyStateProvider({ children }: { children: ReactNode }) {
 
   const setDirty = useCallback((key: string, dirty: boolean, discard?: DirtySource['discard']) => {
     setDirtySources((current) => {
+      const existing = current.get(key);
+      if (!dirty && !existing) return current;
+      if (dirty && existing?.discard === discard) return current;
+
       const next = new Map(current);
       if (dirty) next.set(key, { discard });
       else next.delete(key);

@@ -1,4 +1,7 @@
-const { createRateLimiter, securityHeaders } = require('../../middleware/security');
+const express = require('express');
+const request = require('supertest');
+const { rateLimit } = require('express-rate-limit');
+const { securityHeaders } = require('../../middleware/security');
 
 function makeResponse() {
   return {
@@ -12,26 +15,24 @@ function makeResponse() {
 }
 
 describe('security middleware', () => {
-  it('enforces rate limits when running in production mode', () => {
-    const originalEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    try {
-      const limiter = createRateLimiter({ windowMs: 60_000, max: 2, keyPrefix: 'test' });
-      const req = { ip: '203.0.113.10', socket: { remoteAddress: '203.0.113.10' } };
-      const next = jest.fn();
+  it('enforces the standard rate-limit response contract', async () => {
+    const limitedApp = express();
+    limitedApp.use(rateLimit({
+      windowMs: 60_000,
+      limit: 2,
+      standardHeaders: 'draft-6',
+      legacyHeaders: false,
+      message: { error: 'Too many requests. Please try again later.' }
+    }));
+    limitedApp.get('/', (req, res) => res.json({ ok: true }));
 
-      limiter(req, makeResponse(), next);
-      limiter(req, makeResponse(), next);
-      const blocked = makeResponse();
-      limiter(req, blocked, next);
+    await request(limitedApp).get('/').expect(200);
+    await request(limitedApp).get('/').expect(200);
+    const blocked = await request(limitedApp).get('/').expect(429);
 
-      expect(next).toHaveBeenCalledTimes(2);
-      expect(blocked.statusCode).toBe(429);
-      expect(blocked.headers['Retry-After']).toBeDefined();
-      expect(blocked.body.error).toMatch(/too many requests/i);
-    } finally {
-      process.env.NODE_ENV = originalEnv;
-    }
+    expect(blocked.headers['retry-after']).toBeDefined();
+    expect(blocked.headers['ratelimit-limit']).toBe('2');
+    expect(blocked.body.error).toMatch(/too many requests/i);
   });
 
   it('sets baseline browser security headers', () => {

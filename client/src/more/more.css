@@ -1,0 +1,104 @@
+.more-page {
+  display: grid;
+  gap: 1.25rem;
+  padding-bottom: 4rem;
+}
+
+.more-heading h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 6vw, 2.5rem);
+}
+
+.more-heading > p:last-child {
+  max-width: 42rem;
+  margin: 0.4rem 0 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.more-eyebrow {
+  margin: 0 0 0.25rem;
+  color: var(--accent-strong);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.more-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.more-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 92px;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.95rem;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 5%);
+  transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+.more-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--card-shadow);
+  transform: translateY(-1px);
+}
+
+.more-card-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--accent-subtle);
+  color: var(--accent-strong);
+}
+
+.more-card-icon svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.more-card-copy {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.more-card-copy strong {
+  font-size: 0.98rem;
+}
+
+.more-card-copy small {
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.more-card-arrow {
+  color: var(--accent-strong);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+@media (max-width: 620px) {
+  .more-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .more-card {
+    min-height: 82px;
+  }
+}

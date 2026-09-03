@@ -64,24 +64,24 @@ test.describe('Home / Today - React production slice', () => {
     await expect(page.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
   });
 
-  test('standalone Quick add opens the legacy List compatibility surface with rapid capture focused', async ({ page, baseURL }) => {
+  test('standalone Quick add opens the React List capture', async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
 
     await page.getByRole('button', { name: 'Quick add' }).first().click();
-    await expect(page).toHaveURL(/\/app\?tab=list&focus=rapid-list-input$/);
-    await expect(page.locator('#tab-list')).toHaveClass(/active/);
-    await expect(page.locator('#rapid-list-input')).toBeFocused();
-    await expect(page.locator('#modal-overlay')).toBeHidden();
+    await expect(page).toHaveURL(/\/app\/list/);
+    await expect(page.locator('#react-list-title')).toHaveText('Shopping list');
+    await expect(page.locator('#react-rapid-list-input')).toBeVisible();
+    await expect(page.locator('#modal-overlay')).toHaveCount(0);
   });
 
-  test('empty What do we need Quick add has the same rapid-capture outcome', async ({ page, baseURL }) => {
+  test('empty What do we need Quick add has the same React capture outcome', async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
 
     const card = page.locator('.home-react-card', { hasText: 'What do we need?' });
     await expect(card.getByRole('button', { name: 'Quick add →' })).toBeVisible({ timeout: 15000 });
     await card.getByRole('button', { name: 'Quick add →' }).click();
-    await expect(page.locator('#tab-list')).toHaveClass(/active/);
-    await expect(page.locator('#rapid-list-input')).toBeFocused();
+    await expect(page).toHaveURL(/\/app\/list/);
+    await expect(page.locator('#react-rapid-list-input')).toBeVisible();
   });
 
   test('deferred prices become the next action and can be reviewed in React', async ({ page, baseURL }) => {
@@ -121,27 +121,25 @@ test.describe('Home / Today - React production slice', () => {
     await expect(page.locator('.home-react-card', { hasText: 'What do we need?' })).not.toContainText('Couldn’t load');
   });
 
-  test('Plan dinner opens today in the legacy Plan compatibility surface and focuses dinner', async ({ page, baseURL }) => {
+  test('Plan dinner opens today in React Plan and focuses dinner', async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
 
     await page.getByRole('button', { name: 'Plan dinner' }).first().click();
-    await expect(page).toHaveURL(/\/app\?tab=meal-plan&focus=today-dinner$/);
-    await expect(page.locator('#tab-meal-plan')).toHaveClass(/active/);
-
-    const today = await page.evaluate(() => {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    });
-    const todayCard = page.locator(`.meal-day[data-date^="${today}"]`);
-    await expect(todayCard).toHaveAttribute('data-expanded', 'true');
-    await expect(todayCard.locator('.meal-type-section[data-meal-type="dinner"] .meal-name-input').first()).toBeFocused();
+    await expect(page).toHaveURL(/\/app\/plan\?focus=today-dinner$/);
+    await expect(page.locator('#plan-title')).toHaveText('Plan');
+    await expect(page.locator('.plan-day-today input[data-meal-name="dinner-0"]')).toBeFocused({ timeout: 5000 });
   });
 
-  test('legacy feature navigation returns Home to the React production surface', async ({ page, baseURL }) => {
+  test('remaining legacy More tools return Home to the React production surface', async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
 
-    await page.getByRole('button', { name: 'Pantry', exact: true }).click();
-    await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page).toHaveURL('/app/more');
+    await expect(page.locator('#more-title')).toBeVisible();
+
+    await page.getByRole('link', { name: /My Account/ }).click();
+    await expect(page).toHaveURL('/app?tab=more&section=account');
+    await expect(page.locator('#section-account')).toBeVisible();
     await page.locator('.nav-item[data-tab="home"]').click();
 
     await expect(page).toHaveURL('/app');

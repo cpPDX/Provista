@@ -1,17 +1,10 @@
+import type { ProductRef } from '../products/types';
+export type { ProductRef } from '../products/types';
+
 export interface StoreRef {
   _id: string;
   name: string;
   location?: string;
-}
-
-export interface ProductRef {
-  _id: string;
-  name: string;
-  brand?: string;
-  category?: string;
-  unit?: string;
-  size?: string;
-  isOrganic?: boolean;
 }
 
 export interface PriceOption {

@@ -130,7 +130,7 @@ See [`docs/03-external-pricing.md`](docs/03-external-pricing.md) for the provide
 |---|---|
 | Backend | Node.js 20.19+ · Express |
 | Database | MongoDB · Mongoose |
-| Frontend | Vanilla JavaScript · HTML · CSS |
+| Frontend | React · TypeScript · Vite for migrated routes · Vanilla JavaScript compatibility surface |
 | Auth | JWT in httpOnly cookies · bcrypt |
 | Barcode | ZXing in the browser · Open Food Facts metadata |
 | External pricing | Open Prices / Open Food Facts ecosystem |
@@ -138,7 +138,7 @@ See [`docs/03-external-pricing.md`](docs/03-external-pricing.md) for the provide
 | Browser tests | Playwright · Chromium mobile · WebKit/iPhone coverage |
 | Deployment | Railway + MongoDB Atlas |
 
-There is no frontend build step. Express serves the browser application directly from `public/`.
+The React client builds with Vite into `public/react-preview/`, and Express serves it alongside the remaining Vanilla JavaScript compatibility surface in `public/`.
 
 ---
 

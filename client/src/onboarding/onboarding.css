@@ -1,0 +1,215 @@
+.onboarding-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  background: var(--surface-subtle, var(--surface-subtle));
+}
+
+.onboarding-card {
+  width: min(100%, 680px);
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, var(--border));
+  border-radius: 20px;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  box-shadow: 0 18px 50px rgb(0 0 0 / 8%);
+}
+
+.onboarding-progress {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.onboarding-progress span {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--border, var(--border));
+}
+
+.onboarding-progress span.active {
+  background: var(--primary, var(--feature-accent));
+}
+
+.onboarding-eyebrow {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--text-muted));
+}
+
+.onboarding-card h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 7vw, 2.6rem);
+  line-height: 1.05;
+}
+
+.onboarding-lead {
+  margin: 0.85rem 0 1.5rem;
+  color: var(--text-muted, var(--text-muted));
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.onboarding-field,
+.onboarding-add-person {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.onboarding-field > span,
+.onboarding-add-person > label {
+  font-weight: 700;
+}
+
+.onboarding-field input,
+.onboarding-add-person input {
+  min-height: 48px;
+  width: 100%;
+  border: 1px solid var(--border, var(--border));
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  font: inherit;
+  font-size: 16px;
+  background: var(--surface);
+}
+
+.onboarding-people {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1.4rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border, var(--border));
+}
+
+.onboarding-people p,
+.onboarding-muted {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted, var(--text-muted));
+  line-height: 1.45;
+}
+
+.onboarding-people ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.onboarding-people li {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  background: var(--surface-subtle, var(--surface-subtle));
+}
+
+.onboarding-link {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+
+.onboarding-add-person > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+}
+
+.onboarding-boundary {
+  margin-top: 1.4rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  background: var(--surface-subtle, var(--surface-subtle));
+}
+
+.onboarding-boundary p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted, var(--text-muted));
+  line-height: 1.45;
+}
+
+.onboarding-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.onboarding-actions-split {
+  justify-content: space-between;
+}
+
+.onboarding-error {
+  margin: 1rem 0 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.onboarding-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.onboarding-choice {
+  min-height: 154px;
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  text-align: left;
+  padding: 1rem;
+  border: 1px solid var(--border, var(--border));
+  border-radius: 16px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.onboarding-choice:hover,
+.onboarding-choice:focus-visible {
+  border-color: var(--primary, var(--feature-accent));
+  box-shadow: 0 0 0 3px rgb(49 95 75 / 12%);
+}
+
+.onboarding-choice > span {
+  font-size: 1.6rem;
+}
+
+.onboarding-choice strong {
+  font-size: 1.05rem;
+}
+
+.onboarding-choice small {
+  color: var(--text-muted, var(--text-muted));
+  line-height: 1.4;
+}
+
+@media (max-width: 560px) {
+  .onboarding-card {
+    border-radius: 16px;
+  }
+
+  .onboarding-choice-grid,
+  .onboarding-add-person > div {
+    grid-template-columns: 1fr;
+  }
+
+  .onboarding-actions-split {
+    flex-direction: column-reverse;
+  }
+
+  .onboarding-actions .shell-button {
+    width: 100%;
+  }
+}

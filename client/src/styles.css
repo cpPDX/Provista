@@ -1,9 +1,72 @@
 :root {
+  color-scheme: light;
+  --app-bg: #f5fafb;
+  --surface: #ffffff;
+  --surface-subtle: #f8fbfb;
+  --surface-muted: #eef4f5;
+  --text: #18343b;
+  --text-muted: #5f747a;
+  --nav-text: #315158;
+  --border: #d7e8eb;
+  --border-strong: #bcd4d9;
+  --accent: #21abcd;
+  --accent-strong: #157f98;
+  --accent-subtle: #eef9fb;
+  --feature-accent: #315f4b;
+  --feature-subtle: #eef4ef;
+  --feature-border: #c7d8cb;
+  --header-bg: rgb(255 255 255 / 96%);
+  --overlay: rgb(6 43 51 / 48%);
+  --danger: #b42318;
+  --danger-action: #b42318;
+  --danger-bg: #fff0f0;
+  --warning-bg: #fffaf0;
+  --warning-surface: #fff3cd;
+  --warning-text: #6b5100;
+  --warning-strong: #b54708;
+  --warning-border: #ecd9aa;
+  --success: #067647;
+  --card-shadow: 0 16px 40px rgb(24 52 59 / 7%);
+  --primary: var(--accent);
+  --shell-surface: var(--surface);
+  --shell-border: var(--border);
+  --shell-muted: var(--text-muted);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #18343b;
-  background: #f5fafb;
+  color: var(--text);
+  background: var(--app-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --app-bg: #1a1c20;
+  --surface: #2e3035;
+  --surface-subtle: #34373d;
+  --surface-muted: #3e4047;
+  --text: #f0f2f5;
+  --text-muted: #dde1e8;
+  --nav-text: #dde1e8;
+  --border: rgb(221 225 232 / 22%);
+  --border-strong: rgb(178 237 250 / 45%);
+  --accent: #21abcd;
+  --accent-strong: #b2edfa;
+  --accent-subtle: rgb(33 171 205 / 14%);
+  --feature-accent: #a8f3d1;
+  --feature-subtle: rgb(168 243 209 / 12%);
+  --feature-border: rgb(168 243 209 / 34%);
+  --header-bg: rgb(46 48 53 / 96%);
+  --overlay: rgb(0 0 0 / 66%);
+  --danger: #ffb4ab;
+  --danger-action: #b42318;
+  --danger-bg: rgb(180 35 24 / 18%);
+  --warning-bg: rgb(255 228 168 / 12%);
+  --warning-surface: #4a3d1f;
+  --warning-text: #ffe4a8;
+  --warning-strong: #ffe4a8;
+  --warning-border: rgb(255 228 168 / 42%);
+  --success: #a8f3d1;
+  --card-shadow: 0 16px 40px rgb(0 0 0 / 28%);
 }
 
 * {
@@ -14,6 +77,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  color: var(--text);
+  background: var(--app-bg);
 }
 
 button,
@@ -23,20 +88,20 @@ a {
 
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid #18343b;
+  outline: 3px solid var(--text);
   outline-offset: 3px;
 }
 
 .shell-app {
   min-height: 100vh;
   padding-bottom: 78px;
-  background: #f5fafb;
+  background: var(--app-bg);
 }
 
 .shell-offline-banner {
   padding: 8px 16px;
-  background: #fff3cd;
-  color: #6b5100;
+  background: var(--warning-surface);
+  color: var(--warning-text);
   text-align: center;
   font-size: 0.875rem;
   font-weight: 700;
@@ -51,9 +116,15 @@ a:focus-visible {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 18px;
-  border-bottom: 1px solid #d7e8eb;
-  background: rgb(255 255 255 / 96%);
+  border-bottom: 1px solid var(--border);
+  background: var(--header-bg);
   backdrop-filter: blur(10px);
+}
+
+.shell-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .shell-brand {
@@ -72,7 +143,7 @@ a:focus-visible {
 }
 
 .shell-brand span {
-  color: #5f747a;
+  color: var(--text-muted);
   font-size: 0.75rem;
 }
 
@@ -88,7 +159,7 @@ a:focus-visible {
 
 .shell-eyebrow {
   margin: 0 0 8px;
-  color: #157f98;
+  color: var(--accent-strong);
   font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.07em;
@@ -111,10 +182,10 @@ a:focus-visible {
 .shell-card,
 .shell-state-card {
   padding: 24px;
-  border: 1px solid #d7e8eb;
+  border: 1px solid var(--border);
   border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 16px 40px rgb(24 52 59 / 7%);
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
 }
 
 .shell-card h2 {
@@ -131,12 +202,12 @@ a:focus-visible {
 .shell-session-grid div {
   padding: 14px;
   border-radius: 12px;
-  background: #f5fafb;
+  background: var(--app-bg);
 }
 
 .shell-session-grid dt {
   margin-bottom: 5px;
-  color: #61767c;
+  color: var(--text-muted);
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -158,8 +229,8 @@ a:focus-visible {
   grid-template-columns: repeat(5, 1fr);
   min-height: 68px;
   padding-bottom: env(safe-area-inset-bottom);
-  border-top: 1px solid #d7e8eb;
-  background: #fff;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
 }
 
 .shell-bottom-nav button {
@@ -170,12 +241,73 @@ a:focus-visible {
   min-width: 0;
   border: 0;
   background: transparent;
-  color: #315158;
+  color: var(--nav-text);
   cursor: pointer;
 }
 
 .shell-bottom-nav button span {
   font-size: 1.2rem;
+}
+
+.shell-nav-icon {
+  width: 38px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.shell-nav-icon svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shell-nav-icon .shell-nav-more-icon {
+  fill: currentColor;
+  stroke: none;
+}
+
+.shell-bottom-nav button.active .shell-nav-icon,
+.shell-bottom-nav button[aria-current='page'] .shell-nav-icon {
+  background: var(--accent-subtle);
+}
+
+.shell-bottom-nav button:active .shell-nav-icon {
+  transform: scale(0.94);
+}
+
+.shell-theme-toggle {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.shell-theme-toggle svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shell-theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .shell-bottom-nav button small {
@@ -196,18 +328,18 @@ a:focus-visible {
 }
 
 .shell-button-primary {
-  background: #21abcd;
+  background: var(--accent);
   color: #062b33;
 }
 
 .shell-button-secondary {
-  border-color: #bcd4d9;
-  background: #fff;
-  color: #18343b;
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
 }
 
 .shell-button-danger {
-  background: #b42318;
+  background: var(--danger-action);
   color: #fff;
 }
 
@@ -239,8 +371,8 @@ a:focus-visible {
   width: 34px;
   height: 34px;
   margin-bottom: 18px;
-  border: 4px solid #d7e8eb;
-  border-top-color: #21abcd;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: shell-spin 0.8s linear infinite;
 }
@@ -256,14 +388,14 @@ a:focus-visible {
   display: grid;
   place-items: center;
   padding: 20px;
-  background: rgb(6 43 51 / 48%);
+  background: var(--overlay);
 }
 
 .shell-dialog {
   width: min(460px, 100%);
   padding: 22px;
   border-radius: 16px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 24px 70px rgb(6 43 51 / 25%);
 }
 
@@ -288,18 +420,18 @@ a:focus-visible {
 
 .shell-toast {
   padding: 12px 14px;
-  border: 1px solid #bfd7dc;
+  border: 1px solid var(--border);
   border-radius: 11px;
-  background: #fff;
+  background: var(--surface);
   box-shadow: 0 12px 30px rgb(24 52 59 / 14%);
 }
 
 .shell-toast-success {
-  border-color: #9bd1ae;
+  border-color: var(--success);
 }
 
 .shell-toast-error {
-  border-color: #e4a6a2;
+  border-color: var(--danger);
 }
 
 @media (max-width: 560px) {

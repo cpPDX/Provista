@@ -18,7 +18,7 @@ async function createHouseholdSession(page, suffix) {
 }
 
 test.describe('React migration shell', () => {
-  test('bootstraps the authenticated household and deep-links legacy feature tabs', async ({ page }) => {
+  test('bootstraps the authenticated household and routes migrated feature tabs in React', async ({ page }) => {
     await createHouseholdSession(page, 'Navigation');
 
     await page.goto('/react-preview/');
@@ -27,9 +27,15 @@ test.describe('React migration shell', () => {
     await expect(page.locator('.home-question')).toHaveCount(4);
 
     await page.getByRole('button', { name: 'Pantry', exact: true }).click();
-    await expect(page).toHaveURL(/\/app\?tab=inventory$/);
-    await expect(page.locator('#tab-inventory')).toHaveClass(/active/);
-    await expect(page.locator('#tab-inventory').getByRole('heading', { name: 'Pantry' })).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/pantry$/);
+    await expect(page.locator('#pantry-react-title')).toHaveText('Pantry');
+    await expect(page.getByRole('button', { name: 'Pantry', exact: true })).toHaveAttribute('aria-current', 'page');
+
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/plan$/);
+    await expect(page.locator('#plan-title')).toHaveText('Plan');
+    await expect(page.getByRole('button', { name: 'Plan', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('#tab-meal-plan')).toHaveCount(0);
   });
 
   test('signs out through the shared React confirmation dialog', async ({ page }) => {
@@ -45,6 +51,55 @@ test.describe('React migration shell', () => {
 
     await expect(page).toHaveURL('/');
     await expect(page.getByText('Grocery planning for real households')).toBeVisible();
+  });
+
+  test('restores branded navigation icons and persists theme per user', async ({ page }) => {
+    await createHouseholdSession(page, 'Theme');
+
+    await page.goto('/app');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('.shell-bottom-nav [data-nav-icon]')).toHaveCount(5);
+    await expect(page.locator('[data-nav-icon="home"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="plan"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="list"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="pantry"]')).toBeVisible();
+    await expect(page.locator('[data-nav-icon="more"]')).toBeVisible();
+
+    const session = await page.request.get('/api/auth/me').then(response => response.json());
+    const themeKey = `provista_theme_${session.user._id}`;
+    const toggle = page.getByRole('button', { name: 'Switch to dark theme' });
+    await toggle.click();
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(page.getByRole('button', { name: 'Switch to light theme' })).toBeVisible();
+    await expect.poll(() => page.evaluate(key => localStorage.getItem(key), themeKey)).toBe('dark');
+    await expect.poll(async () => {
+      const response = await page.request.get('/api/auth/me');
+      return (await response.json()).user.preferences.theme;
+    }).toBe('dark');
+
+    await page.evaluate(key => localStorage.removeItem(key), themeKey);
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect.poll(() => page.evaluate(key => localStorage.getItem(key), themeKey)).toBe('dark');
+  });
+
+  test('keeps More in the React shell and preserves theme for legacy tools', async ({ page }) => {
+    await createHouseholdSession(page, 'More');
+
+    await page.goto('/app');
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/more$/);
+    await expect(page.locator('#more-title')).toHaveText('More');
+    await expect(page.locator('.shell-brand')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveAttribute('aria-current', 'page');
+
+    await page.getByRole('button', { name: 'Switch to dark theme' }).click();
+    await page.getByRole('link', { name: /My Account/ }).click();
+    await expect(page).toHaveURL(/\/app\?tab=more&section=account$/);
+    await expect(page.locator('#section-account')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 
   test('keeps the production React Home shell available after going offline', async ({ page, context }) => {

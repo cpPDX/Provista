@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useOnlineStatus } from '../app/useOnlineStatus';
+import {
+  completeFirstAction,
+  goBackInOnboarding,
+  loadOnboarding,
+  onboardingQueryKey
+} from '../onboarding/api';
 import { useConfirm } from '../shell/DialogProvider';
+import { useDirtyState } from '../shell/DirtyStateProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
 import { useShoppingCheckout } from './checkout';
@@ -20,6 +29,7 @@ import {
 import './list.css';
 
 const queryKey = ['shopping-list'] as const;
+const EMPTY_ITEMS: ShoppingListItem[] = [];
 
 interface CheckSync {
   serverChecked: boolean;
@@ -69,35 +79,29 @@ function householdPrice(item: ShoppingListItem): string {
   return 'No recent household price';
 }
 
-function useOnlineStatus() {
-  const [online, setOnline] = useState(() => navigator.onLine);
-  useEffect(() => {
-    const onOnline = () => setOnline(true);
-    const onOffline = () => setOnline(false);
-    window.addEventListener('online', onOnline);
-    window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
-  }, []);
-  return online;
-}
-
 export function ShoppingListPage() {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
   const confirm = useConfirm();
+  const { requestNavigation } = useDirtyState();
   const { showToast } = useToast();
   const online = useOnlineStatus();
   const listQuery = useQuery({ queryKey, queryFn: loadShoppingList });
+  const onboardingQuery = useQuery({ queryKey: onboardingQueryKey, queryFn: loadOnboarding });
   const [storeFilter, setStoreFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   const [storePreferenceItem, setStorePreferenceItem] = useState<ShoppingListItem | null>(null);
   const checkSync = useRef(new Map<string, CheckSync>());
 
-  const items = listQuery.data || [];
+  const items = listQuery.data || EMPTY_ITEMS;
   const checkedItems = items.filter(item => item.checked);
+  const onboardingActive = Boolean(
+    onboardingQuery.data?.required &&
+    onboardingQuery.data.firstAction === 'list' &&
+    onboardingQuery.data.step === 'first_action'
+  );
 
   useEffect(() => {
     if (!checkedItems.length) {
@@ -106,6 +110,14 @@ export function ShoppingListPage() {
     }
     setActiveStoreId(current => current || inferActiveStore(checkedItems));
   }, [checkedItems.length]);
+
+  useEffect(() => {
+    if (new URLSearchParams(location.search).get('focus') !== 'rapid-list-input') return;
+    const timer = window.setTimeout(() => {
+      document.querySelector<HTMLTextAreaElement>('#react-rapid-list-input')?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [location.search]);
 
   useEffect(() => {
     if (!online) return;
@@ -117,6 +129,34 @@ export function ShoppingListPage() {
       if (result.failed) showToast(`${result.failed} List change${result.failed === 1 ? '' : 's'} could not sync`, { tone: 'error' });
     });
   }, [online, queryClient, showToast]);
+
+  const handleListChanged = async () => {
+    await queryClient.invalidateQueries({ queryKey });
+    await queryClient.invalidateQueries({ queryKey: ['home'], refetchType: 'none' });
+    if (!onboardingActive) return;
+
+    try {
+      const next = await completeFirstAction();
+      queryClient.setQueryData(onboardingQueryKey, next);
+      showToast('Your shopping list has a start. Home is ready.', { tone: 'success', durationMs: 4500 });
+      navigate('/app', { replace: true });
+    } catch (error) {
+      // The server is authoritative: updating a pre-existing item does not
+      // satisfy onboarding because it is not a new List outcome after choice.
+      console.info('Onboarding completion is not ready yet:', error);
+    }
+  };
+
+  const changeFirstAction = async () => {
+    try {
+      const next = await goBackInOnboarding();
+      queryClient.setQueryData(onboardingQueryKey, next);
+      navigate('/app', { replace: true });
+    } catch (error) {
+      console.error(error);
+      showToast('Could not change the first action.', { tone: 'error' });
+    }
+  };
 
   const updateCheckedCache = (id: string, checked: boolean) => {
     queryClient.setQueryData<ShoppingListItem[]>(queryKey, current =>
@@ -263,7 +303,11 @@ export function ShoppingListPage() {
   const threshold = Number(context?.savingsThreshold || 0);
   const showStoreSuggestion = Boolean(context?.additionalStore?.name && savings >= threshold);
 
-  const openCompatibilityTool = (action: 'review-low-stock' | 'scan-list-item') => {
+  const openShoppingTool = (action: 'review-low-stock' | 'scan-list-item') => {
+    if (action === 'review-low-stock') {
+      void requestNavigation(() => navigate('/app/pantry'));
+      return;
+    }
     const params = new URLSearchParams({ tab: 'list', action });
     window.location.assign(`/app?${params.toString()}`);
   };
@@ -278,12 +322,20 @@ export function ShoppingListPage() {
         </div>
       </header>
 
+      {onboardingActive && (
+        <aside className="react-list-store-suggestion">
+          <strong>First useful action: build your shopping list</strong>
+          <span>Add at least one grocery you actually need. Once the new item is saved, Provista will take you to Home.</span>
+          <button type="button" className="react-list-clear-filter" onClick={() => void changeFirstAction()}>Choose Plan instead</button>
+        </aside>
+      )}
+
       {!online && <div className="react-list-offline" role="status">Offline · check-offs and simple List changes will sync when you reconnect.</div>}
 
       <RapidCapture
         items={items}
         online={online}
-        onListChanged={() => queryClient.invalidateQueries({ queryKey })}
+        onListChanged={handleListChanged}
       />
 
       <div className="react-list-toolbar">
@@ -309,9 +361,9 @@ export function ShoppingListPage() {
         <details className="react-list-more-tools">
           <summary>More shopping tools</summary>
           <div>
-            <button type="button" onClick={() => openCompatibilityTool('review-low-stock')}>Review low stock</button>
-            <button type="button" onClick={() => openCompatibilityTool('scan-list-item')}>Scan item</button>
-            <small>These tools stay on the compatibility screen until Pantry and scanner migration work is complete.</small>
+            <button type="button" onClick={() => openShoppingTool('review-low-stock')}>Review low stock</button>
+            <button type="button" onClick={() => openShoppingTool('scan-list-item')}>Scan item</button>
+            <small>Low-stock review opens React Pantry. Scanner support remains on the compatibility screen until its migration work is complete.</small>
           </div>
         </details>
       </div>

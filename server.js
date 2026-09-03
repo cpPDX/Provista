@@ -5,7 +5,8 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
-const { securityHeaders, createRateLimiter } = require('./middleware/security');
+const { rateLimit } = require('express-rate-limit');
+const { securityHeaders } = require('./middleware/security');
 
 if (!process.env.JWT_SECRET) {
   console.error('FATAL: JWT_SECRET environment variable is required');
@@ -20,9 +21,18 @@ app.use(cookieParser());
 
 // Keep brute-force / account abuse bounded. These stores are process-local,
 // which matches the current single-replica deployment.
-const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'login' });
-const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'register' });
-const passwordLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'password' });
+const commonLimiterOptions = {
+  standardHeaders: 'draft-6',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test'
+};
+const loginLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 15 * 60 * 1000, limit: 20 });
+const registerLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 60 * 60 * 1000, limit: 10 });
+const passwordLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 15 * 60 * 1000, limit: 10 });
+// These routes only return the small React HTML shell. The generous ceiling
+// blocks abusive filesystem traffic while staying invisible during normal use.
+const appShellLimiter = rateLimit({ ...commonLimiterOptions, windowMs: 60 * 1000, limit: 240 });
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/password', passwordLimiter);
@@ -126,8 +136,9 @@ app.use('/api/health', require('./routes/health'));
 // Auth routes
 app.use('/api/auth', require('./routes/auth'));
 
-// Household management
+// Household management + first-run orchestration
 app.use('/api/household', require('./routes/household'));
+app.use('/api/onboarding', require('./routes/onboarding'));
 
 // Data routes (all require auth via route-level middleware)
 app.use('/api/items', require('./routes/items'));
@@ -190,16 +201,20 @@ app.get('/', (req, res) => {
 // `/app` without a feature deep link is the migrated React Home. During the
 // strangler migration, explicit `?tab=` links continue to open the legacy
 // feature renderer until that destination moves to React.
-app.get('/app', (req, res) => {
+app.get('/app', appShellLimiter, (req, res) => {
   if (req.query.tab || req.query.legacy === '1') return serveLegacyApp(req, res);
   return serveReactApp(req, res);
 });
 
-// PRO-53 List migration route. The legacy List remains reachable through
-// `/app?tab=list` until checkout and capture parity are complete.
-app.get('/app/list', serveReactApp);
+// Migrated authenticated feature routes. The matching legacy `?tab=` deep
+// links remain available until PRO-56 retires the compatibility renderer.
+app.get('/app/list', appShellLimiter, serveReactApp);
+app.get('/app/pantry', appShellLimiter, serveReactApp);
+app.get('/app/plan', appShellLimiter, serveReactApp);
+app.get('/app/more', appShellLimiter, serveReactApp);
 
-// New-household onboarding still depends on legacy DOM targets until PRO-55.
+// Compatibility surface remains available while secondary More tools,
+// Insights, scanner, and legacy authenticated JavaScript are retired under PRO-56.
 app.get('/legacy-app', serveLegacyApp);
 
 // Vite's output lives under public/react-preview, but static directory indexes are

@@ -58,12 +58,31 @@ function requestedInitialTab() {
   return tab && LEGACY_TAB_IDS.has(tab) ? tab : 'home';
 }
 
+function requestedMoreSection() {
+  const section = new URLSearchParams(window.location.search).get('section');
+  return ['insights', 'account', 'household', 'items', 'stores', 'about'].includes(section) ? section : null;
+}
+
+function requestedMoreAction() {
+  const action = new URLSearchParams(window.location.search).get('action');
+  return ['csv-import', 'app-tour'].includes(action) ? action : null;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Auth check — returns to the public page with sign-in open when needed
   const ok = await window.appAuth.load();
   if (!ok) return;
 
   const { user, household, features } = window.appAuth;
+  let theme = user.preferences?.theme === 'dark' ? 'dark' : 'light';
+  try {
+    const cachedTheme = localStorage.getItem(`provista_theme_${user._id}`);
+    if (cachedTheme === 'light' || cachedTheme === 'dark') theme = cachedTheme;
+  } catch (_) {}
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+  document.querySelector('meta[name="theme-color"]')
+    ?.setAttribute('content', theme === 'dark' ? '#1A1C20' : '#F5FAFB');
 
   // Show session expiry notice if using cached auth
   if (window.appAuth.offlineSession) {
@@ -126,6 +145,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadHomeTab();
   const initialTab = requestedInitialTab();
   if (initialTab !== 'home') await switchTab(initialTab);
+  if (initialTab === 'more') {
+    const section = requestedMoreSection();
+    const action = requestedMoreAction();
+    if (section) await openMoreSection(section);
+    else if (action === 'csv-import') openCsvImportModal();
+    else if (action === 'app-tour') startAppTour();
+  }
 
   // Initialize offline support AFTER UI is interactive (non-blocking)
   if (features?.offlineAccess) {

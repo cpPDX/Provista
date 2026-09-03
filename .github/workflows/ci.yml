@@ -10,7 +10,7 @@ on:
 # Push validation is reserved for persistent integration branches so a PR update
 # does not start a second, immediately-cancelled workflow run for the same commit.
 concurrency:
-  group: app-ci-${{ github.head_ref || github.ref_name }}
+  group: app-ci-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -76,6 +76,7 @@ jobs:
           node --check services/passwordResetEmail.js
           node --check utils/mealShopping.js
           node --check routes/mealPlan.js
+          node --check routes/onboarding.js
           node --check routes/auth.js
           node --check routes/externalPrices.js
           node --check routes/household.js
@@ -86,6 +87,7 @@ jobs:
           node --check routes/spend.js
           node --check routes/stores.js
           node --check tests/api/mealShopping.test.js
+          node --check tests/api/onboarding.test.js
           node --check tests/api/uxBatch1.test.js
           node --check tests/e2e/prices.spec.js
           node --check tests/e2e/mealPlan.spec.js
@@ -103,6 +105,9 @@ jobs:
           node --check tests/e2e/releaseFeedback.spec.js
           node --check tests/e2e/reactShell.spec.js
           node --check tests/e2e/reactShoppingList.spec.js
+          node --check tests/e2e/reactPantry.spec.js
+          node --check tests/e2e/reactPlan.spec.js
+          node --check tests/e2e/reactOnboarding.spec.js
           node --check .github/scripts/staging-deployment-policy.cjs
           node --check .github/scripts/prepare-staging-deployment.cjs
           node --check tests/ci/prepareStagingDeployment.test.js
@@ -150,5 +155,5 @@ jobs:
       - name: Install Chromium and WebKit
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Run critical household, latency, and mobile accessibility tests
-        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/household.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js tests/e2e/releaseFeedback.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js
+      - name: Run critical household, latency, onboarding, Plan, and mobile accessibility tests
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/household.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js tests/e2e/releaseFeedback.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js tests/e2e/reactPantry.spec.js tests/e2e/reactPlan.spec.js tests/e2e/reactOnboarding.spec.js

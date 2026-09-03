@@ -78,6 +78,32 @@
   --shadow-lg: var(--shadow-modal);
 }
 
+:root[data-theme='light'] {
+  --color-bg-base: #F5FAFB;
+  --color-bg-card: #FFFFFF;
+  --color-bg-card-elevated: #F8FBFB;
+  --color-bg-input: #EEF4F5;
+  --color-bg-nav: #FFFFFF;
+  --color-text-primary: #18343B;
+  --color-text-secondary: #5F747A;
+  --color-text-disabled: #8CA0A5;
+  --color-text-inverse: #062B33;
+  --color-blue-light: #157F98;
+  --color-blue-dark: #116A7F;
+  --color-blue-muted: rgba(33, 171, 205, 0.12);
+  --color-success: #067647;
+  --color-warning: #8A6100;
+  --color-danger: #B42318;
+  --color-danger-muted: rgba(180, 35, 24, 0.08);
+  --color-border: rgba(49, 81, 88, 0.18);
+  --color-border-focus: #157F98;
+  --color-divider: rgba(49, 81, 88, 0.12);
+  --shadow-card: 0 2px 8px rgba(24, 52, 59, 0.08);
+  --shadow-card-elevated: 0 8px 24px rgba(24, 52, 59, 0.12);
+  --shadow-modal: 0 -4px 24px rgba(24, 52, 59, 0.18);
+  --shadow-blue-glow: 0 0 12px rgba(33, 171, 205, 0.18);
+}
+
 /* ===== Reset ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; overflow: hidden; }
