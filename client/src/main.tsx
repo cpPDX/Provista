@@ -9,6 +9,7 @@ import { DialogProvider } from './shell/DialogProvider';
 import { DirtyStateProvider } from './shell/DirtyStateProvider';
 import { ToastProvider } from './shell/ToastProvider';
 import './styles.css';
+import './themeHardening.css';
 
 const rootElement = document.getElementById('root');
 
