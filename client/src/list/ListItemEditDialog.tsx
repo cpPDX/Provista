@@ -110,7 +110,7 @@ export function ListItemEditDialog({ item, onClose }: ListItemEditDialogProps) {
 
           {required != null && (
             <p className="react-list-modal-help">
-              Provista currently calculates {required:g} needed. Changing what you plan to buy does not rewrite that Plan/Pantry requirement.
+              Provista currently calculates {required} needed. Changing what you plan to buy does not rewrite that Plan/Pantry requirement.
             </p>
           )}
 
