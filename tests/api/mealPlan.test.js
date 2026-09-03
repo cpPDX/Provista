@@ -277,6 +277,92 @@ describe('POST /api/meal-plan/shopping-suggestions', () => {
   });
 });
 
+describe('GET /api/meal-plan/allocations', () => {
+  it('projects chronological meal demand without changing Pantry quantity', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const chicken = await request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name: 'Allocation Chicken', category: 'Meat', unit: 'each' });
+    expect(chicken.status).toBe(201);
+
+    const pantry = await request(app).post('/api/inventory').set('Cookie', cookie)
+      .send({ itemId: chicken.body._id, trackingMode: 'exact', quantity: 4 });
+    expect(pantry.status).toBe(201);
+
+    const saved = await request(app).put('/api/meal-plan').set('Cookie', cookie).send({
+      weekStart: WEEK_START,
+      days: [{
+        date: `${WEEK_START}T00:00:00.000Z`,
+        meals: [{ mealType: 'dinner', name: 'Monday', notes: 'Allocation Chicken x2', forEveryone: true }]
+      }, {
+        date: '2026-01-07T00:00:00.000Z',
+        meals: [{ mealType: 'dinner', name: 'Wednesday', notes: 'Allocation Chicken x3', forEveryone: true }]
+      }]
+    });
+    expect(saved.status).toBe(200);
+
+    const projection = await request(app)
+      .get(`/api/meal-plan/allocations?weekStart=${WEEK_START}`)
+      .set('Cookie', cookie);
+    expect(projection.status).toBe(200);
+    expect(projection.body.itemSummaries[0]).toMatchObject({
+      itemId: chicken.body._id,
+      onHandQuantity: 4,
+      plannedQuantity: 5,
+      projectedQuantity: 0,
+      shortageQuantity: 1,
+      shoppingQuantity: 1
+    });
+    expect(projection.body.mealAllocations[1]).toMatchObject({
+      mealName: 'Wednesday',
+      availableBefore: 2,
+      shortageQuantity: 1,
+      shoppingQuantity: 1
+    });
+
+    const inventory = await request(app).get('/api/inventory').set('Cookie', cookie);
+    expect(inventory.status).toBe(200);
+    expect(inventory.body.find(entry => entry.itemId?._id === chicken.body._id)?.quantity).toBe(4);
+  });
+
+  it('subtracts existing List quantity from the projected shopping need', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const onion = await request(app).post('/api/items').set('Cookie', cookie)
+      .send({ name: 'Allocation Onion', category: 'Produce', unit: 'each' });
+    expect(onion.status).toBe(201);
+    await request(app).post('/api/inventory').set('Cookie', cookie)
+      .send({ itemId: onion.body._id, trackingMode: 'exact', quantity: 1 });
+    await request(app).post('/api/shopping-list').set('Cookie', cookie)
+      .send({ itemId: onion.body._id, quantity: 0.5 });
+    await request(app).put('/api/meal-plan').set('Cookie', cookie).send({
+      weekStart: WEEK_START,
+      days: [{
+        date: `${WEEK_START}T00:00:00.000Z`,
+        meals: [{ mealType: 'dinner', name: 'Soup', notes: 'Allocation Onion x1.75', forEveryone: true }]
+      }]
+    });
+
+    const projection = await request(app)
+      .get(`/api/meal-plan/allocations?weekStart=${WEEK_START}`)
+      .set('Cookie', cookie);
+    expect(projection.status).toBe(200);
+    expect(projection.body.itemSummaries[0]).toMatchObject({
+      onHandQuantity: 1,
+      plannedQuantity: 1.75,
+      shortageQuantity: 0.75,
+      listQuantity: 0.5,
+      shoppingQuantity: 0.25
+    });
+  });
+
+  it('requires a valid week start', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const missing = await request(app).get('/api/meal-plan/allocations').set('Cookie', cookie);
+    const invalid = await request(app).get('/api/meal-plan/allocations?weekStart=nope').set('Cookie', cookie);
+    expect(missing.status).toBe(400);
+    expect(invalid.status).toBe(400);
+  });
+});
+
 describe('POST /api/meal-plan/copy-previous', () => {
   it('copies last week while remapping dates to the requested week', async () => {
     const { cookie } = await createOwnerSession(app);

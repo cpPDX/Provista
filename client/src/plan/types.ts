@@ -73,3 +73,26 @@ export interface MealShoppingPreview {
   parsedCount: number;
   suggestions: MealShoppingSuggestion[];
 }
+
+export interface MealAllocationSummary {
+  itemId: string;
+  name: string;
+  unit: string;
+  trackingMode: 'simple' | 'exact' | null;
+  pantryStatus: 'have' | 'low' | 'out' | 'not-tracked';
+  onHandQuantity: number | null;
+  plannedQuantity: number;
+  projectedQuantity: number | null;
+  lowStockThreshold: number | null;
+  belowLowStockThreshold: boolean | null;
+  shortageQuantity: number | null;
+  listQuantity: number;
+  shoppingQuantity: number;
+}
+
+export interface MealAllocationProjection {
+  weekStart: string | null;
+  itemSummaries: MealAllocationSummary[];
+  mealAllocations: Array<Record<string, unknown>>;
+  unresolvedNeeds: Array<Record<string, unknown>>;
+}

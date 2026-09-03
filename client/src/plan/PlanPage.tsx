@@ -17,10 +17,12 @@ import {
   copyPreviousWeek,
   deleteFavoriteMeal,
   favoriteMealsQueryKey,
+  loadMealAllocations,
   loadFavoriteMeals,
   loadMealPlan,
   loadMealPlanSettings,
   mealPlanQueryKey,
+  mealAllocationQueryKey,
   mealPlanSettingsQueryKey,
   previewMealShoppingNeeds,
   saveFavoriteMeal,
@@ -190,6 +192,11 @@ export function PlanPage() {
   const planQuery = useQuery({
     queryKey: mealPlanQueryKey(weekStart),
     queryFn: () => loadMealPlan(weekStart),
+    enabled: Boolean(weekStart)
+  });
+  const allocationQuery = useQuery({
+    queryKey: mealAllocationQueryKey(weekStart),
+    queryFn: () => loadMealAllocations(weekStart),
     enabled: Boolean(weekStart)
   });
 
@@ -688,6 +695,26 @@ export function PlanPage() {
         </div>
         <button type="button" className="shell-button shell-button-secondary" onClick={() => void navigateWeek(1)}>Next →</button>
       </div>
+
+      {allocationQuery.data && allocationQuery.data.itemSummaries.length > 0 && (
+        <section className="plan-pantry-outlook" aria-labelledby="plan-pantry-outlook-title">
+          <div>
+            <h2 id="plan-pantry-outlook-title">Pantry outlook</h2>
+            <p>Based on saved meal needs. Planning does not change Pantry on-hand quantities.</p>
+          </div>
+          <div className="plan-pantry-outlook-items">
+            {allocationQuery.data.itemSummaries.map(item => {
+              const unit = item.unit ? ` ${item.unit}` : '';
+              const need = item.shoppingQuantity > 0 ? ` · Buy ${item.shoppingQuantity}${unit}` : item.listQuantity > 0 ? ' · Covered on List' : '';
+              const detail = item.trackingMode === 'simple'
+                ? `Pantry: ${item.pantryStatus === 'have' ? 'Have' : item.pantryStatus === 'low' ? 'Running low' : 'Out'}${need}`
+                : `On hand ${item.onHandQuantity || 0}${unit} · Planned ${item.plannedQuantity}${unit} · Projected ${item.projectedQuantity || 0}${unit}${need}`;
+              return <div className={item.shoppingQuantity > 0 ? 'plan-pantry-outlook-shortage' : ''} key={item.itemId}><strong>{item.name}</strong><span>{detail}</span></div>;
+            })}
+          </div>
+          {allocationQuery.data.unresolvedNeeds.length > 0 && <small>{allocationQuery.data.unresolvedNeeds.length} meal need{allocationQuery.data.unresolvedNeeds.length === 1 ? '' : 's'} need a catalog match before Provista can project them.</small>}
+        </section>
+      )}
 
       <div className="plan-tools">
         <button type="button" className="shell-button shell-button-secondary" disabled={!online} onClick={() => void copyLastWeek()}>Copy last week</button>
