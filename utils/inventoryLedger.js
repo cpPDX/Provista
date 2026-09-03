@@ -24,57 +24,77 @@ function deriveQuantity(events = [], fallbackQuantity = 0) {
   return roundQuantity(quantity);
 }
 
-async function ensureBaselineEvent(inventoryItem) {
-  const existing = await InventoryEvent.findOne({
+function withSession(query, session) {
+  return session ? query.session(session) : query;
+}
+
+async function createEvent(document, session) {
+  if (!session) return InventoryEvent.create(document);
+  const created = await InventoryEvent.create([document], { session });
+  return created[0];
+}
+
+async function ensureBaselineEvent(inventoryItem, options = {}) {
+  const session = options.session || null;
+  const existing = await withSession(InventoryEvent.findOne({
     householdId: inventoryItem.householdId,
     inventoryItemId: inventoryItem._id,
     type: 'baseline'
-  }).lean();
+  }), session).lean();
   if (existing) return existing;
 
-  const effectiveAt = inventoryItem.lastUpdated || inventoryItem.updatedAt || inventoryItem.createdAt || new Date();
+  const effectiveAt = options.effectiveAt || inventoryItem.lastUpdated || inventoryItem.updatedAt || inventoryItem.createdAt || new Date();
+  const absoluteQuantity = options.absoluteQuantity == null
+    ? Math.max(0, Number(inventoryItem.quantity) || 0)
+    : Math.max(0, Number(options.absoluteQuantity) || 0);
   try {
-    return await InventoryEvent.create({
+    return await createEvent({
       householdId: inventoryItem.householdId,
       inventoryItemId: inventoryItem._id,
       itemId: inventoryItem.itemId,
       type: 'baseline',
-      absoluteQuantity: Math.max(0, Number(inventoryItem.quantity) || 0),
+      absoluteQuantity,
       effectiveAt,
       sourceIdentity: `baseline:${inventoryItem._id}`,
       sourceType: 'inventory-item'
-    });
+    }, session);
   } catch (err) {
     if (err?.code === 11000) {
-      return InventoryEvent.findOne({ householdId: inventoryItem.householdId, sourceIdentity: `baseline:${inventoryItem._id}` });
+      return withSession(InventoryEvent.findOne({
+        householdId: inventoryItem.householdId,
+        sourceIdentity: `baseline:${inventoryItem._id}`
+      }), session);
     }
     throw err;
   }
 }
 
-async function currentQuantityForItem(inventoryItem) {
-  await ensureBaselineEvent(inventoryItem);
-  const events = await InventoryEvent.find({
+async function currentQuantityForItem(inventoryItem, options = {}) {
+  const session = options.session || null;
+  await ensureBaselineEvent(inventoryItem, { session });
+  const events = await withSession(InventoryEvent.find({
     householdId: inventoryItem.householdId,
     inventoryItemId: inventoryItem._id
-  }).lean();
+  }), session).lean();
   return deriveQuantity(events, inventoryItem.quantity);
 }
 
-async function syncMaterializedQuantity(inventoryItem) {
-  const quantity = await currentQuantityForItem(inventoryItem);
+async function syncMaterializedQuantity(inventoryItem, options = {}) {
+  const session = options.session || null;
+  const quantity = await currentQuantityForItem(inventoryItem, { session });
   if (Number(inventoryItem.quantity) !== quantity) {
     inventoryItem.quantity = quantity;
     inventoryItem.lastUpdated = new Date();
-    await inventoryItem.save();
+    await inventoryItem.save(session ? { session } : undefined);
   }
   return quantity;
 }
 
 async function appendAbsoluteCount(inventoryItem, quantity, options = {}) {
-  await ensureBaselineEvent(inventoryItem);
+  const session = options.session || null;
+  await ensureBaselineEvent(inventoryItem, { session });
   const effectiveAt = options.effectiveAt || new Date();
-  const event = await InventoryEvent.create({
+  const event = await createEvent({
     householdId: inventoryItem.householdId,
     inventoryItemId: inventoryItem._id,
     itemId: inventoryItem.itemId,
@@ -86,16 +106,17 @@ async function appendAbsoluteCount(inventoryItem, quantity, options = {}) {
     sourceEntityId: options.sourceEntityId || null,
     sourceMeta: options.sourceMeta || null,
     createdBy: options.createdBy || null
-  });
-  await syncMaterializedQuantity(inventoryItem);
+  }, session);
+  await syncMaterializedQuantity(inventoryItem, { session });
   return event;
 }
 
 async function appendDelta(inventoryItem, type, quantityDelta, options = {}) {
-  await ensureBaselineEvent(inventoryItem);
+  const session = options.session || null;
+  await ensureBaselineEvent(inventoryItem, { session });
   let event;
   try {
-    event = await InventoryEvent.create({
+    event = await createEvent({
       householdId: inventoryItem.householdId,
       inventoryItemId: inventoryItem._id,
       itemId: inventoryItem.itemId,
@@ -108,15 +129,15 @@ async function appendDelta(inventoryItem, type, quantityDelta, options = {}) {
       sourceMeta: options.sourceMeta || null,
       reversesEventId: options.reversesEventId || null,
       createdBy: options.createdBy || null
-    });
+    }, session);
   } catch (err) {
     if (err?.code !== 11000 || !options.sourceIdentity) throw err;
-    event = await InventoryEvent.findOne({
+    event = await withSession(InventoryEvent.findOne({
       householdId: inventoryItem.householdId,
       sourceIdentity: options.sourceIdentity
-    });
+    }), session);
   }
-  await syncMaterializedQuantity(inventoryItem);
+  await syncMaterializedQuantity(inventoryItem, { session });
   return event;
 }
 
