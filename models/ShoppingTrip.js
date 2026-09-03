@@ -6,7 +6,13 @@ const shoppingTripItemSchema = new mongoose.Schema({
   itemName: { type: String, required: true, trim: true },
   category: { type: String, trim: true, default: 'Other' },
   unit: { type: String, trim: true, default: '' },
+  // `quantity` remains the compatibility field and always means what was
+  // actually purchased for completed trips.
   quantity: { type: Number, required: true, min: 0 },
+  requiredQuantity: { type: Number, default: null, min: 0 },
+  intendedPurchaseQuantity: { type: Number, required: true, min: 0 },
+  actualPurchasedQuantity: { type: Number, required: true, min: 0 },
+  quantitySource: { type: String, enum: ['system', 'user'], default: 'user' },
   storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
   storeName: { type: String, trim: true, default: '' },
   price: { type: Number, min: 0, default: null },
