@@ -44,7 +44,7 @@ test.describe('React Shopping List migration', () => {
 
     await expect(page.locator('#react-rapid-status')).toHaveAttribute('data-state', 'success');
     await expect(page.locator('#react-rapid-status')).toContainText('Added 1 item');
-    await expect(page.locator('.react-list-item', { hasText: item.name })).toContainText('qty 1');
+    await expect(page.locator('.react-list-item', { hasText: item.name })).toContainText('Buy 1');
     await expect(input).toHaveValue('');
   });
 
@@ -71,9 +71,9 @@ test.describe('React Shopping List migration', () => {
 
     await page.getByRole('button', { name: 'Add 3 items', exact: true }).click();
     await expect(page.locator('.react-rapid-preview')).toHaveCount(0);
-    await expect(page.locator('.react-list-item', { hasText: milk.name })).toContainText('qty 5');
-    await expect(page.locator('.react-list-item', { hasText: eggs.name })).toContainText('qty 1');
-    await expect(page.locator('.react-list-item', { hasText: bananas.name })).toContainText('qty 2');
+    await expect(page.locator('.react-list-item', { hasText: milk.name })).toContainText('Buy 5');
+    await expect(page.locator('.react-list-item', { hasText: eggs.name })).toContainText('Buy 1');
+    await expect(page.locator('.react-list-item', { hasText: bananas.name })).toContainText('Buy 2');
 
     response = await page.request.get('/api/shopping-list');
     const list = await response.json();
@@ -363,7 +363,7 @@ test.describe('React Shopping List migration', () => {
     await expect(dialog.locator('#parent-trip-price-summary')).toContainText('3 prices will be reviewed later');
     await expect(dialog.locator('.finish-shopping-confirmed')).toContainText('17 recorded prices');
     await expect(dialog.locator('.finish-shopping-outcomes')).toContainText('Update Spending');
-    await expect(dialog.locator('.finish-shopping-outcomes')).toContainText('Update Pantry if selected below');
+    await expect(dialog.locator('.finish-shopping-outcomes')).toContainText('Update Pantry');
 
     await dialog.locator('#parent-finish-shopping').click();
     await expect(dialog).toHaveCount(0, { timeout: 20000 });

@@ -1,0 +1,73 @@
+.react-list-context-controls,
+.react-list-store-line,
+.react-list-price-line {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.react-list-context-controls {
+  margin-top: 0.35rem;
+}
+
+.react-list-quantity-line,
+.react-list-pantry-context {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.react-list-quantity-line > span {
+  font-weight: 750;
+  color: var(--text);
+}
+
+.react-list-context-controls small,
+.react-list-store-line small,
+.react-list-price-line small {
+  display: block;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.react-list-store-line {
+  margin-top: 0.3rem;
+}
+
+.react-list-price-line {
+  margin-top: 0.3rem;
+}
+
+.react-list-inline-create {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.react-list-inline-create label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.react-list-inline-create small {
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 620px) {
+  .react-list-quantity-line,
+  .react-list-pantry-context {
+    align-items: flex-start;
+  }
+}
+
+@media (min-resolution: 1dppx) {
+  .react-list-context-controls button,
+  .react-list-store-line button {
+    min-height: 44px;
+  }
+}

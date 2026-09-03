@@ -13,12 +13,15 @@ import { useDirtyState } from '../shell/DirtyStateProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
 import { useShoppingCheckout } from './checkout';
+import { ListItemContextControls } from './ListItemContextControls';
 import { RapidCapture } from './RapidCapture';
 import { StorePreferenceDialog } from './StorePreferenceDialog';
 import { StoreSectionControl, useStoreSections } from './storeSections';
 import { processShoppingQueue } from './storage';
 import {
+  currentShoppingStoreId,
   entityId,
+  intendedPurchaseQuantity,
   plannedStoreId,
   plannedStoreName,
   preferredStoreId,
@@ -34,7 +37,9 @@ const EMPTY_ITEMS: ShoppingListItem[] = [];
 
 interface CheckSync {
   serverChecked: boolean;
+  serverShoppingStoreId: string | null;
   desiredChecked: boolean;
+  desiredShoppingStoreId: string | null;
   processing: boolean;
   promise?: Promise<boolean>;
 }
@@ -55,6 +60,7 @@ function inferActiveStore(items: ShoppingListItem[]): string | null {
 function storeName(items: ShoppingListItem[], id: string | null): string {
   if (!id) return '';
   for (const item of items) {
+    if (entityId(item.shoppingStoreId) === id && item.shoppingStoreId && typeof item.shoppingStoreId !== 'string') return item.shoppingStoreId.name;
     if (entityId(item.storeId) === id && item.storeId && typeof item.storeId !== 'string') return item.storeId.name;
     if (entityId(item.tripStore) === id && item.tripStore) return item.tripStore.name;
     const usual = item.priceContext?.usualStore;
@@ -165,9 +171,18 @@ export function ShoppingListPage() {
     }
   };
 
-  const updateCheckedCache = (id: string, checked: boolean) => {
+  const updateCheckedCache = (id: string, checked: boolean, shoppingStoreId: string | null) => {
     queryClient.setQueryData<ShoppingListItem[]>(queryKey, current =>
-      current?.map(item => item._id === id ? { ...item, checked } : item) || []
+      current?.map(item => item._id === id
+        ? {
+            ...item,
+            checked,
+            shoppingStoreId: checked ? shoppingStoreId : null,
+            actualPurchasedQuantity: checked
+              ? (item.actualPurchasedQuantity ?? intendedPurchaseQuantity(item))
+              : null
+          }
+        : item) || []
     );
   };
 
@@ -178,19 +193,30 @@ export function ShoppingListPage() {
     let queued = false;
 
     try {
-      while (sync.serverChecked !== sync.desiredChecked) {
+      while (
+        sync.serverChecked !== sync.desiredChecked ||
+        sync.serverShoppingStoreId !== sync.desiredShoppingStoreId
+      ) {
         const target = sync.desiredChecked;
+        const targetStoreId = target ? sync.desiredShoppingStoreId : null;
         const snapshot = queryClient.getQueryData<ShoppingListItem[]>(queryKey)?.find(item => item._id === id);
         if (!snapshot) throw new Error('Shopping-list item is no longer available');
-        const result = await updateShoppingListItem(id, { checked: target }, snapshot);
+        const result = await updateShoppingListItem(id, {
+          checked: target,
+          shoppingStoreId: targetStoreId
+        }, snapshot);
         queued ||= result.queued;
         sync.serverChecked = target;
+        sync.serverShoppingStoreId = targetStoreId;
+        queryClient.setQueryData<ShoppingListItem[]>(queryKey, current =>
+          current?.map(item => item._id === id ? { ...item, ...result.data } : item) || []
+        );
       }
       checkSync.current.delete(id);
       if (queued) showToast('Saved offline. Will sync when you reconnect.');
       return true;
     } catch (error) {
-      updateCheckedCache(id, sync.serverChecked);
+      updateCheckedCache(id, sync.serverChecked, sync.serverShoppingStoreId);
       checkSync.current.delete(id);
       console.error(error);
       showToast('Could not save that item. Your check-off was rolled back.', { tone: 'error', durationMs: 4000 });
@@ -201,6 +227,10 @@ export function ShoppingListPage() {
   };
 
   const handleCheck = async (item: ShoppingListItem, checked: boolean) => {
+    let shoppingStoreId: string | null = checked
+      ? (activeStoreId || plannedStoreId(item) || usualStoreId(items) || null)
+      : null;
+
     if (checked && activeStoreId) {
       const preferredId = preferredStoreId(item);
       if (preferredId && preferredId !== activeStoreId) {
@@ -213,6 +243,7 @@ export function ShoppingListPage() {
           cancelLabel: `Leave for ${preferredName}`
         });
         if (!buyHere) return;
+        shoppingStoreId = activeStoreId;
       }
     }
 
@@ -220,16 +251,19 @@ export function ShoppingListPage() {
     if (!sync) {
       sync = {
         serverChecked: Boolean(item.checked),
+        serverShoppingStoreId: currentShoppingStoreId(item) || null,
         desiredChecked: Boolean(item.checked),
+        desiredShoppingStoreId: currentShoppingStoreId(item) || null,
         processing: false
       };
       checkSync.current.set(item._id, sync);
     }
     sync.desiredChecked = checked;
-    updateCheckedCache(item._id, checked);
+    sync.desiredShoppingStoreId = shoppingStoreId;
+    updateCheckedCache(item._id, checked, shoppingStoreId);
 
     if (checked && !activeStoreId) {
-      setActiveStoreId(plannedStoreId(item) || usualStoreId(items) || null);
+      setActiveStoreId(shoppingStoreId);
     } else if (!checked && checkedItems.length === 1 && checkedItems[0]?._id === item._id) {
       setActiveStoreId(null);
     }
@@ -435,21 +469,29 @@ export function ShoppingListPage() {
                         </button>
                         <div className="react-list-item-body">
                           <h3>{productName(item)}</h3>
-                          <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'} · qty {item.quantity}</p>
-                          <button
-                            type="button"
-                            className="react-list-store-preference"
-                            aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
-                            onClick={() => setStorePreferenceItem(item)}
-                          >
-                            Store: {explicitStoreName(item)}
-                          </button>
+                          <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'}</p>
+                          <ListItemContextControls item={item} online={online} />
+                          <div className="react-list-store-line">
+                            <button
+                              type="button"
+                              className="react-list-store-preference"
+                              aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
+                              onClick={() => setStorePreferenceItem(item)}
+                            >
+                              Store: {explicitStoreName(item)}
+                            </button>
+                            {item.checked && currentShoppingStoreId(item) && (
+                              <small>Current trip: {storeName(items, currentShoppingStoreId(item)) || 'selected store'}</small>
+                            )}
+                          </div>
                           <StoreSectionControl
                             item={item}
                             currentSection={storeSections.sectionFor(item)}
                             suggestions={storeSections.suggestions}
                           />
-                          {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
+                          <div className="react-list-price-line">
+                            {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
+                          </div>
                         </div>
                         <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
                       </article>
