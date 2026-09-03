@@ -14,6 +14,18 @@ export interface ShoppingMutationResult {
   queued: boolean;
 }
 
+export interface GeneratedShoppingNeedResult {
+  addedCount: number;
+  skippedCount: number;
+  addedItems: Array<{
+    itemId: string;
+    name?: string;
+    quantity: number;
+    requiredQuantity?: number;
+    quantitySource?: 'system' | 'user';
+  }>;
+}
+
 export interface MatchCandidate extends ProductRef {
   score?: number;
   matchSource?: string;
@@ -125,6 +137,14 @@ export async function addShoppingListItem(
     });
     return { data: optimistic, queued: true };
   }
+}
+
+export async function addGeneratedShoppingNeed(itemId: string, quantity: number): Promise<GeneratedShoppingNeedResult> {
+  return apiFetch<GeneratedShoppingNeedResult>('/api/shopping-list/from-meal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: [{ itemId, quantity }] })
+  });
 }
 
 export type ShoppingListPatch = Partial<Pick<
