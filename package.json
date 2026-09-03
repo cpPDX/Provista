@@ -13,6 +13,7 @@
     "build": "npm run client:build",
     "test": "jest --runInBand --forceExit",
     "test:api": "jest tests/api --runInBand --forceExit",
+    "test:ci-policy": "jest --runInBand --forceExit --testMatch '<rootDir>/tests/ci/**/*.test.js'",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed"
   },
