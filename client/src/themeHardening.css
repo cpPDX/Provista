@@ -1,0 +1,43 @@
+:root[data-theme='light'] .shell-theme-toggle svg path {
+  fill: currentColor;
+  stroke: none;
+}
+
+.react-list-modal-backdrop {
+  background: var(--overlay);
+}
+
+.react-list-modal {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--card-shadow);
+}
+
+.react-list-modal .react-list-eyebrow {
+  color: var(--accent-strong);
+}
+
+.react-list-modal h2,
+.react-list-modal strong,
+.react-list-modal summary {
+  color: var(--text);
+}
+
+.react-list-modal :is(button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 3px;
+}
+
+.react-list-modal :is(button, input, select, textarea):disabled {
+  border-color: var(--border-strong);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.react-list-cart {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--card-shadow);
+}
