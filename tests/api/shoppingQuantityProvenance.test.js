@@ -133,4 +133,31 @@ describe('shopping quantity provenance', () => {
       quantitySource: 'user'
     });
   });
+
+  it('attaches later Plan demand to a manual List item without replacing the parent quantity', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const item = await createCatalogItem(cookie, 'Manual First Rice');
+    const manual = await request(app).post('/api/shopping-list').set('Cookie', cookie)
+      .send({ itemId: item._id, quantity: 6 });
+    expect(manual.status).toBe(201);
+    expect(manual.body.quantitySource).toBe('user');
+
+    const planNeed = await request(app).post('/api/shopping-list/from-meal').set('Cookie', cookie)
+      .send({ items: [{ itemId: item._id, quantity: 3 }] });
+    expect(planNeed.status).toBe(200);
+    expect(planNeed.body).toMatchObject({
+      addedCount: 0,
+      skippedCount: 1,
+      requirementUpdatedCount: 1
+    });
+
+    const list = await request(app).get('/api/shopping-list').set('Cookie', cookie);
+    const row = list.body.find(entry => entry._id === manual.body._id);
+    expect(row).toMatchObject({
+      quantity: 6,
+      intendedPurchaseQuantity: 6,
+      requiredQuantity: 3,
+      quantitySource: 'user'
+    });
+  });
 });
