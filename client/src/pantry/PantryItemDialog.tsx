@@ -15,6 +15,7 @@ interface PantryItemDialogProps {
   mode: 'add' | 'edit';
   item?: PantryItem | null;
   prefill?: string;
+  initialProduct?: ProductRef | null;
   online: boolean;
   onClose: () => void;
   onSaved: (item: PantryItem) => void | Promise<void>;
@@ -26,7 +27,15 @@ function numericValue(value: string, label: string): number {
   return parsed;
 }
 
-export function PantryItemDialog({ mode, item = null, prefill = '', online, onClose, onSaved }: PantryItemDialogProps) {
+export function PantryItemDialog({
+  mode,
+  item = null,
+  prefill = '',
+  initialProduct = null,
+  online,
+  onClose,
+  onSaved
+}: PantryItemDialogProps) {
   const nameRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const [name, setName] = useState('');
@@ -56,6 +65,20 @@ export function PantryItemDialog({ mode, item = null, prefill = '', online, onCl
       return;
     }
 
+    if (initialProduct) {
+      setName(initialProduct.name);
+      setSelectedProduct(initialProduct);
+      setCategory(initialProduct.category || 'Other');
+      setUnit(initialProduct.unit || 'each');
+      setTrackingMode('simple');
+      setStockStatus('have');
+      setQuantity('1');
+      setThreshold('');
+      setNotes('');
+      setError('');
+      return;
+    }
+
     setName(prefill.trim());
     setSelectedProduct(null);
     setCategory('Other');
@@ -66,19 +89,19 @@ export function PantryItemDialog({ mode, item = null, prefill = '', online, onCl
     setThreshold('');
     setNotes('');
     setError('');
-  }, [item?._id, mode, prefill]);
+  }, [initialProduct?._id, item?._id, mode, prefill]);
 
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const focusTimer = window.setTimeout(() => {
-      (nameRef.current || closeRef.current)?.focus();
+      (initialProduct ? closeRef.current : nameRef.current || closeRef.current)?.focus();
     }, 0);
 
     return () => {
       window.clearTimeout(focusTimer);
       if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
     };
-  }, []);
+  }, [initialProduct]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Escape' && !saving) {
@@ -155,7 +178,11 @@ export function PantryItemDialog({ mode, item = null, prefill = '', online, onCl
     }
   };
 
-  const title = mode === 'edit' && item ? `Track ${pantryProductName(item)}` : 'Track an item';
+  const title = mode === 'edit' && item
+    ? `Track ${pantryProductName(item)}`
+    : initialProduct
+      ? `Track ${initialProduct.name}`
+      : 'Track an item';
 
   return (
     <div className="pantry-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !saving) onClose(); }}>
@@ -169,7 +196,13 @@ export function PantryItemDialog({ mode, item = null, prefill = '', online, onCl
             <button ref={closeRef} type="button" className="pantry-modal-close" aria-label={`Close ${title}`} disabled={saving} onClick={onClose}>✕</button>
           </div>
 
-          {mode === 'add' ? (
+          {mode === 'add' && initialProduct ? (
+            <div className="pantry-scanned-product" aria-label="Scanned product">
+              <strong>{initialProduct.name}</strong>
+              <span>{[initialProduct.brand, initialProduct.category, initialProduct.unit, initialProduct.size].filter(Boolean).join(' · ')}</span>
+              <small>Product identified. Choose only how Pantry should track it.</small>
+            </div>
+          ) : mode === 'add' ? (
             <ProductPickerField
               idPrefix="pantry-product"
               inputRef={nameRef}
