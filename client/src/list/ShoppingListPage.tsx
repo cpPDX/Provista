@@ -15,6 +15,7 @@ import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from
 import { useShoppingCheckout } from './checkout';
 import { RapidCapture } from './RapidCapture';
 import { StorePreferenceDialog } from './StorePreferenceDialog';
+import { StoreSectionControl, useStoreSections } from './storeSections';
 import { processShoppingQueue } from './storage';
 import {
   entityId,
@@ -97,6 +98,7 @@ export function ShoppingListPage() {
 
   const items = listQuery.data || EMPTY_ITEMS;
   const checkedItems = items.filter(item => item.checked);
+  const storeSections = useStoreSections(items);
   const onboardingActive = Boolean(
     onboardingQuery.data?.required &&
     onboardingQuery.data.firstAction === 'list' &&
@@ -141,8 +143,6 @@ export function ShoppingListPage() {
       showToast('Your shopping list has a start. Home is ready.', { tone: 'success', durationMs: 4500 });
       navigate('/app', { replace: true });
     } catch (error) {
-      // The server is authoritative: updating a pre-existing item does not
-      // satisfy onboarding because it is not a new List outcome after choice.
       console.info('Onboarding completion is not ready yet:', error);
     }
   };
@@ -332,11 +332,7 @@ export function ShoppingListPage() {
 
       {!online && <div className="react-list-offline" role="status">Offline · check-offs and simple List changes will sync when you reconnect.</div>}
 
-      <RapidCapture
-        items={items}
-        online={online}
-        onListChanged={handleListChanged}
-      />
+      <RapidCapture items={items} online={online} onListChanged={handleListChanged} />
 
       <div className="react-list-toolbar">
         <div className="react-list-controls" aria-label="List filters">
@@ -402,36 +398,49 @@ export function ShoppingListPage() {
                 <h2>{groupName === 'Any store' ? 'No store preference' : `Suggested: ${groupName}`}</h2>
                 <span>{groupItems.length} item{groupItems.length === 1 ? '' : 's'}</span>
               </div>
-              {groupItems.map(item => {
-                const product = productFor(item);
-                return (
-                  <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
-                    <button
-                      type="button"
-                      className="list-item-check-wrap react-list-check"
-                      aria-label={`${item.checked ? 'Uncheck' : 'Mark as purchased'} ${productName(item)}`}
-                      aria-pressed={item.checked}
-                      onClick={() => void handleCheck(item, !item.checked)}
-                    >
-                      <span className={`react-list-checkbox ${item.checked ? 'checked' : ''}`} aria-hidden="true">{item.checked ? '✓' : ''}</span>
-                    </button>
-                    <div className="react-list-item-body">
-                      <h3>{productName(item)}</h3>
-                      <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'} · qty {item.quantity}</p>
-                      <button
-                        type="button"
-                        className="react-list-store-preference"
-                        aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
-                        onClick={() => setStorePreferenceItem(item)}
-                      >
-                        Store: {explicitStoreName(item)}
-                      </button>
-                      {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
-                    </div>
-                    <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
-                  </article>
-                );
-              })}
+              {storeSections.group(groupItems).map(([sectionName, sectionItems]) => (
+                <div className="react-list-section-group" data-section={sectionName} key={sectionName}>
+                  <div className="react-list-section-heading">
+                    <h3>{sectionName}</h3>
+                    <span>{sectionItems.length}</span>
+                  </div>
+                  {sectionItems.map(item => {
+                    const product = productFor(item);
+                    return (
+                      <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
+                        <button
+                          type="button"
+                          className="list-item-check-wrap react-list-check"
+                          aria-label={`${item.checked ? 'Uncheck' : 'Mark as purchased'} ${productName(item)}`}
+                          aria-pressed={item.checked}
+                          onClick={() => void handleCheck(item, !item.checked)}
+                        >
+                          <span className={`react-list-checkbox ${item.checked ? 'checked' : ''}`} aria-hidden="true">{item.checked ? '✓' : ''}</span>
+                        </button>
+                        <div className="react-list-item-body">
+                          <h3>{productName(item)}</h3>
+                          <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'} · qty {item.quantity}</p>
+                          <button
+                            type="button"
+                            className="react-list-store-preference"
+                            aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
+                            onClick={() => setStorePreferenceItem(item)}
+                          >
+                            Store: {explicitStoreName(item)}
+                          </button>
+                          <StoreSectionControl
+                            item={item}
+                            currentSection={storeSections.sectionFor(item)}
+                            suggestions={storeSections.suggestions}
+                          />
+                          {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
+                        </div>
+                        <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
+                      </article>
+                    );
+                  })}
+                </div>
+              ))}
             </section>
           ))}
         </div>
