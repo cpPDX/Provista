@@ -24,6 +24,8 @@ interface RapidCaptureProps {
   items: ShoppingListItem[];
   online: boolean;
   onListChanged: () => void | Promise<void>;
+  initialDetail?: { name: string; quantity: number } | null;
+  onInitialDetailResolved?: () => void;
 }
 
 interface AddBatchResult {
@@ -66,10 +68,11 @@ function unresolvedTokens(suggestions: ShoppingMatchSuggestion[]): ReviewToken[]
     }));
 }
 
-export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps) {
+export function RapidCapture({ items, online, onListChanged, initialDetail = null, onInitialDetailResolved }: RapidCaptureProps) {
   const { showToast } = useToast();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const detailNameRef = useRef<HTMLInputElement>(null);
+  const initialDetailRef = useRef('');
   const [text, setText] = useState('');
   const [status, setStatus] = useState<{ message: string; tone?: 'success' | 'warning' }>({ message: '' });
   const [matching, setMatching] = useState(false);
@@ -83,6 +86,19 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
   const [detailSaving, setDetailSaving] = useState(false);
 
   const currentToken = reviewTokens[0] || null;
+
+  useEffect(() => {
+    if (!initialDetail?.name.trim()) return;
+    const quantity = Math.min(MAX_QUANTITY, Math.max(1, Number(initialDetail.quantity) || 1));
+    const key = `${initialDetail.name.trim()}|${quantity}`;
+    if (initialDetailRef.current === key) return;
+    initialDetailRef.current = key;
+    const token = { name: initialDetail.name.trim(), quantity };
+    setCapture(null);
+    setText(serializeToken(token));
+    setReviewTokens([token]);
+    setStatus({ message: 'Plan sent this need with its quantity. Add only the missing product details.', tone: 'warning' });
+  }, [initialDetail?.name, initialDetail?.quantity]);
 
   useEffect(() => {
     if (!currentToken) return;
@@ -246,8 +262,10 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
       if (remaining.length) {
         setStatus({ message: `${remaining.length} ${remaining.length === 1 ? 'item still needs' : 'items still need'} details.`, tone: 'warning' });
       } else {
+        setText('');
         setStatus({ message: result.queued ? 'All items added; the last change will sync when you reconnect.' : 'All items added.', tone: 'success' });
         showToast('All groceries added', { tone: 'success' });
+        if (initialDetail) onInitialDetailResolved?.();
         window.setTimeout(() => inputRef.current?.focus(), 0);
       }
     } catch (error) {
