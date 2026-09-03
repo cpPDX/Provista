@@ -1,7 +1,7 @@
 const InventoryItem = require('../models/InventoryItem');
 const Item = require('../models/Item');
 const MealPlan = require('../models/MealPlan');
-const { appendDelta } = require('./inventoryLedger');
+const { appendDelta, roundQuantity } = require('./inventoryLedger');
 const { matchCatalogItem } = require('./itemMatching');
 const { effectiveTrackingMode, flattenMeals } = require('./mealAllocations');
 const { parseMealShoppingNotes } = require('./mealShopping');
@@ -54,12 +54,12 @@ function resolveMealNeedsForReconciliation(meal, items, usageByItemId = new Map(
     const id = String(match.item._id);
     const existing = resolved.get(id);
     if (existing) {
-      existing.quantity += Number(parsed.quantity) || 0;
+      existing.quantity = roundQuantity(existing.quantity + (Number(parsed.quantity) || 0));
       existing.sourceTexts.push(parsed.sourceText);
     } else {
       resolved.set(id, {
         item: match.item,
-        quantity: Number(parsed.quantity) || 1,
+        quantity: roundQuantity(Number(parsed.quantity) || 1),
         sourceTexts: [parsed.sourceText]
       });
     }
@@ -78,7 +78,12 @@ async function reconcileHouseholdMeals({ householdId, timeZone = 'UTC', now = ne
 
   const inventoryByItemId = new Map(inventoryItems.map(entry => [String(entry.itemId), entry]));
   const usageByItemId = new Map(inventoryItems.map(entry => [String(entry.itemId), 3]));
-  const result = { createdOrReused: 0, unresolved: [], skippedSimple: 0, skippedUntracked: 0 };
+  const result = {
+    createdOrReused: 0,
+    simpleUsageRecorded: 0,
+    unresolved: [],
+    skippedUntracked: 0
+  };
 
   for (const plan of plans) {
     for (const meal of flattenMeals(plan)) {
@@ -93,10 +98,6 @@ async function reconcileHouseholdMeals({ householdId, timeZone = 'UTC', now = ne
           result.skippedUntracked += 1;
           continue;
         }
-        if (effectiveTrackingMode(inventory) !== 'exact') {
-          result.skippedSimple += 1;
-          continue;
-        }
 
         const sourceIdentity = mealSourceIdentity({
           householdId: String(householdId),
@@ -104,21 +105,41 @@ async function reconcileHouseholdMeals({ householdId, timeZone = 'UTC', now = ne
           meal,
           itemId
         });
+        const trackingMode = effectiveTrackingMode(inventory);
+        const commonMeta = {
+          reconciliationVersion: RECONCILIATION_VERSION,
+          mealDate: meal.dateKey,
+          dayIndex: meal.dayIndex,
+          mealIndex: meal.mealIndex,
+          mealType: meal.mealType,
+          mealName: meal.mealName,
+          sourceTexts: need.sourceTexts,
+          trackingMode
+        };
+
+        if (trackingMode === 'simple') {
+          await appendDelta(inventory, 'meal_consumption', 0, {
+            effectiveAt: new Date(`${meal.dateKey}T12:00:00.000Z`),
+            sourceIdentity,
+            sourceType: 'meal-plan',
+            sourceEntityId: String(plan._id),
+            sourceMeta: {
+              ...commonMeta,
+              uncertainQuantity: true,
+              plannedQuantity: need.quantity
+            }
+          });
+          result.createdOrReused += 1;
+          result.simpleUsageRecorded += 1;
+          continue;
+        }
 
         await appendDelta(inventory, 'meal_consumption', -Math.abs(need.quantity), {
           effectiveAt: new Date(`${meal.dateKey}T12:00:00.000Z`),
           sourceIdentity,
           sourceType: 'meal-plan',
           sourceEntityId: String(plan._id),
-          sourceMeta: {
-            reconciliationVersion: RECONCILIATION_VERSION,
-            mealDate: meal.dateKey,
-            dayIndex: meal.dayIndex,
-            mealIndex: meal.mealIndex,
-            mealType: meal.mealType,
-            mealName: meal.mealName,
-            sourceTexts: need.sourceTexts
-          }
+          sourceMeta: commonMeta
         });
         result.createdOrReused += 1;
       }
