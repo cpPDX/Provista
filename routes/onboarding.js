@@ -6,6 +6,18 @@ const ShoppingListItem = require('../models/ShoppingListItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { rateLimit } = require('express-rate-limit');
 
+// Reading onboarding state happens during shell bootstrap and resume. Keep it
+// available for normal navigation while bounding repeated authorization and
+// database work from one client.
+const onboardingReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 120,
+  standardHeaders: 'draft-6',
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+  skip: () => process.env.NODE_ENV === 'test'
+});
+
 // Onboarding writes are infrequent by design. Keep accidental retries and
 // automated abuse bounded without limiting normal progress through the flow.
 const onboardingMutationLimiter = rateLimit({
@@ -86,7 +98,7 @@ async function householdFor(req) {
 
 // GET /api/onboarding - durable first-run state. Households that predate the
 // action-based flow intentionally return required=false.
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', onboardingReadLimiter, requireAuth, async (req, res) => {
   try {
     const household = await householdFor(req);
     if (!household) return res.status(404).json({ error: 'Household not found' });
