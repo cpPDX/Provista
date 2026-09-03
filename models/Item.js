@@ -11,6 +11,11 @@ const STORE_SECTIONS = [
   'Other'
 ];
 
+function normalizeUnit(value) {
+  const unit = String(value || '').trim();
+  return !unit || /^\d+(?:\.\d+)?$/.test(unit) ? 'each' : unit;
+}
+
 const itemAliasSchema = new mongoose.Schema({
   text: { type: String, required: true, trim: true, maxlength: 120 },
   normalized: { type: String, required: true, trim: true, maxlength: 120 },
@@ -28,7 +33,7 @@ const itemSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   brand: { type: String, trim: true, default: '' },
   category: { type: String, required: true, trim: true },
-  unit: { type: String, required: true, trim: true },
+  unit: { type: String, required: true, trim: true, set: normalizeUnit },
   size: { type: Number, default: null },
   barcode: { type: String, trim: true },
   upc: { type: String, trim: true, default: null },
@@ -58,3 +63,4 @@ itemSchema.index({ householdId: 1, 'aliases.normalized': 1 });
 
 module.exports = mongoose.model('Item', itemSchema);
 module.exports.STORE_SECTIONS = STORE_SECTIONS;
+module.exports.normalizeUnit = normalizeUnit;

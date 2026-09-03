@@ -1,0 +1,115 @@
+.plan-pantry-outlook {
+  padding: 0;
+  overflow: clip;
+}
+
+.plan-pantry-outlook > summary {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.plan-pantry-outlook > summary::-webkit-details-marker {
+  display: none;
+}
+
+.plan-pantry-outlook > summary > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.plan-pantry-outlook > summary strong {
+  color: var(--text);
+}
+
+.plan-pantry-outlook > summary span {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.plan-pantry-outlook > summary > span {
+  flex: 0 0 auto;
+  font-weight: 700;
+}
+
+.plan-pantry-outlook[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-pantry-outlook > p,
+.plan-pantry-outlook > small,
+.plan-pantry-outlook-items,
+.plan-pantry-outlook-nearest {
+  margin-left: 1rem;
+  margin-right: 1rem;
+}
+
+.plan-pantry-outlook-nearest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.plan-pantry-outlook-nearest span {
+  min-width: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+.plan-pantry-outlook-items {
+  padding-bottom: 0.25rem;
+}
+
+.plan-pantry-outlook > small {
+  display: block;
+  padding-bottom: 0.9rem;
+}
+
+.plan-week-complete {
+  display: grid;
+  gap: 0.15rem;
+  justify-self: start;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-subtle);
+}
+
+.plan-week-complete span {
+  color: var(--text-muted);
+}
+
+.react-list-plan-return {
+  align-items: start;
+}
+
+@media (max-width: 520px) {
+  .plan-pantry-outlook > summary {
+    align-items: flex-start;
+  }
+
+  .plan-pantry-outlook > summary > span {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 360px) {
+  .plan-pantry-outlook > summary {
+    display: grid;
+  }
+
+  .plan-pantry-outlook-nearest span {
+    width: 100%;
+    border-radius: 0.65rem;
+  }
+}

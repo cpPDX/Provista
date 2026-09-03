@@ -257,7 +257,11 @@ test.describe('React Plan migration', () => {
     await today.locator('textarea').first().fill(`5 ${name}`);
     await expect(page.locator('.plan-save-status')).toContainText('Saved', { timeout: 8000 });
 
-    const outlook = page.getByRole('region', { name: 'Pantry outlook' });
+    const outlook = page.locator('.plan-pantry-outlook');
+    await expect(outlook.locator('summary')).toContainText('1 shortage this week');
+    await expect(outlook.locator('.plan-pantry-outlook-items')).not.toBeVisible();
+    await outlook.locator('summary').click();
+    await expect(outlook.locator('.plan-pantry-outlook-items')).toBeVisible();
     await expect(outlook).toContainText(name);
     await expect(outlook).toContainText('On hand 4 each');
     await expect(outlook).toContainText('Planned 5 each');
