@@ -7,6 +7,7 @@ import type { ProductRef } from '../products/types';
 import { ListItemEditDialog } from './ListItemEditDialog';
 import { intendedPurchaseQuantity, productFor, type ShoppingListItem } from './types';
 import '../pantry/pantry.css';
+import './contextual-setup.css';
 
 interface ListItemContextControlsProps {
   item: ShoppingListItem;
