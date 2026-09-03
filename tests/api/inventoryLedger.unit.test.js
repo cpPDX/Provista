@@ -1,77 +1,99 @@
-const { deriveQuantity } = require('../../utils/inventoryLedger');
+const mongoose = require('mongoose');
+const {
+  deriveQuantity,
+  roundQuantity
+} = require('../../utils/inventoryLedger');
 const {
   localDateKey,
   mealSourceIdentity,
   resolveMealNeedsForReconciliation
 } = require('../../utils/mealReconciliation');
 
-describe('inventory ledger quantity derivation', () => {
-  it('applies chronological deltas with fractional precision', () => {
-    const quantity = deriveQuantity([
-      { effectiveAt: '2026-09-01T12:00:00.000Z', recordedAt: '2026-09-01T12:01:00.000Z', quantityDelta: -0.25 },
-      { effectiveAt: '2026-09-02T12:00:00.000Z', recordedAt: '2026-09-02T12:01:00.000Z', quantityDelta: -0.5 }
-    ], 1);
-    expect(quantity).toBe(0.25);
+function id() {
+  return new mongoose.Types.ObjectId();
+}
+
+describe('inventory ledger derivation', () => {
+  it('applies fractional deltas chronologically', () => {
+    const events = [
+      { _id: '2', effectiveAt: new Date('2026-09-02T12:00:00Z'), recordedAt: new Date('2026-09-02T13:00:00Z'), quantityDelta: -0.5 },
+      { _id: '1', effectiveAt: new Date('2026-09-01T12:00:00Z'), recordedAt: new Date('2026-09-01T13:00:00Z'), absoluteQuantity: 1.25 },
+      { _id: '3', effectiveAt: new Date('2026-09-03T12:00:00Z'), recordedAt: new Date('2026-09-03T13:00:00Z'), quantityDelta: -0.5 }
+    ];
+    expect(deriveQuantity(events)).toBe(0.25);
   });
 
-  it('lets a newer-effective absolute count supersede an older meal recorded later', () => {
-    const quantity = deriveQuantity([
-      {
-        effectiveAt: '2026-09-01T12:00:00.000Z',
-        recordedAt: '2026-09-02T20:00:00.000Z',
-        quantityDelta: -2
-      },
-      {
-        effectiveAt: '2026-09-02T08:00:00.000Z',
-        recordedAt: '2026-09-02T08:00:00.000Z',
-        absoluteQuantity: 3
-      }
-    ], 4);
-    expect(quantity).toBe(3);
+  it('keeps a newer absolute count authoritative when an older-effective meal event is recorded later', () => {
+    const events = [
+      { _id: 'baseline', effectiveAt: new Date('2026-09-01T08:00:00Z'), recordedAt: new Date('2026-09-01T08:00:00Z'), absoluteQuantity: 4 },
+      { _id: 'meal', effectiveAt: new Date('2026-09-01T18:00:00Z'), recordedAt: new Date('2026-09-03T12:00:00Z'), quantityDelta: -2 },
+      { _id: 'count', effectiveAt: new Date('2026-09-02T18:00:00Z'), recordedAt: new Date('2026-09-02T18:00:00Z'), absoluteQuantity: 3 }
+    ];
+    expect(deriveQuantity(events)).toBe(3);
   });
 
-  it('applies a correction after the consumption it corrects', () => {
-    const quantity = deriveQuantity([
-      { effectiveAt: '2026-09-01T12:00:00.000Z', recordedAt: '2026-09-01T12:00:00.000Z', quantityDelta: -0.5 },
-      { effectiveAt: '2026-09-01T13:00:00.000Z', recordedAt: '2026-09-01T13:00:00.000Z', quantityDelta: 0.25 }
-    ], 1);
-    expect(quantity).toBe(0.75);
+  it('composes shopping replenishment and meal consumption', () => {
+    const events = [
+      { _id: 'baseline', effectiveAt: new Date('2026-09-01T08:00:00Z'), recordedAt: new Date('2026-09-01T08:00:00Z'), absoluteQuantity: 1 },
+      { _id: 'shop', effectiveAt: new Date('2026-09-01T10:00:00Z'), recordedAt: new Date('2026-09-01T10:00:00Z'), quantityDelta: 4 },
+      { _id: 'meal', effectiveAt: new Date('2026-09-02T12:00:00Z'), recordedAt: new Date('2026-09-03T09:00:00Z'), quantityDelta: -2 }
+    ];
+    expect(deriveQuantity(events)).toBe(3);
+  });
+
+  it('treats zero-delta simple usage signals as non-mutating history', () => {
+    const events = [
+      { _id: 'baseline', effectiveAt: new Date('2026-09-01T08:00:00Z'), recordedAt: new Date('2026-09-01T08:00:00Z'), absoluteQuantity: 1 },
+      { _id: 'usage', effectiveAt: new Date('2026-09-02T12:00:00Z'), recordedAt: new Date('2026-09-03T09:00:00Z'), quantityDelta: 0 }
+    ];
+    expect(deriveQuantity(events)).toBe(1);
+  });
+
+  it('applies corrections as appended deltas', () => {
+    const events = [
+      { _id: 'baseline', effectiveAt: new Date('2026-09-01T08:00:00Z'), recordedAt: new Date('2026-09-01T08:00:00Z'), absoluteQuantity: 4 },
+      { _id: 'meal', effectiveAt: new Date('2026-09-01T18:00:00Z'), recordedAt: new Date('2026-09-02T08:00:00Z'), quantityDelta: -2 },
+      { _id: 'correction', effectiveAt: new Date('2026-09-01T18:00:00Z'), recordedAt: new Date('2026-09-02T09:00:00Z'), quantityDelta: 1 }
+    ];
+    expect(deriveQuantity(events)).toBe(3);
   });
 });
 
-describe('meal reconciliation identity and boundaries', () => {
-  it('uses household-local calendar dates at timezone boundaries', () => {
-    const instant = new Date('2026-09-03T06:30:00.000Z');
-    expect(localDateKey(instant, 'America/Los_Angeles')).toBe('2026-09-02');
-    expect(localDateKey(instant, 'America/New_York')).toBe('2026-09-03');
+describe('meal reconciliation identity and matching', () => {
+  it('uses household-local dates at timezone boundaries', () => {
+    const now = new Date('2026-09-03T06:30:00.000Z');
+    expect(localDateKey(now, 'America/Los_Angeles')).toBe('2026-09-02');
+    expect(localDateKey(now, 'America/New_York')).toBe('2026-09-03');
   });
 
-  it('keeps source identity stable for the same meal need', () => {
-    const input = {
+  it('creates a stable versioned source identity', () => {
+    const source = mealSourceIdentity({
       householdId: 'household',
       planId: 'plan',
       meal: { dateKey: '2026-09-01', dayIndex: 1, mealIndex: 2 },
-      itemId: 'chicken'
-    };
-    expect(mealSourceIdentity(input)).toBe(mealSourceIdentity(input));
-    expect(mealSourceIdentity(input)).toContain('meal-consumption:v1:');
+      itemId: 'item'
+    });
+    expect(source).toBe('meal-consumption:v1:household:plan:2026-09-01:1:2:item');
   });
 
-  it('does not guess when a meal need is ambiguous', () => {
-    const resolved = resolveMealNeedsForReconciliation({
+  it('keeps ambiguous catalog needs unresolved instead of guessing', () => {
+    const items = [
+      { _id: id(), name: 'Corn Tortillas', category: 'Pantry', unit: 'each' },
+      { _id: id(), name: 'Flour Tortillas', category: 'Pantry', unit: 'each' }
+    ];
+    const meal = {
       dateKey: '2026-09-01',
       dayIndex: 0,
-      mealIndex: 0,
+      mealIndex: 2,
       mealName: 'Tacos',
-      notes: 'Tortillas x2'
-    }, [
-      { _id: 'corn', name: 'Corn Tortillas', unit: 'pack' },
-      { _id: 'flour', name: 'Flour Tortillas', unit: 'pack' }
-    ]);
+      notes: '2 tortillas'
+    };
+    const resolved = resolveMealNeedsForReconciliation(meal, items, new Map());
+    expect(resolved.needs).toHaveLength(0);
+    expect(resolved.unresolved).toHaveLength(1);
+  });
 
-    expect(resolved.needs).toEqual([]);
-    expect(resolved.unresolved).toEqual([
-      expect.objectContaining({ sourceText: 'Tortillas', quantity: 2, matchStatus: 'ambiguous' })
-    ]);
+  it('rounds repeated fractional needs deterministically', () => {
+    expect(roundQuantity(0.1 + 0.2)).toBe(0.3);
   });
 });
