@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useToast } from '../shell/ToastProvider';
 import { completeShoppingTrip, loadStores, type ShoppingTripResult } from './api';
 import {
+  actualPurchasedQuantity,
+  currentShoppingStoreId,
   entityId,
   plannedStoreId,
   productName,
@@ -50,15 +52,15 @@ function knownLinePriceForStore(item: ShoppingListItem, storeId: string | null):
     Number(price.pricePerUnit) >= 0
   );
   if (!option) return null;
-  return roundCurrency(Number(option.pricePerUnit) * Number(item.quantity || 1));
+  return roundCurrency(Number(option.pricePerUnit) * actualPurchasedQuantity(item));
 }
 
 function makeCartEntry(item: ShoppingListItem, storeId: string | null): CartEntry {
-  const actualStoreId = storeId || plannedStoreId(item) || null;
+  const actualStoreId = currentShoppingStoreId(item) || storeId || plannedStoreId(item) || null;
   const known = knownLinePriceForStore(item, actualStoreId);
   return {
     name: productName(item),
-    quantity: Number(item.quantity) || 1,
+    quantity: actualPurchasedQuantity(item),
     storeId: actualStoreId,
     plannedStoreId: plannedStoreId(item) || null,
     suggestedPrice: known,
@@ -73,6 +75,7 @@ function storeName(stores: StoreRef[], items: ShoppingListItem[], id: string | n
   const store = stores.find(candidate => candidate._id === id);
   if (store) return store.name;
   for (const item of items) {
+    if (item.shoppingStoreId && typeof item.shoppingStoreId !== 'string' && item.shoppingStoreId._id === id) return item.shoppingStoreId.name;
     if (item.storeId && typeof item.storeId !== 'string' && item.storeId._id === id) return item.storeId.name;
     if (item.tripStore?._id === id) return item.tripStore.name;
     if (item.priceContext?.usualStore?._id === id) return item.priceContext.usualStore.name;
@@ -142,7 +145,21 @@ export function useShoppingCheckout({
       const next: Record<string, CartEntry> = {};
       checkedItems.forEach(item => {
         const existing = current[item._id];
-        next[item._id] = existing || makeCartEntry(item, activeStoreId || usualStoreId(items) || null);
+        if (!existing) {
+          next[item._id] = makeCartEntry(item, activeStoreId || usualStoreId(items) || null);
+          return;
+        }
+
+        const quantity = actualPurchasedQuantity(item);
+        const storeId = currentShoppingStoreId(item) || existing.storeId;
+        const updated = { ...existing, quantity, storeId };
+        if (existing.priceDecision === 'existing') {
+          const known = knownLinePriceForStore(item, storeId);
+          updated.suggestedPrice = known;
+          updated.price = known;
+          if (known === null) updated.priceDecision = 'later';
+        }
+        next[item._id] = updated;
       });
       return next;
     });
@@ -162,6 +179,7 @@ export function useShoppingCheckout({
           if (known === null) entry.priceDecision = 'later';
         }
         entry.storeId = storeId;
+        entry.quantity = actualPurchasedQuantity(item);
         entry.priceControlsExpanded = false;
         next[item._id] = entry;
       });
@@ -244,7 +262,8 @@ export function useShoppingCheckout({
       return;
     }
 
-    const initialStore = activeStoreId || usualStoreId(items) || '';
+    const checkedStore = currentShoppingStoreId(checkedItems[0]);
+    const initialStore = checkedStore || activeStoreId || usualStoreId(items) || '';
     applyTripStore(initialStore || null);
     setCheckoutStoreId(initialStore);
     setAddToPantry(true);
@@ -271,7 +290,7 @@ export function useShoppingCheckout({
         purchases: checkedItems.map(item => ({
           listItemId: item._id,
           price: cartEntries[item._id]?.price ?? null,
-          storeId: checkoutStoreId
+          storeId: cartEntries[item._id]?.storeId || checkoutStoreId
         })),
         addToPantry
       });
@@ -392,7 +411,7 @@ export function useShoppingCheckout({
                 <li>Record the prices you confirmed</li>
                 <li>Update Spending</li>
                 <li>Remove purchased items from this list</li>
-                <li>Update Pantry if selected below</li>
+                <li>Update Pantry using what you actually got if selected below</li>
               </ul>
               <p>Finish before moving to another store. Store preferences are planning hints; this records where these items were actually purchased.</p>
             </div>
@@ -430,7 +449,7 @@ export function useShoppingCheckout({
                 <details className="finish-shopping-confirmed">
                   <summary>{confirmedEntries.length} recorded price{confirmedEntries.length === 1 ? '' : 's'}</summary>
                   {confirmedEntries.map(entry => (
-                    <div key={entry.name}><span>{entry.name}</span><span>{formatCurrency(entry.price as number)}</span></div>
+                    <div key={entry.name}><span>{entry.name} · {entry.quantity} bought</span><span>{formatCurrency(entry.price as number)}</span></div>
                   ))}
                 </details>
               )}
@@ -438,7 +457,7 @@ export function useShoppingCheckout({
 
             <label className="trip-pantry-option">
               <input type="checkbox" checked={addToPantry} disabled={completing} onChange={event => setAddToPantry(event.target.checked)} />
-              <span><strong>Update Pantry</strong><small>Purchased items become Have; exact-tracked quantities are replenished.</small></span>
+              <span><strong>Update Pantry</strong><small>Actual purchased quantities replenish exact-tracked items.</small></span>
             </label>
 
             <div className="react-list-modal-actions">
