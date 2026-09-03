@@ -10,6 +10,7 @@ import { DirtyStateProvider } from './shell/DirtyStateProvider';
 import { ToastProvider } from './shell/ToastProvider';
 import './styles.css';
 import './themeHardening.css';
+import './plan/pro72.css';
 
 const rootElement = document.getElementById('root');
 
