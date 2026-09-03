@@ -10,6 +10,7 @@ const Item = require('../models/Item');
 const PriceEntry = require('../models/PriceEntry');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { ensureHouseholdPeople } = require('../utils/householdPeople');
+const { buildMealAllocationProjection } = require('../utils/mealAllocations');
 const { buildMealShoppingSuggestions, MAX_NOTES_LENGTH } = require('../utils/mealShopping');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
@@ -97,6 +98,54 @@ async function validateAudience(days, householdId) {
   });
   return count === ids.length ? null : 'Meal audience contains a person outside this household';
 }
+
+// GET /api/meal-plan/allocations?weekStart=YYYY-MM-DD
+// Derive the selected week's planned consumption without mutating Pantry.
+// Only clear catalog matches become allocations; ambiguous/unmatched notes are
+// returned separately so downstream UI never treats a guess as inventory truth.
+router.get('/allocations', requireAuth, async (req, res) => {
+  try {
+    const { weekStart } = req.query;
+    if (!weekStart) return res.status(400).json({ error: 'weekStart query param required' });
+
+    const weekStartDate = new Date(`${weekStart}T00:00:00.000Z`);
+    if (isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
+
+    const householdId = req.user.householdId;
+    const [plan, items, listItems, inventoryItems, priceUsage] = await Promise.all([
+      MealPlan.findOne({ householdId, weekStart: weekStartDate }).lean(),
+      Item.find({ householdId }).select('name brand category unit aliases').lean(),
+      ShoppingListItem.find({ householdId, checked: false }).select('itemId quantity checked').lean(),
+      InventoryItem.find({ householdId })
+        .select('itemId quantity trackingMode stockStatus unit lowStockThreshold')
+        .lean(),
+      PriceEntry.aggregate([
+        { $match: { householdId } },
+        { $group: { _id: '$itemId', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    const usageByItemId = new Map(priceUsage.map(entry => [String(entry._id), entry.count]));
+    listItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 5);
+    });
+    inventoryItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 3);
+    });
+
+    res.json(buildMealAllocationProjection({
+      plan: plan || { weekStart: weekStartDate, days: [] },
+      items,
+      listItems,
+      inventoryItems,
+      usageByItemId
+    }));
+  } catch (err) {
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
 
 // GET /api/meal-plan?weekStart=YYYY-MM-DD
 router.get('/', requireAuth, async (req, res) => {

@@ -17,10 +17,12 @@ import {
   copyPreviousWeek,
   deleteFavoriteMeal,
   favoriteMealsQueryKey,
+  loadMealAllocations,
   loadFavoriteMeals,
   loadMealPlan,
   loadMealPlanSettings,
   mealPlanQueryKey,
+  mealAllocationQueryKey,
   mealPlanSettingsQueryKey,
   previewMealShoppingNeeds,
   saveFavoriteMeal,
@@ -39,6 +41,7 @@ import type {
   PlanMeal,
   ShoppingSuggestionItem
 } from './types';
+import { allocationShortagesByDate, dayPlanStatus, mealContexts, nextUnfinishedContext } from './viewModel';
 import './plan.css';
 
 const MEAL_LABELS: Record<MealType, string> = {
@@ -162,8 +165,9 @@ export function PlanPage() {
   const [draft, setDraft] = useState<MealPlan | null>(null);
   const [dirty, setLocalDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('idle');
-  const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set());
-  const [revealedSpecialDays, setRevealedSpecialDays] = useState<Set<number>>(new Set());
+  const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+  const [activeMealType, setActiveMealType] = useState<MealType>('dinner');
+  const [activeRowIndex, setActiveRowIndex] = useState(0);
   const [favoriteTarget, setFavoriteTarget] = useState<string | null>(null);
   const [favoriteEditing, setFavoriteEditing] = useState<FavoriteMeal | null>(null);
   const [favoriteEditName, setFavoriteEditName] = useState('');
@@ -192,6 +196,11 @@ export function PlanPage() {
     queryFn: () => loadMealPlan(weekStart),
     enabled: Boolean(weekStart)
   });
+  const allocationQuery = useQuery({
+    queryKey: mealAllocationQueryKey(weekStart),
+    queryFn: () => loadMealAllocations(weekStart),
+    enabled: Boolean(weekStart)
+  });
 
   useEffect(() => {
     if (!planQuery.data || draft || String(planQuery.data.weekStart).slice(0, 10) !== weekStart) return;
@@ -202,17 +211,21 @@ export function PlanPage() {
     setLocalDirty(false);
     setDirty('react-plan', false);
     setSaveStatus('saved');
-    setRevealedSpecialDays(new Set());
-
     const today = isoDate();
     const todayIndex = next.days.findIndex(day => day.date.slice(0, 10) === today);
-    const initial = new Set<number>();
-    next.days.forEach((day, index) => {
-      const hasMeal = day.meals.some(meal => meal.name.trim());
-      if (hasMeal || (todayIndex >= 0 && index >= todayIndex && index <= todayIndex + 2)) initial.add(index);
-    });
-    if (todayIndex >= 0) initial.add(todayIndex);
-    setExpandedDays(initial);
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('provista-plan-context') || '{}');
+      const savedDayIndex = saved.weekStart === weekStart
+        ? next.days.findIndex(day => day.date === saved.date)
+        : -1;
+      setSelectedDayIndex(savedDayIndex >= 0 ? savedDayIndex : todayIndex >= 0 ? todayIndex : 0);
+      setActiveMealType(['breakfast', 'lunch', 'dinner', 'special'].includes(saved.mealType) ? saved.mealType : 'dinner');
+      setActiveRowIndex(Number.isInteger(saved.rowIndex) && saved.rowIndex >= 0 ? saved.rowIndex : 0);
+    } catch {
+      setSelectedDayIndex(todayIndex >= 0 ? todayIndex : 0);
+      setActiveMealType('dinner');
+      setActiveRowIndex(0);
+    }
   }, [draft, planQuery.data, setDirty]);
 
   useEffect(() => () => {
@@ -349,15 +362,32 @@ export function PlanPage() {
   };
 
   const addSeparateMeal = (dayIndex: number, mealType: MealType) => {
-    mutateDraft(plan => plan.days[dayIndex].meals.push(emptyMeal(mealType)));
-    setExpandedDays(current => new Set(current).add(dayIndex));
+    const nextRowIndex = draft ? mealContexts(draft.days[dayIndex], mealType).length : 0;
+    const assigned = new Set(mealContexts(draft!.days[dayIndex], mealType).flatMap(context => context.meal.forEveryone === false ? context.meal.personIds.map(String) : []));
+    const firstPersonId = draft?.people.find(person => person.active !== false && !assigned.has(String(person._id)))?._id;
+    if (!firstPersonId) {
+      showToast('Everyone is already assigned for this meal. Edit an existing group first.');
+      return;
+    }
+    mutateDraft(plan => plan.days[dayIndex].meals.push({
+      ...emptyMeal(mealType),
+      forEveryone: false,
+      personIds: [String(firstPersonId)]
+    }));
+    setActiveMealType(mealType);
+    setActiveRowIndex(nextRowIndex);
   };
 
   const revealSpecialMeal = (dayIndex: number) => {
     const hasSpecialRow = Boolean(draft?.days[dayIndex]?.meals.some(meal => meal.mealType === 'special'));
-    if (!hasSpecialRow) mutateDraft(plan => plan.days[dayIndex].meals.push(emptyMeal('special')));
-    setRevealedSpecialDays(current => new Set(current).add(dayIndex));
-    setExpandedDays(current => new Set(current).add(dayIndex));
+    const firstPersonId = draft?.people.find(person => person.active !== false)?._id;
+    if (!hasSpecialRow) mutateDraft(plan => plan.days[dayIndex].meals.push({
+      ...emptyMeal('special'),
+      forEveryone: !firstPersonId,
+      personIds: firstPersonId ? [String(firstPersonId)] : []
+    }));
+    setActiveMealType('special');
+    setActiveRowIndex(0);
   };
 
   const removeSeparateMeal = async (dayIndex: number, mealType: MealType, rowIndex: number) => {
@@ -403,7 +433,6 @@ export function PlanPage() {
       personIds: [...source.personIds],
       personName: source.personName || ''
     });
-    setExpandedDays(current => new Set(current).add(destination!.dayIndex));
     showToast(`${source.name} repeated on ${dayLabel(draft.days[destination.dayIndex].date)}`);
   };
 
@@ -421,10 +450,22 @@ export function PlanPage() {
   };
 
   const togglePerson = (dayIndex: number, mealType: MealType, rowIndex: number, personId: string, checked: boolean) => {
-    const meal = draft ? findMeal(draft, dayIndex, mealType, rowIndex) : null;
-    const next = new Set(meal?.personIds || []);
-    if (checked) next.add(personId); else next.delete(personId);
-    updateMeal(dayIndex, mealType, rowIndex, { forEveryone: false, personIds: [...next], personName: '' });
+    const assignedElsewhere = checked && mealContexts(draft!.days[dayIndex], mealType)
+      .some(context => context.rowIndex !== rowIndex && context.meal.forEveryone === false && context.meal.personIds.map(String).includes(personId));
+    if (assignedElsewhere) {
+      showToast('That person is already assigned to another group for this meal.');
+      return;
+    }
+    mutateDraft(plan => {
+      const rows = plan.days[dayIndex].meals
+        .map((meal, index) => ({ meal, index }))
+        .filter(entry => entry.meal.mealType === mealType);
+      const target = rows[rowIndex];
+      if (!target) return;
+      const next = new Set(target.meal.personIds || []);
+      if (checked) next.add(personId); else next.delete(personId);
+      plan.days[dayIndex].meals[target.index] = { ...target.meal, forEveryone: false, personIds: [...next], personName: '' };
+    });
   };
 
   const goToWeek = async (targetWeekStart: string) => {
@@ -432,8 +473,9 @@ export function PlanPage() {
     if (!(await saveCurrentDraftIfNeeded())) return;
     setDraft(null);
     setWeekStart(targetWeekStart);
-    setExpandedDays(new Set());
-    setRevealedSpecialDays(new Set());
+    setSelectedDayIndex(0);
+    setActiveMealType('dinner');
+    setActiveRowIndex(0);
     firstFocusDoneRef.current = false;
   };
 
@@ -481,8 +523,9 @@ export function PlanPage() {
       if (nextWeekStart !== weekStart) {
         setDraft(null);
         setWeekStart(nextWeekStart);
-        setExpandedDays(new Set());
-        setRevealedSpecialDays(new Set());
+        setSelectedDayIndex(0);
+        setActiveMealType('dinner');
+        setActiveRowIndex(0);
         firstFocusDoneRef.current = false;
       }
     } catch (error) {
@@ -628,15 +671,23 @@ export function PlanPage() {
   }, [settingsQuery.data?.mealPlanMode]);
 
   useEffect(() => {
+    const date = draft?.days[selectedDayIndex]?.date;
+    if (!date || !weekStart) return;
+    sessionStorage.setItem('provista-plan-context', JSON.stringify({ weekStart, date, mealType: activeMealType, rowIndex: activeRowIndex }));
+  }, [activeMealType, activeRowIndex, draft, selectedDayIndex, weekStart]);
+
+  useEffect(() => {
     if (!draft || firstFocusDoneRef.current) return;
     const focus = new URLSearchParams(location.search).get('focus');
     if (focus !== 'today-dinner' && !onboardingActive) return;
     const todayIndex = draft.days.findIndex(day => day.date === isoDate());
     if (todayIndex < 0) return;
-    setExpandedDays(current => new Set(current).add(todayIndex));
+    setSelectedDayIndex(todayIndex);
+    setActiveMealType('dinner');
+    setActiveRowIndex(0);
     firstFocusDoneRef.current = true;
     window.setTimeout(() => {
-      document.querySelector<HTMLInputElement>(`[data-plan-day="${todayIndex}"] input[data-meal-name="dinner-0"]`)?.focus({ preventScroll: true });
+      document.querySelector<HTMLInputElement>('input[data-meal-name="dinner-0"]')?.focus({ preventScroll: true });
     }, 0);
   }, [draft, location.search, onboardingActive]);
 
@@ -656,6 +707,29 @@ export function PlanPage() {
 
   const today = isoDate();
   const thisWeekStart = normalizeWeekStart(new Date(), settingsQuery.data!.weekStartDay);
+  const shortageByDate = allocationShortagesByDate(allocationQuery.data);
+  const dayStatuses = draft.days.map(day => dayPlanStatus(day, visibleMealTypes, shortageByDate.get(day.date) || 0));
+  const selectedDay = draft.days[Math.min(selectedDayIndex, draft.days.length - 1)];
+  const selectedDayStatus = dayStatuses[Math.min(selectedDayIndex, dayStatuses.length - 1)];
+  const activeContexts = mealContexts(selectedDay, activeMealType);
+  const activeContext = activeContexts[activeRowIndex] || activeContexts[0] || null;
+  const activeMeal = activeContext?.meal || emptyMeal(activeMealType);
+  const effectiveRowIndex = activeContext?.rowIndex || 0;
+  const activeKey = mealKey(selectedDayIndex, activeMealType, effectiveRowIndex);
+  const activeMealIndex = selectedDay.meals
+    .map((meal, index) => ({ meal, index }))
+    .filter(entry => entry.meal.mealType === activeMealType)[effectiveRowIndex]?.index;
+  const focusedAudienceLabel = (meal: PlanMeal) => meal.forEveryone !== false && activeContexts.some(context => context.meal.forEveryone === false)
+    ? 'Everyone else in household'
+    : audienceLabel(meal);
+  const nextContext = activeMeal.name.trim()
+    ? nextUnfinishedContext(selectedDay, activeMealType, effectiveRowIndex)
+    : null;
+  const activeDayAllocations = (allocationQuery.data?.mealAllocations || []).filter(allocation =>
+    String(allocation.date || '').slice(0, 10) === selectedDay.date && allocation.mealType === activeMealType && allocation.mealIndex === activeMealIndex
+  );
+  const activeShoppingCount = activeDayAllocations.filter(allocation => Number(allocation.shoppingQuantity) > 0).length;
+  const activeCoveredCount = activeDayAllocations.length - activeShoppingCount;
 
   return (
     <section className="plan-page" aria-labelledby="plan-title">
@@ -666,7 +740,7 @@ export function PlanPage() {
           <p>Plan what matters this week. Provista saves changes automatically.</p>
         </div>
         <div className={`plan-save-status plan-save-${saveStatus}`} role="status">
-          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? 'Couldn’t save' : dirty ? 'Unsaved changes' : 'Saved ✓'}
+          {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'error' ? <><span>Not saved</span><button type="button" onClick={() => { if (draft) void queueDraftSave(clonePlan(draft), revisionRef.current); }}>Retry</button></> : dirty ? 'Unsaved changes' : 'Saved ✓'}
         </div>
       </header>
 
@@ -688,6 +762,26 @@ export function PlanPage() {
         </div>
         <button type="button" className="shell-button shell-button-secondary" onClick={() => void navigateWeek(1)}>Next →</button>
       </div>
+
+      {allocationQuery.data && allocationQuery.data.itemSummaries.length > 0 && (
+        <section className="plan-pantry-outlook" aria-labelledby="plan-pantry-outlook-title">
+          <div>
+            <h2 id="plan-pantry-outlook-title">Pantry outlook</h2>
+            <p>Based on saved meal needs. Planning does not change Pantry on-hand quantities.</p>
+          </div>
+          <div className="plan-pantry-outlook-items">
+            {allocationQuery.data.itemSummaries.map(item => {
+              const unit = item.unit ? ` ${item.unit}` : '';
+              const need = item.shoppingQuantity > 0 ? ` · Buy ${item.shoppingQuantity}${unit}` : item.listQuantity > 0 ? ' · Covered on List' : '';
+              const detail = item.trackingMode === 'simple'
+                ? `Pantry: ${item.pantryStatus === 'have' ? 'Have' : item.pantryStatus === 'low' ? 'Running low' : 'Out'}${need}`
+                : `On hand ${item.onHandQuantity || 0}${unit} · Planned ${item.plannedQuantity}${unit} · Projected ${item.projectedQuantity || 0}${unit}${need}`;
+              return <div className={item.shoppingQuantity > 0 ? 'plan-pantry-outlook-shortage' : ''} key={item.itemId}><strong>{item.name}</strong><span>{detail}</span></div>;
+            })}
+          </div>
+          {allocationQuery.data.unresolvedNeeds.length > 0 && <small>{allocationQuery.data.unresolvedNeeds.length} meal need{allocationQuery.data.unresolvedNeeds.length === 1 ? '' : 's'} need a catalog match before Provista can project them.</small>}
+        </section>
+      )}
 
       <div className="plan-tools">
         <button type="button" className="shell-button shell-button-secondary" disabled={!online} onClick={() => void copyLastWeek()}>Copy last week</button>
@@ -743,125 +837,83 @@ export function PlanPage() {
         )}
       </div>
 
-      <div className="plan-days">
+      <nav className="plan-week-overview" aria-label="Days in this plan">
         {draft.days.map((day, dayIndex) => {
-          const expanded = expandedDays.has(dayIndex);
-          const names = day.meals.map(meal => meal.name.trim()).filter(Boolean);
-          const isToday = day.date === today;
+          const status = dayStatuses[dayIndex];
+          const selected = dayIndex === selectedDayIndex;
+          const fullLabel = `${dayLabel(day.date)}, ${status.status}${status.hasSeparateMeal ? ', separate meal' : ''}${status.shortageCount ? `, ${status.shortageCount} shortage${status.shortageCount === 1 ? '' : 's'}` : ''}`;
           return (
-            <article className={`plan-day ${isToday ? 'plan-day-today' : ''}`} data-plan-day={dayIndex} key={day.date}>
-              <button
-                type="button"
-                className="plan-day-toggle"
-                aria-expanded={expanded}
-                onClick={() => setExpandedDays(current => {
-                  const next = new Set(current);
-                  if (next.has(dayIndex)) next.delete(dayIndex); else next.add(dayIndex);
-                  return next;
-                })}
-              >
-                <span><strong>{dayLabel(day.date)}</strong>{isToday && <em>Today</em>}</span>
-                <span className="plan-day-summary">{names.length ? names.slice(0, 2).join(' · ') : 'Not planned'}</span>
-                <span aria-hidden="true">{expanded ? '−' : '+'}</span>
-              </button>
-
-              {expanded && (
-                <div className="plan-day-content">
-                  {visibleMealTypes.map(mealType => {
-                    const rows = mealRows(day, mealType);
-                    const isSpecial = mealType === 'special';
-                    const showSpecial = !isSpecial || rows.some(meal => meal.name || meal.notes) || onboardingActive || revealedSpecialDays.has(dayIndex);
-                    if (!showSpecial && settingsQuery.data?.mealPlanMode === 'dinner') {
-                      return (
-                        <button key={mealType} type="button" className="plan-add-special" disabled={!online} onClick={() => revealSpecialMeal(dayIndex)}>
-                          + Add a separate meal
-                        </button>
-                      );
-                    }
-                    return (
-                      <section className="plan-meal-section" data-meal-type={mealType} key={mealType}>
-                        <div className="plan-meal-section-heading">
-                          <h2>{MEAL_LABELS[mealType]}</h2>
-                          {mealType !== 'special' && <button type="button" className="plan-link-button" disabled={!online} onClick={() => addSeparateMeal(dayIndex, mealType)}>+ Separate meal</button>}
-                        </div>
-
-                        {rows.map((meal, rowIndex) => {
-                          const key = mealKey(dayIndex, mealType, rowIndex);
-                          const hasContent = Boolean(meal.name || meal.notes);
-                          return (
-                            <div className="plan-meal-row" key={key}>
-                              <div className="plan-meal-topline">
-                                <label>
-                                  <span>Meal</span>
-                                  <input
-                                    data-meal-name={`${mealType}-${rowIndex}`}
-                                    value={meal.name}
-                                    disabled={!online}
-                                    placeholder={mealType === 'special' ? 'Separate meal…' : 'Meal…'}
-                                    onChange={event => updateMeal(dayIndex, mealType, rowIndex, { name: event.target.value })}
-                                  />
-                                </label>
-                                <details className="plan-audience">
-                                  <summary>{audienceLabel(meal)} · Change</summary>
-                                  <div>
-                                    <label>
-                                      <input
-                                        type="checkbox"
-                                        checked={meal.forEveryone !== false}
-                                        disabled={!online}
-                                        onChange={event => updateMeal(dayIndex, mealType, rowIndex, {
-                                          forEveryone: event.target.checked,
-                                          personIds: event.target.checked ? [] : meal.personIds,
-                                          personName: event.target.checked ? '' : meal.personName || ''
-                                        })}
-                                      /> Everyone
-                                    </label>
-                                    {draft.people.map(person => (
-                                      <label key={person._id}>
-                                        <input
-                                          type="checkbox"
-                                          checked={!meal.forEveryone && meal.personIds.includes(String(person._id))}
-                                          disabled={!online || meal.forEveryone}
-                                          onChange={event => togglePerson(dayIndex, mealType, rowIndex, String(person._id), event.target.checked)}
-                                        /> {person.displayName}{person.historical ? ' (past)' : ''}
-                                      </label>
-                                    ))}
-                                  </div>
-                                </details>
-                              </div>
-
-                              <label className="plan-needs-field">
-                                <span>Need for this meal</span>
-                                <textarea
-                                  value={meal.notes}
-                                  disabled={!online}
-                                  maxLength={2000}
-                                  rows={2}
-                                  placeholder="e.g. tortillas, lettuce, salsa"
-                                  onChange={event => updateMeal(dayIndex, mealType, rowIndex, { notes: event.target.value })}
-                                />
-                              </label>
-
-                              <div className="plan-meal-actions">
-                                {meal.notes.trim() && <button type="button" className="plan-link-button" disabled={!online || shoppingLoading} onClick={() => void openShoppingReview(key, meal.notes)}>Check shopping needs</button>}
-                                {meal.name.trim() && <button type="button" className="plan-link-button" disabled={!online} onClick={() => repeatMeal(dayIndex, mealType, rowIndex)}>Repeat later this week</button>}
-                                {!hasContent && <button type="button" className="plan-link-button" disabled={!online} onClick={() => planLeftovers(dayIndex, mealType, rowIndex)}>Plan leftovers</button>}
-                                {meal.name.trim() && <button type="button" className="plan-link-button" disabled={!online} onClick={() => void saveAsFavorite(meal)}>Save as favorite</button>}
-                                <button type="button" className="plan-link-button" disabled={!online} onClick={() => setFavoriteTarget(key)}>Use favorite</button>
-                                {(isSpecial || rows.length > 1) && <button type="button" className="plan-link-button plan-danger-link" disabled={!online} onClick={() => void removeSeparateMeal(dayIndex, mealType, rowIndex)}>Remove meal</button>}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </section>
-                    );
-                  })}
-                </div>
-              )}
-            </article>
+            <button
+              type="button"
+              className={`plan-day plan-day-status-${status.status} ${day.date === today ? 'plan-week-day-today' : ''}`}
+              aria-label={fullLabel}
+              aria-current={selected ? 'date' : undefined}
+              onClick={() => { setSelectedDayIndex(dayIndex); setActiveRowIndex(0); }}
+              key={day.date}
+            >
+              <strong>{new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(localDate(day.date))}</strong>
+              <span>{localDate(day.date).getDate()}</span>
+              <small>{status.status === 'planned' ? 'Planned' : status.status === 'partial' ? 'Partial' : 'Open'}</small>
+              {(status.hasSeparateMeal || status.shortageCount > 0) && <em>{status.hasSeparateMeal ? 'Group' : ''}{status.hasSeparateMeal && status.shortageCount ? ' · ' : ''}{status.shortageCount ? `Need ${status.shortageCount}` : ''}</em>}
+            </button>
           );
         })}
-      </div>
+      </nav>
+
+      <article className={`plan-focused-day ${selectedDay.date === today ? 'plan-day-today' : ''}`} data-plan-day={selectedDayIndex}>
+        <header className="plan-focused-day-heading">
+          <div><p>Focused day</p><h2>{dayLabel(selectedDay.date)}</h2></div>
+          <span>{selectedDayStatus.plannedCount} of {selectedDayStatus.contextCount} planned{selectedDayStatus.shortageCount ? ` · ${selectedDayStatus.shortageCount} shortage${selectedDayStatus.shortageCount === 1 ? '' : 's'}` : ''}</span>
+        </header>
+
+        <div className="plan-meal-type-selector" role="tablist" aria-label="Meal type">
+          {visibleMealTypes.map(mealType => (
+            <button type="button" role="tab" aria-selected={activeMealType === mealType} onClick={() => { setActiveMealType(mealType); setActiveRowIndex(0); }} key={mealType}>
+              {MEAL_LABELS[mealType]}
+            </button>
+          ))}
+        </div>
+
+        {activeMealType === 'special' && activeContexts.length === 0 ? (
+          <button type="button" className="plan-add-special" disabled={!online} onClick={() => revealSpecialMeal(selectedDayIndex)}>+ Add a separate meal</button>
+        ) : (
+          <section className="plan-focused-meal plan-meal-section" data-meal-type={activeMealType}>
+            <div className="plan-audience-status-list" aria-label={`${MEAL_LABELS[activeMealType]} groups`}>
+              {activeContexts.map(context => (
+                <button type="button" aria-pressed={context.rowIndex === effectiveRowIndex} onClick={() => setActiveRowIndex(context.rowIndex)} key={mealKey(selectedDayIndex, activeMealType, context.rowIndex)}>
+                  <strong>{focusedAudienceLabel(context.meal)}</strong>
+                  <span>{context.planned ? `Planned · ${context.meal.name}` : `Needs ${MEAL_LABELS[activeMealType].toLowerCase()}`}</span>
+                </button>
+              ))}
+              {activeMealType !== 'special' && <button type="button" className="plan-add-group" disabled={!online} onClick={() => addSeparateMeal(selectedDayIndex, activeMealType)}>+ Separate group</button>}
+            </div>
+
+            <div className="plan-meal-row">
+              <div className="plan-active-audience"><span>Planning for</span><strong>{focusedAudienceLabel(activeMeal)}</strong></div>
+              <div className="plan-meal-topline">
+                <label><span>Meal</span><input data-meal-name={`${activeMealType}-${effectiveRowIndex}`} value={activeMeal.name} disabled={!online} placeholder={activeMealType === 'special' ? 'Separate meal…' : 'Meal…'} onChange={event => updateMeal(selectedDayIndex, activeMealType, effectiveRowIndex, { name: event.target.value })} /></label>
+                <details className="plan-audience"><summary>{audienceLabel(activeMeal)} · Change</summary><div>
+                  <label><input type="checkbox" checked={activeMeal.forEveryone !== false} disabled={!online} onChange={event => updateMeal(selectedDayIndex, activeMealType, effectiveRowIndex, { forEveryone: event.target.checked, personIds: event.target.checked ? [] : activeMeal.personIds, personName: event.target.checked ? '' : activeMeal.personName || '' })} /> Everyone</label>
+                  {draft.people.map(person => <label key={person._id}><input type="checkbox" checked={!activeMeal.forEveryone && activeMeal.personIds.includes(String(person._id))} disabled={!online || activeMeal.forEveryone} onChange={event => togglePerson(selectedDayIndex, activeMealType, effectiveRowIndex, String(person._id), event.target.checked)} /> {person.displayName}{person.historical ? ' (past)' : ''}</label>)}
+                </div></details>
+              </div>
+              <label className="plan-needs-field"><span>Need for this meal</span><textarea value={activeMeal.notes} disabled={!online} maxLength={2000} rows={2} placeholder="e.g. tortillas, lettuce, salsa" onChange={event => updateMeal(selectedDayIndex, activeMealType, effectiveRowIndex, { notes: event.target.value })} /></label>
+              {activeDayAllocations.length > 0 && <div className={activeShoppingCount ? 'plan-coverage-summary plan-coverage-shortage' : 'plan-coverage-summary'}>{activeCoveredCount} covered · {activeShoppingCount} need buying</div>}
+              {allocationQuery.isError && <div className="plan-coverage-unavailable">Pantry availability unavailable. You can keep planning.</div>}
+              <div className="plan-meal-actions">
+                {activeMeal.notes.trim() && <button type="button" className="plan-link-button" disabled={!online || shoppingLoading} onClick={() => void openShoppingReview(activeKey, activeMeal.notes)}>Check shopping needs</button>}
+                {activeMeal.name.trim() && <button type="button" className="plan-link-button" disabled={!online} onClick={() => repeatMeal(selectedDayIndex, activeMealType, effectiveRowIndex)}>Repeat later this week</button>}
+                {!activeMeal.name && !activeMeal.notes && <button type="button" className="plan-link-button" disabled={!online} onClick={() => planLeftovers(selectedDayIndex, activeMealType, effectiveRowIndex)}>Plan leftovers</button>}
+                {activeMeal.name.trim() && <button type="button" className="plan-link-button" disabled={!online} onClick={() => void saveAsFavorite(activeMeal)}>Save as favorite</button>}
+                <button type="button" className="plan-link-button" disabled={!online} onClick={() => setFavoriteTarget(activeKey)}>Use favorite</button>
+                {(activeMealType === 'special' || activeContexts.length > 1) && <button type="button" className="plan-link-button plan-danger-link" disabled={!online} onClick={() => void removeSeparateMeal(selectedDayIndex, activeMealType, effectiveRowIndex)}>Remove meal</button>}
+              </div>
+            </div>
+
+            {nextContext && <button type="button" className="shell-button shell-button-primary plan-next-context" onClick={() => setActiveRowIndex(nextContext.rowIndex)}>Next: plan for {focusedAudienceLabel(nextContext.meal)}</button>}
+          </section>
+        )}
+      </article>
 
       <section className="plan-produce">
         <label htmlFor="plan-produce-notes">Produce to use this week</label>

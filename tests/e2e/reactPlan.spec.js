@@ -39,6 +39,50 @@ test.describe('React Plan migration', () => {
     }).toBe(mealName);
   });
 
+  test('uses a compact week overview with only one focused day editor', async ({ page }) => {
+    await page.goto('/app/plan');
+
+    const dayButtons = page.getByRole('navigation', { name: 'Days in this plan' }).getByRole('button');
+    await expect(dayButtons).toHaveCount(7);
+    await expect(page.locator('.plan-focused-day input[data-meal-name]')).toHaveCount(1);
+
+    const originalHeading = await page.locator('.plan-focused-day h2').textContent();
+    const selectedIndex = await dayButtons.evaluateAll(buttons => buttons.findIndex(button => button.getAttribute('aria-current') === 'date'));
+    const nextDay = dayButtons.nth((selectedIndex + 1) % 7);
+    await nextDay.click();
+    await expect(nextDay).toHaveAttribute('aria-current', 'date');
+    await expect(page.locator('.plan-focused-day h2')).not.toHaveText(originalHeading || '');
+    await expect(page.locator('.plan-focused-day input[data-meal-name]')).toHaveCount(1);
+  });
+
+  test('surfaces the next unfinished household group without forced scrolling', async ({ page }) => {
+    await page.goto('/app/plan');
+    const firstMeal = `Shared dinner ${Date.now()}`;
+    await page.locator('.plan-focused-day input[data-meal-name="dinner-0"]').fill(firstMeal);
+    await page.getByRole('button', { name: '+ Separate group' }).click();
+
+    const groups = page.locator('.plan-audience-status-list button').filter({ hasNotText: '+ Separate group' });
+    await expect(groups).toHaveCount(2);
+    await expect(page.locator('.plan-focused-day input[data-meal-name]')).toHaveCount(1);
+    await groups.first().click();
+    await expect(page.getByRole('button', { name: /Next: plan for/ })).toBeVisible();
+    await page.getByRole('button', { name: /Next: plan for/ }).click();
+    await expect(groups.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('restores the focused Plan context after primary navigation', async ({ page }) => {
+    await page.goto('/app/plan');
+    const dayButtons = page.getByRole('navigation', { name: 'Days in this plan' }).getByRole('button');
+    await dayButtons.nth(3).click();
+    const selectedLabel = await dayButtons.nth(3).getAttribute('aria-label');
+
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+
+    await expect(page.getByRole('navigation', { name: 'Days in this plan' }).getByRole('button').nth(3)).toHaveAttribute('aria-current', 'date');
+    await expect(page.locator('.plan-focused-day h2')).toContainText((selectedLabel || '').split(',')[0]);
+  });
+
   test('serializes and coalesces autosaves while the previous write is slow', async ({ page }) => {
     let releaseFirstSave = () => {};
     const firstSaveGate = new Promise(resolve => {
@@ -196,5 +240,31 @@ test.describe('React Plan migration', () => {
 
     const inventory = await (await page.request.get('/api/inventory')).json();
     expect(inventory.find(entry => entry.itemId?._id === item._id)?.quantity).toBe(5);
+  });
+
+  test('shows the saved weekly Pantry projection without deducting on-hand quantity', async ({ page }) => {
+    const name = `Projected Pantry Item ${Date.now()}`;
+    const itemResponse = await page.request.post('/api/items', { data: { name, category: 'Pantry', unit: 'each' } });
+    expect(itemResponse.ok()).toBeTruthy();
+    const item = await itemResponse.json();
+    const inventoryResponse = await page.request.post('/api/inventory', {
+      data: { itemId: item._id, trackingMode: 'exact', quantity: 4, lowStockThreshold: 1, unit: 'each' }
+    });
+    expect(inventoryResponse.ok()).toBeTruthy();
+
+    await page.goto('/app/plan');
+    const today = page.locator('.plan-day-today');
+    await today.locator('textarea').first().fill(`5 ${name}`);
+    await expect(page.locator('.plan-save-status')).toContainText('Saved', { timeout: 8000 });
+
+    const outlook = page.getByRole('region', { name: 'Pantry outlook' });
+    await expect(outlook).toContainText(name);
+    await expect(outlook).toContainText('On hand 4 each');
+    await expect(outlook).toContainText('Planned 5 each');
+    await expect(outlook).toContainText('Projected 0 each');
+    await expect(outlook).toContainText('Buy 1 each');
+
+    const inventory = await (await page.request.get('/api/inventory')).json();
+    expect(inventory.find(entry => entry.itemId?._id === item._id)?.quantity).toBe(4);
   });
 });

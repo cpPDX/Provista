@@ -2,6 +2,7 @@ import { apiFetch } from '../api/http';
 import { queryClient } from '../app/queryClient';
 import type {
   FavoriteMeal,
+  MealAllocationProjection,
   MealPlan,
   MealPlanSettings,
   MealShoppingPreview,
@@ -9,18 +10,23 @@ import type {
 } from './types';
 
 export const mealPlanQueryKey = (weekStart: string) => ['meal-plan', weekStart] as const;
+export const mealAllocationQueryKey = (weekStart: string) => ['meal-allocations', weekStart] as const;
 export const mealPlanSettingsQueryKey = ['meal-plan-settings'] as const;
 export const favoriteMealsQueryKey = ['meal-plan-favorites'] as const;
 
 function invalidateMealPlanCache(weekStart: string) {
-  return queryClient.invalidateQueries({
-    queryKey: mealPlanQueryKey(weekStart),
-    refetchType: 'none'
-  });
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: mealPlanQueryKey(weekStart), refetchType: 'none' }),
+    queryClient.invalidateQueries({ queryKey: mealAllocationQueryKey(weekStart) })
+  ]);
 }
 
 export function loadMealPlan(weekStart: string) {
   return apiFetch<MealPlan>(`/api/meal-plan?weekStart=${encodeURIComponent(weekStart)}`);
+}
+
+export function loadMealAllocations(weekStart: string) {
+  return apiFetch<MealAllocationProjection>(`/api/meal-plan/allocations?weekStart=${encodeURIComponent(weekStart)}`);
 }
 
 export async function saveMealPlan(payload: {

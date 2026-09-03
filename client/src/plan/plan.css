@@ -44,6 +44,8 @@
 
 .plan-save-saving { font-weight: 700; }
 .plan-save-error { color: var(--danger); }
+.plan-save-error { gap: 0.45rem; }
+.plan-save-error button { min-height: 32px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; }
 
 .plan-onboarding-banner,
 .plan-offline {
@@ -111,6 +113,43 @@
   flex-wrap: wrap;
   gap: 0.6rem;
   align-items: flex-start;
+}
+
+.plan-pantry-outlook {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.plan-pantry-outlook h2,
+.plan-pantry-outlook p {
+  margin: 0;
+}
+
+.plan-pantry-outlook p,
+.plan-pantry-outlook small,
+.plan-pantry-outlook-items span {
+  color: var(--muted);
+}
+
+.plan-pantry-outlook-items {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.plan-pantry-outlook-items > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.plan-pantry-outlook-shortage span {
+  color: var(--danger);
+  font-weight: 700;
 }
 
 .plan-tools details {
@@ -205,6 +244,121 @@
   gap: 0.75rem;
 }
 
+.plan-week-overview {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(82px, 1fr);
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.15rem 0.1rem 0.5rem;
+  scroll-snap-type: x proximity;
+}
+
+.plan-week-overview .plan-day {
+  min-height: 88px;
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: 0.1rem;
+  padding: 0.55rem;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+
+.plan-week-overview .plan-day[aria-current='date'] {
+  border-color: var(--feature-accent);
+  box-shadow: 0 0 0 2px var(--feature-border);
+}
+
+.plan-week-overview .plan-day small,
+.plan-week-overview .plan-day em {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.plan-week-overview .plan-day-status-planned small { color: var(--success); }
+.plan-week-overview .plan-day-status-partial small { color: var(--text); }
+.plan-week-overview .plan-day em { color: var(--danger); }
+
+.plan-focused-day {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.plan-focused-day-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  align-items: end;
+}
+
+.plan-focused-day-heading p,
+.plan-focused-day-heading h2 { margin: 0; }
+.plan-focused-day-heading p { color: var(--text-muted); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; }
+.plan-focused-day-heading > span { color: var(--text-muted); }
+
+.plan-meal-type-selector,
+.plan-audience-status-list {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.plan-meal-type-selector button,
+.plan-audience-status-list button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-subtle);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.plan-meal-type-selector button[aria-selected='true'],
+.plan-audience-status-list button[aria-pressed='true'] {
+  border-color: var(--feature-accent);
+  background: var(--feature-subtle);
+}
+
+.plan-audience-status-list button {
+  min-width: 150px;
+  display: grid;
+  gap: 0.15rem;
+  text-align: left;
+}
+
+.plan-audience-status-list button span { color: var(--text-muted); font-size: 0.8rem; }
+.plan-audience-status-list .plan-add-group { min-width: auto; color: var(--primary); font-weight: 700; }
+
+.plan-focused-meal { display: grid; gap: 0.75rem; }
+.plan-active-audience { display: flex; gap: 0.4rem; color: var(--text-muted); }
+.plan-active-audience strong { color: var(--text); }
+
+.plan-coverage-summary,
+.plan-coverage-unavailable {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.65rem;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.plan-coverage-shortage { background: var(--danger-bg); color: var(--danger); }
+.plan-next-context { justify-self: start; }
+
 .plan-day {
   overflow: clip;
   border: 1px solid var(--border, var(--border));
@@ -212,7 +366,8 @@
   background: var(--surface, #fff);
 }
 
-.plan-day-today {
+.plan-day-today,
+.plan-week-day-today {
   border-color: var(--feature-border);
   box-shadow: 0 0 0 2px rgb(49 95 75 / 7%);
 }
