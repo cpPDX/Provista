@@ -26,6 +26,7 @@ interface ReviewToken {
 interface RapidCaptureProps {
   items: ShoppingListItem[];
   online: boolean;
+  storeId?: string | null;
   onListChanged: () => void | Promise<void>;
   initialDetail?: { name: string; quantity: number } | null;
   onInitialDetailResolved?: () => void;
@@ -75,7 +76,14 @@ function money(value: number) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value);
 }
 
-export function RapidCapture({ items, online, onListChanged, initialDetail = null, onInitialDetailResolved }: RapidCaptureProps) {
+export function RapidCapture({
+  items,
+  online,
+  storeId = null,
+  onListChanged,
+  initialDetail = null,
+  onInitialDetailResolved
+}: RapidCaptureProps) {
   const { showToast } = useToast();
   const { session } = useAuth();
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -444,6 +452,7 @@ export function RapidCapture({ items, online, onListChanged, initialDetail = nul
       {barcodeOpen && (
         <BarcodeResolverDialog
           purpose="list"
+          storeId={storeId}
           onClose={() => setBarcodeOpen(false)}
           onResolved={addScannedProduct}
           onPriceContext={showScannedPriceContext}
