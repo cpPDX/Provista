@@ -46,7 +46,7 @@ function inferredSection(item: ShoppingListItem) {
   return CATEGORY_SECTIONS.get(category) || 'Other';
 }
 
-export function useStoreSections() {
+export function useStoreSections(_items?: ShoppingListItem[]) {
   const query = useQuery({ queryKey: storeSectionsQueryKey, queryFn: loadStoreSections });
 
   const savedByItem = useMemo(() => new Map(
