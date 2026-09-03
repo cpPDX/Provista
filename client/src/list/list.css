@@ -421,6 +421,7 @@
   }
 
   .react-list-controls {
+    display: grid;
     width: 100%;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
