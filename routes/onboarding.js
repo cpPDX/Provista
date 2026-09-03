@@ -4,6 +4,15 @@ const Household = require('../models/Household');
 const MealPlan = require('../models/MealPlan');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { createRateLimiter } = require('../middleware/security');
+
+// Onboarding writes are infrequent by design. Keep accidental retries and
+// automated abuse bounded without limiting normal progress through the flow.
+const onboardingMutationLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  keyPrefix: 'onboarding-write'
+});
 
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
@@ -87,7 +96,7 @@ router.get('/', requireAuth, async (req, res) => {
 // POST /api/onboarding/start - converts the legacy first-run browser marker
 // into server-backed progress. Existing households are not opted in unless
 // the client explicitly identifies this as a new-household first run.
-router.post('/start', requireAuth, requireAdmin, async (req, res) => {
+router.post('/start', onboardingMutationLimiter, requireAuth, requireAdmin, async (req, res) => {
   try {
     const household = await householdFor(req);
     if (!household) return res.status(404).json({ error: 'Household not found' });
@@ -104,7 +113,7 @@ router.post('/start', requireAuth, requireAdmin, async (req, res) => {
 // POST /api/onboarding/people-step - records completion/skip of the optional
 // planning-person step. Person records themselves continue to use the normal
 // HouseholdPerson API so onboarding never owns a second copy of that data.
-router.post('/people-step', requireAuth, requireAdmin, async (req, res) => {
+router.post('/people-step', onboardingMutationLimiter, requireAuth, requireAdmin, async (req, res) => {
   try {
     const household = await householdFor(req);
     if (!household?.onboarding) return res.status(409).json({ error: 'Onboarding has not started' });
@@ -127,7 +136,7 @@ router.post('/people-step', requireAuth, requireAdmin, async (req, res) => {
 // POST /api/onboarding/action - selects the real product surface that must
 // produce the first useful outcome. Re-selecting a different action resets the
 // verification window but does not discard already-saved household setup.
-router.post('/action', requireAuth, requireAdmin, async (req, res) => {
+router.post('/action', onboardingMutationLimiter, requireAuth, requireAdmin, async (req, res) => {
   try {
     const action = String(req.body.action || '');
     if (!['plan', 'list'].includes(action)) {
@@ -157,7 +166,7 @@ router.post('/action', requireAuth, requireAdmin, async (req, res) => {
 // POST /api/onboarding/back - supports back navigation without losing the
 // saved people/profile work. From a selected action it returns to the action
 // chooser; from there it returns to household setup.
-router.post('/back', requireAuth, requireAdmin, async (req, res) => {
+router.post('/back', onboardingMutationLimiter, requireAuth, requireAdmin, async (req, res) => {
   try {
     const household = await householdFor(req);
     if (!household?.onboarding) return res.status(409).json({ error: 'Onboarding has not started' });
@@ -181,7 +190,7 @@ router.post('/back', requireAuth, requireAdmin, async (req, res) => {
 // POST /api/onboarding/resume - privacy-conscious instrumentation. The client
 // calls this once per browser session for an already-started flow; no household
 // content is captured.
-router.post('/resume', requireAuth, async (req, res) => {
+router.post('/resume', onboardingMutationLimiter, requireAuth, async (req, res) => {
   try {
     const household = await householdFor(req);
     if (!household?.onboarding || household.onboarding.status === 'completed') {
@@ -222,7 +231,7 @@ async function verifyListOutcome(householdId, selectedAt) {
 // POST /api/onboarding/complete-action - completion is server verified against
 // a real Plan/List mutation after the action-selection timestamp. Pressing a
 // navigation button alone can never complete onboarding.
-router.post('/complete-action', requireAuth, requireAdmin, async (req, res) => {
+router.post('/complete-action', onboardingMutationLimiter, requireAuth, requireAdmin, async (req, res) => {
   try {
     const household = await householdFor(req);
     if (!household?.onboarding) return res.status(409).json({ error: 'Onboarding has not started' });

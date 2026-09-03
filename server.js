@@ -23,6 +23,9 @@ app.use(cookieParser());
 const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 20, keyPrefix: 'login' });
 const registerLimiter = createRateLimiter({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'register' });
 const passwordLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'password' });
+// These routes only return the small React HTML shell. The generous ceiling
+// blocks abusive filesystem traffic while staying invisible during normal use.
+const appShellLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 240, keyPrefix: 'app-shell' });
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/password', passwordLimiter);
@@ -191,17 +194,17 @@ app.get('/', (req, res) => {
 // `/app` without a feature deep link is the migrated React Home. During the
 // strangler migration, explicit `?tab=` links continue to open the legacy
 // feature renderer until that destination moves to React.
-app.get('/app', (req, res) => {
+app.get('/app', appShellLimiter, (req, res) => {
   if (req.query.tab || req.query.legacy === '1') return serveLegacyApp(req, res);
   return serveReactApp(req, res);
 });
 
 // Migrated authenticated feature routes. The matching legacy `?tab=` deep
 // links remain available until PRO-56 retires the compatibility renderer.
-app.get('/app/list', serveReactApp);
-app.get('/app/pantry', serveReactApp);
-app.get('/app/plan', serveReactApp);
-app.get('/app/more', serveReactApp);
+app.get('/app/list', appShellLimiter, serveReactApp);
+app.get('/app/pantry', appShellLimiter, serveReactApp);
+app.get('/app/plan', appShellLimiter, serveReactApp);
+app.get('/app/more', appShellLimiter, serveReactApp);
 
 // Compatibility surface remains available while secondary More tools,
 // Insights, scanner, and legacy authenticated JavaScript are retired under PRO-56.
