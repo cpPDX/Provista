@@ -34,10 +34,10 @@ const itemSchema = new mongoose.Schema({
   upc: { type: String, trim: true, default: null },
   upcSource: { type: String, enum: ['scan', 'backfill', 'manual'], default: null },
   upcPendingLookup: { type: Boolean, default: false },
-  // A household-confirmed shopping department. Null means the List may use a
-  // deterministic category mapping, but that inference is never persisted as
-  // if the user confirmed it.
-  storeSection: { type: String, enum: STORE_SECTIONS, default: null },
+  // A household-confirmed shopping department. The familiar STORE_SECTIONS
+  // remain suggestions, not a closed taxonomy: households can use a concise
+  // custom label that matches the way their stores are organized.
+  storeSection: { type: String, trim: true, maxlength: 80, default: null },
   // Provider-specific product identifiers. UPC remains the preferred shared
   // identifier, but providers can cache their own IDs here when needed.
   externalIds: { type: Map, of: String, default: {} },
