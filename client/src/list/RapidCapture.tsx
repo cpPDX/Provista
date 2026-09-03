@@ -6,6 +6,7 @@ import type { ExternalPriceRefreshResult, ProductPriceContext, ProductRef as Cat
 import { useToast } from '../shell/ToastProvider';
 import {
   addCatalogAlias,
+  addGeneratedShoppingNeed,
   addShoppingListItem,
   createCatalogProduct,
   matchShoppingText,
@@ -148,6 +149,22 @@ export function RapidCapture({
       return updateShoppingListItem(existing._id, { quantity: nextQuantity }, existing);
     }
     return addShoppingListItem(product, quantity);
+  };
+
+  const addPlanRequiredProduct = async (product: ProductRef, quantity: number): Promise<{ queued: boolean }> => {
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY) {
+      throw new Error(`Quantity must be between 1 and ${MAX_QUANTITY}`);
+    }
+
+    const existing = items.find(item => !item.checked && entityId(item.itemId) === product._id);
+    if (existing) {
+      const requiredQuantity = Math.max(Number(existing.requiredQuantity) || 0, quantity);
+      const result = await updateShoppingListItem(existing._id, { requiredQuantity }, existing);
+      return { queued: result.queued };
+    }
+
+    await addGeneratedShoppingNeed(product._id, quantity);
+    return { queued: false };
   };
 
   const addMatchedSuggestions = async (suggestions: ShoppingMatchSuggestion[]): Promise<AddBatchResult> => {
@@ -310,7 +327,9 @@ export function RapidCapture({
         });
       }
 
-      const result = await addProductQuantity(product, detailQuantity);
+      const result = initialDetail
+        ? await addPlanRequiredProduct(product, detailQuantity)
+        : await addProductQuantity(product, detailQuantity);
       await onListChanged();
       if (currentToken.name.trim().toLowerCase() !== product.name.trim().toLowerCase()) {
         void addCatalogAlias(product._id, currentToken.name).catch(error => {
