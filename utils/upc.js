@@ -1,11 +1,16 @@
 /**
- * Normalizes a raw barcode string to a canonical 12-digit UPC-A string.
- * Returns null for unrecognized or invalid input.
+ * Normalizes a raw retail barcode string to a canonical UPC/EAN identifier.
+ * Returns null for unrecognized input lengths.
  *
  * Handles:
  *   - UPC-A (12 digits) → returned as-is
- *   - EAN-13 starting with 0 (13 digits) → strip leading zero → UPC-A
+ *   - EAN-13 starting with 0 (13 digits) → strip leading zero → equivalent UPC-A
+ *   - EAN-13 with a non-zero prefix → preserve all 13 digits
  *   - UPC-E (8 digits) → expand to UPC-A using standard algorithm
+ *
+ * We intentionally preserve genuine EAN-13 values. Product metadata providers
+ * and real grocery packaging use both UPC-A and EAN-13, while a leading-zero
+ * EAN-13 is simply another representation of the same UPC-A identity.
  */
 function normalizeUpc(raw) {
   if (!raw || typeof raw !== 'string') return null;
@@ -13,7 +18,7 @@ function normalizeUpc(raw) {
 
   if (digits.length === 12) return digits;
 
-  if (digits.length === 13 && digits[0] === '0') return digits.slice(1);
+  if (digits.length === 13) return digits[0] === '0' ? digits.slice(1) : digits;
 
   if (digits.length === 8) return expandUpce(digits);
 
