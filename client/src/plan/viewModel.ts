@@ -79,12 +79,9 @@ export function nextPlanningTarget(
   const mealTypes = enabledMealTypes.filter(type => type !== 'special');
   const currentMealIndex = Math.max(0, mealTypes.indexOf(currentMealType));
 
-  for (let dayOffset = 0; dayOffset < days.length; dayOffset += 1) {
-    const dayIndex = (currentDayIndex + dayOffset) % days.length;
-    const mealStart = dayOffset === 0 ? currentMealIndex + 1 : 0;
-    for (let mealOffset = 0; mealOffset < mealTypes.length; mealOffset += 1) {
-      const mealIndex = (mealStart + mealOffset) % mealTypes.length;
-      if (dayOffset === 0 && mealIndex <= currentMealIndex) continue;
+  for (let dayIndex = currentDayIndex; dayIndex < days.length; dayIndex += 1) {
+    const startMealIndex = dayIndex === currentDayIndex ? currentMealIndex + 1 : 0;
+    for (let mealIndex = startMealIndex; mealIndex < mealTypes.length; mealIndex += 1) {
       const mealType = mealTypes[mealIndex];
       const unfinished = mealContexts(days[dayIndex], mealType).find(context => !context.planned);
       if (unfinished) return { dayIndex, mealType, rowIndex: unfinished.rowIndex, meal: unfinished.meal };
