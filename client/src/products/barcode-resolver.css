@@ -1,0 +1,237 @@
+.barcode-resolver-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: end center;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(12px, env(safe-area-inset-bottom));
+  background: var(--overlay);
+}
+
+.barcode-resolver {
+  width: min(100%, 34rem);
+  max-height: min(90dvh, 48rem);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--card-shadow);
+  padding: 16px;
+}
+
+.barcode-resolver-heading,
+.barcode-resolver-actions,
+.barcode-manual-form,
+.barcode-product-summary,
+.barcode-found-summary {
+  display: flex;
+  gap: 12px;
+}
+
+.barcode-resolver-heading {
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.barcode-resolver-heading h2,
+.barcode-resolver-heading p,
+.barcode-resolver-help,
+.barcode-resolver-status,
+.barcode-resolver-error {
+  margin: 0;
+}
+
+.barcode-resolver-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.barcode-resolver-close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.barcode-resolver-help {
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.barcode-camera-frame {
+  position: relative;
+  margin: 14px 0 10px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+  border-radius: 16px;
+  background: #111;
+}
+
+.barcode-camera-frame video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.barcode-camera-guide {
+  position: absolute;
+  inset: 28% 10%;
+  border: 3px solid currentColor;
+  border-radius: 12px;
+  color: white;
+  pointer-events: none;
+}
+
+.barcode-resolver-status {
+  min-height: 1.5em;
+  color: var(--text-muted);
+}
+
+.barcode-resolver-error {
+  margin-top: 10px;
+  color: var(--danger, #b42318);
+  font-weight: 650;
+}
+
+.barcode-manual-toggle {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.barcode-manual-form {
+  align-items: end;
+  margin-top: 12px;
+}
+
+.barcode-manual-form label,
+.barcode-review-fields label {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.barcode-manual-form input,
+.barcode-review-fields input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 9px 11px;
+  font: inherit;
+}
+
+.barcode-review {
+  display: grid;
+  gap: 12px;
+}
+
+.barcode-upc {
+  width: fit-content;
+  border-radius: 999px;
+  background: var(--surface-muted, var(--surface));
+  color: var(--text-muted);
+  padding: 5px 9px;
+  font-size: 0.82rem;
+}
+
+.barcode-product-summary,
+.barcode-found-summary {
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.barcode-product-summary span,
+.barcode-found-summary span {
+  color: var(--text-muted);
+}
+
+.barcode-review-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.barcode-review-fields small {
+  color: var(--text-muted);
+}
+
+.barcode-organic {
+  display: flex !important;
+  align-items: center;
+  grid-column: 1 / -1;
+  min-height: 44px;
+}
+
+.barcode-organic input {
+  width: 20px;
+  min-height: 20px;
+}
+
+.barcode-edit-found {
+  justify-self: start;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.barcode-resolver-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.barcode-resolver :is(button, input, video):focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 3px;
+}
+
+@media (min-width: 640px) {
+  .barcode-resolver-backdrop {
+    place-items: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .barcode-resolver-backdrop {
+    padding-inline: 0;
+  }
+
+  .barcode-resolver {
+    width: 100%;
+    max-height: 94dvh;
+    border-radius: 18px 18px 0 0;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+
+  .barcode-manual-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .barcode-review-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px), (min-resolution: 2dppx) and (max-width: 720px) {
+  .barcode-resolver-actions > * {
+    flex: 1 1 9rem;
+  }
+}
