@@ -135,10 +135,20 @@ async function loadTripContext(householdId, purchases, session) {
 
   const snapshots = purchases.map(purchase => {
     const listItem = listById.get(purchase.listItemId);
-    const quantity = Number(listItem.quantity);
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      fail(409, `${listItem.itemId.name} has an invalid shopping-list quantity`);
+    const intendedPurchaseQuantity = Number(listItem.quantity);
+    if (!Number.isFinite(intendedPurchaseQuantity) || intendedPurchaseQuantity <= 0) {
+      fail(409, `${listItem.itemId.name} has an invalid intended purchase quantity`);
     }
+
+    const rawActual = listItem.actualPurchasedQuantity == null
+      ? intendedPurchaseQuantity
+      : Number(listItem.actualPurchasedQuantity);
+    if (!Number.isFinite(rawActual) || rawActual <= 0) {
+      fail(409, `${listItem.itemId.name} has an invalid actual purchased quantity`);
+    }
+
+    const rawRequired = listItem.requiredQuantity == null ? null : Number(listItem.requiredQuantity);
+    const requiredQuantity = Number.isFinite(rawRequired) && rawRequired >= 0 ? rawRequired : null;
     const store = purchase.storeId ? storesById.get(purchase.storeId) : null;
     return {
       shoppingListItemId: listItem._id,
@@ -146,7 +156,12 @@ async function loadTripContext(householdId, purchases, session) {
       itemName: listItem.itemId.name,
       category: listItem.itemId.category || 'Other',
       unit: listItem.itemId.unit || '',
-      quantity,
+      // Compatibility: completed-trip quantity means actual purchased quantity.
+      quantity: rawActual,
+      requiredQuantity,
+      intendedPurchaseQuantity,
+      actualPurchasedQuantity: rawActual,
+      quantitySource: listItem.quantitySource === 'system' ? 'system' : 'user',
       storeId: store?._id || null,
       storeName: store?.name || '',
       price: purchase.price,
@@ -175,9 +190,13 @@ async function applyPantryUpdates({ householdId, userId, tripId, snapshots, sess
     const key = String(item.itemId);
     const existing = totalsByItem.get(key);
     if (existing) {
-      existing.quantity += item.quantity;
+      existing.quantity += item.actualPurchasedQuantity;
     } else {
-      totalsByItem.set(key, { itemId: item.itemId, quantity: item.quantity, unit: item.unit });
+      totalsByItem.set(key, {
+        itemId: item.itemId,
+        quantity: item.actualPurchasedQuantity,
+        unit: item.unit
+      });
     }
   }
   const updates = [...totalsByItem.values()];
@@ -256,8 +275,8 @@ async function executeTrip({ householdId, userId, role, strictPriceReview, reque
       couponAmount: null,
       couponCode: null,
       finalPrice: item.price,
-      quantity: item.quantity,
-      pricePerUnit: item.price / item.quantity,
+      quantity: item.actualPurchasedQuantity,
+      pricePerUnit: item.price / item.actualPurchasedQuantity,
       date: now,
       source: 'shopping-trip',
       shoppingTripId: trip._id,
