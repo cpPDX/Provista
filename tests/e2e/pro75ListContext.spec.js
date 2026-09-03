@@ -105,17 +105,19 @@ test.describe('PRO-75 contextual List setup', () => {
     expect(tracked.quantity).toBe(4);
   });
 
-  test('tracks an untracked List product in Pantry without leaving List or re-entering product identity', async ({ page }) => {
+  test('tracks an untracked List product and refreshes required demand without changing the intended purchase', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const product = await createCatalogItem(page, `PRO75 Pantry Context ${suffix}`);
-    const add = await page.request.post('/api/shopping-list', {
-      data: { itemId: product._id, quantity: 2 }
+    const generated = await page.request.post('/api/shopping-list/from-meal', {
+      data: { items: [{ itemId: product._id, quantity: 4 }] }
     });
-    expect(add.ok()).toBeTruthy();
-    const listItem = await add.json();
+    expect(generated.ok()).toBeTruthy();
+    const listItem = await listItemFor(page, product._id);
 
     await page.goto('/app/list');
     const card = page.locator(`.list-item[data-id="${listItem._id}"]`);
+    await expect(card).toContainText('Buy 4');
+    await expect(card).toContainText('4 required');
     await expect(card).toContainText('Not in Pantry');
     await card.getByRole('button', { name: 'Track it?' }).click();
 
@@ -129,6 +131,13 @@ test.describe('PRO-75 contextual List setup', () => {
     await expect(dialog).toHaveCount(0);
     await expect(page).toHaveURL(/\/app\/list/);
     await expect(card).toContainText('Pantry: 2 each on hand');
+    await expect(card).toContainText('Buy 4');
+    await expect(card).toContainText('2 required');
+
+    const refreshed = await listItemFor(page, product._id);
+    expect(refreshed.quantity).toBe(4);
+    expect(refreshed.requiredQuantity).toBe(2);
+    expect(refreshed.quantitySource).toBe('system');
   });
 
   test('keeps List metadata usable at mobile width and 200 percent text', async ({ page }) => {
