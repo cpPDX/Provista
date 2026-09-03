@@ -39,6 +39,50 @@ test.describe('React Plan migration', () => {
     }).toBe(mealName);
   });
 
+  test('uses a compact week overview with only one focused day editor', async ({ page }) => {
+    await page.goto('/app/plan');
+
+    const dayButtons = page.getByRole('navigation', { name: 'Days in this plan' }).getByRole('button');
+    await expect(dayButtons).toHaveCount(7);
+    await expect(page.locator('.plan-focused-day input[data-meal-name]')).toHaveCount(1);
+
+    const originalHeading = await page.locator('.plan-focused-day h2').textContent();
+    const selectedIndex = await dayButtons.evaluateAll(buttons => buttons.findIndex(button => button.getAttribute('aria-current') === 'date'));
+    const nextDay = dayButtons.nth((selectedIndex + 1) % 7);
+    await nextDay.click();
+    await expect(nextDay).toHaveAttribute('aria-current', 'date');
+    await expect(page.locator('.plan-focused-day h2')).not.toHaveText(originalHeading || '');
+    await expect(page.locator('.plan-focused-day input[data-meal-name]')).toHaveCount(1);
+  });
+
+  test('surfaces the next unfinished household group without forced scrolling', async ({ page }) => {
+    await page.goto('/app/plan');
+    const firstMeal = `Shared dinner ${Date.now()}`;
+    await page.locator('.plan-focused-day input[data-meal-name="dinner-0"]').fill(firstMeal);
+    await page.getByRole('button', { name: '+ Separate group' }).click();
+
+    const groups = page.locator('.plan-audience-status-list button').filter({ hasNotText: '+ Separate group' });
+    await expect(groups).toHaveCount(2);
+    await expect(page.locator('.plan-focused-day input[data-meal-name]')).toHaveCount(1);
+    await groups.first().click();
+    await expect(page.getByRole('button', { name: /Next: plan for/ })).toBeVisible();
+    await page.getByRole('button', { name: /Next: plan for/ }).click();
+    await expect(groups.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('restores the focused Plan context after primary navigation', async ({ page }) => {
+    await page.goto('/app/plan');
+    const dayButtons = page.getByRole('navigation', { name: 'Days in this plan' }).getByRole('button');
+    await dayButtons.nth(3).click();
+    const selectedLabel = await dayButtons.nth(3).getAttribute('aria-label');
+
+    await page.getByRole('button', { name: 'List', exact: true }).click();
+    await page.getByRole('button', { name: 'Plan', exact: true }).click();
+
+    await expect(page.getByRole('navigation', { name: 'Days in this plan' }).getByRole('button').nth(3)).toHaveAttribute('aria-current', 'date');
+    await expect(page.locator('.plan-focused-day h2')).toContainText((selectedLabel || '').split(',')[0]);
+  });
+
   test('serializes and coalesces autosaves while the previous write is slow', async ({ page }) => {
     let releaseFirstSave = () => {};
     const firstSaveGate = new Promise(resolve => {
