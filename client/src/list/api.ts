@@ -54,6 +54,12 @@ export interface ShoppingTripResult {
   idempotent: boolean;
 }
 
+export interface StoreSectionsResult {
+  defaults: string[];
+  suggestions: string[];
+  saved: Array<{ itemId: string; storeSection: string }>;
+}
+
 function shouldUseOfflineFallback(error: unknown): boolean {
   return !navigator.onLine ||
     error instanceof TypeError ||
@@ -179,6 +185,18 @@ export async function addCatalogAlias(itemId: string, text: string): Promise<voi
 
 export async function loadStores(): Promise<StoreRef[]> {
   return apiFetch<StoreRef[]>('/api/stores');
+}
+
+export async function loadStoreSections(): Promise<StoreSectionsResult> {
+  return apiFetch<StoreSectionsResult>('/api/item-sections');
+}
+
+export async function updateStoreSection(itemId: string, storeSection: string): Promise<{ _id: string; storeSection: string }> {
+  return apiFetch<{ _id: string; storeSection: string }>(`/api/item-sections/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeSection })
+  });
 }
 
 export async function completeShoppingTrip(input: {
