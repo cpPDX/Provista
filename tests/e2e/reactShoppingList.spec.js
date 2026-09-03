@@ -1,9 +1,9 @@
 const { test, expect } = require('@playwright/test');
 const { loginAsReactHomeUser } = require('./helpers/login');
 
-async function createCatalogItem(page, name) {
+async function createCatalogItem(page, name, category = 'Other') {
   const response = await page.request.post('/api/items', {
-    data: { name, category: 'Other', unit: 'each' }
+    data: { name, category, unit: 'each' }
   });
   expect(response.ok()).toBeTruthy();
   return response.json();
@@ -138,6 +138,43 @@ test.describe('React Shopping List migration', () => {
       const saved = list.find(entry => entry._id === listItem._id);
       return saved?.storeId?._id || saved?.storeId;
     }).toBe(store._id);
+  });
+
+  test('groups each store by familiar sections and remembers a typed custom section', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const storeResponse = await page.request.post('/api/stores', { data: { name: `React Section Store ${suffix}` } });
+    expect(storeResponse.ok()).toBeTruthy();
+    const store = await storeResponse.json();
+    const produce = await createCatalogItem(page, `React Apples ${suffix}`, 'Produce');
+    const dairy = await createCatalogItem(page, `React Milk ${suffix}`, 'Dairy');
+    const pantry = await createCatalogItem(page, `React Rice ${suffix}`, 'Pantry');
+    const listResponses = await Promise.all([produce, dairy, pantry].map(item =>
+      page.request.post('/api/shopping-list', { data: { itemId: item._id, quantity: 1, storeId: store._id } })
+    ));
+    expect(listResponses.every(response => response.ok())).toBeTruthy();
+
+    await page.goto('/app/list');
+    const storeGroup = page.getByRole('region', { name: `Suggested stop ${store.name}` });
+    await expect(storeGroup.locator('.react-list-section-group[data-section="Produce"]')).toContainText(produce.name);
+    await expect(storeGroup.locator('.react-list-section-group[data-section="Dairy & Eggs"]')).toContainText(dairy.name);
+    await expect(storeGroup.locator('.react-list-section-group[data-section="Pantry"]')).toContainText(pantry.name);
+
+    const dairyCard = page.locator('.react-list-item', { hasText: dairy.name });
+    await dairyCard.getByRole('button', { name: `Edit store section for ${dairy.name}: Dairy & Eggs` }).click();
+    const dialog = page.getByRole('dialog', { name: 'Store section' });
+    const input = dialog.getByRole('combobox', { name: 'Section' });
+    await expect(input).toHaveAttribute('aria-autocomplete', 'list');
+    await input.fill('International Foods');
+    await dialog.getByRole('button', { name: 'Save section' }).click();
+
+    await expect(dialog).toHaveCount(0);
+    await expect(storeGroup.locator('.react-list-section-group[data-section="International Foods"]')).toContainText(dairy.name);
+    await page.reload();
+    const reloadedGroup = page.getByRole('region', { name: `Suggested stop ${store.name}` });
+    await expect(reloadedGroup.locator('.react-list-section-group[data-section="International Foods"]')).toContainText(dairy.name);
+
+    const sections = await page.request.get('/api/item-sections').then(response => response.json());
+    expect(sections.suggestions).toContain('International Foods');
   });
 
   test('shows optimistic check-off feedback before a slow write finishes', async ({ page }) => {
