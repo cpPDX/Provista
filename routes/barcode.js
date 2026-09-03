@@ -12,35 +12,46 @@ const OFF_TIMEOUT_MS = 5000;
 const isProd = process.env.NODE_ENV === 'production';
 function serverErr(err) { return isProd ? 'Internal server error' : err.message; }
 
+function publicItem(item) {
+  if (!item) return null;
+  return {
+    _id: item._id,
+    upc: item.upc,
+    name: item.name,
+    brand: item.brand,
+    category: item.category,
+    unit: item.unit,
+    size: item.size,
+    isOrganic: item.isOrganic
+  };
+}
+
 // GET /api/barcode/:upc
 router.get('/:upc', requireAuth, async (req, res) => {
   const upc = normalizeUpc(req.params.upc);
   if (!upc) return res.status(400).json({ error: 'Invalid UPC format' });
 
   try {
-    // Check local catalog first
+    // Household catalog is always the source of truth for a known UPC. External
+    // metadata can be requested separately to fill blanks, but never delays or
+    // overwrites this authoritative match.
     const existing = await Item.findOne({ upc, householdId: req.user.householdId });
     if (existing) {
+      const enrichableFields = [];
+      if (!String(existing.brand || '').trim()) enrichableFields.push('brand');
+      if (existing.size == null) enrichableFields.push('size');
       return res.json({
         found: true,
         source: 'local',
         confidence: 'full',
-        autoAccept: false,
-        item: {
-          _id: existing._id,
-          upc: existing.upc,
-          name: existing.name,
-          brand: existing.brand,
-          category: existing.category,
-          unit: existing.unit,
-          size: existing.size,
-          isOrganic: existing.isOrganic
-        },
-        missingFields: []
+        autoAccept: true,
+        item: publicItem(existing),
+        missingFields: [],
+        enrichableFields
       });
     }
 
-    // Fall back to Open Food Facts
+    // Fall back to Open Food Facts for a new household product.
     let offProduct = null;
     try {
       offProduct = await fetchOffProduct(upc);
@@ -55,7 +66,8 @@ router.get('/:upc', requireAuth, async (req, res) => {
         confidence: null,
         autoAccept: false,
         item: { upc },
-        missingFields: ['name', 'category', 'unit']
+        missingFields: ['name', 'category', 'unit'],
+        enrichableFields: []
       });
     }
 
@@ -70,10 +82,62 @@ router.get('/:upc', requireAuth, async (req, res) => {
       confidence,
       autoAccept,
       item: normalized,
-      missingFields
+      missingFields,
+      enrichableFields: []
     });
   } catch (err) {
     console.error('Barcode lookup error:', err);
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+// POST /api/barcode/:upc/enrich-local
+// Safely improve an already-known household item without changing any field the
+// household has populated. This intentionally fills only fields whose empty
+// state is unambiguous; false/Other/each may be deliberate corrections.
+router.post('/:upc/enrich-local', requireAuth, async (req, res) => {
+  const upc = normalizeUpc(req.params.upc);
+  if (!upc) return res.status(400).json({ error: 'Invalid UPC format' });
+
+  try {
+    const existing = await Item.findOne({ upc, householdId: req.user.householdId });
+    if (!existing) return res.status(404).json({ error: 'Item not found' });
+
+    const needsBrand = !String(existing.brand || '').trim();
+    const needsSize = existing.size == null;
+    if (!needsBrand && !needsSize) {
+      return res.json({ item: publicItem(existing), filledFields: [] });
+    }
+
+    let offProduct = null;
+    try {
+      offProduct = await fetchOffProduct(upc);
+    } catch (err) {
+      console.info(`Open Food Facts enrichment unavailable for UPC ${upc}:`, err.message);
+    }
+    if (!offProduct) return res.json({ item: publicItem(existing), filledFields: [] });
+
+    const normalized = normalizeOffProduct(offProduct, upc);
+    const updates = {};
+    const filledFields = [];
+    if (needsBrand && normalized.brand) {
+      updates.brand = normalized.brand;
+      filledFields.push('brand');
+    }
+    if (needsSize && normalized.size != null) {
+      updates.size = normalized.size;
+      filledFields.push('size');
+    }
+
+    if (!filledFields.length) return res.json({ item: publicItem(existing), filledFields: [] });
+    const updated = await Item.findOneAndUpdate(
+      { _id: existing._id, householdId: req.user.householdId },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+    return res.json({ item: publicItem(updated), filledFields });
+  } catch (err) {
+    console.error('Barcode enrichment error:', err);
     res.status(500).json({ error: serverErr(err) });
   }
 });
