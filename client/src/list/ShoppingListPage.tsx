@@ -315,8 +315,7 @@ export function ShoppingListPage() {
       void requestNavigation(() => navigate('/app/pantry'));
       return;
     }
-    const params = new URLSearchParams({ tab: 'list', action });
-    window.location.assign(`/app?${params.toString()}`);
+    window.dispatchEvent(new Event('provista:open-list-barcode'));
   };
 
   return (
@@ -380,7 +379,7 @@ export function ShoppingListPage() {
           <div>
             <button type="button" onClick={() => openShoppingTool('review-low-stock')}>Review low stock</button>
             <button type="button" onClick={() => openShoppingTool('scan-list-item')}>Scan item</button>
-            <small>Low-stock review opens React Pantry. Scanner support remains on the compatibility screen until its migration work is complete.</small>
+            <small>Both tools stay in the React workflow; scanning returns the resolved product directly to this List.</small>
           </div>
         </details>
       </div>
