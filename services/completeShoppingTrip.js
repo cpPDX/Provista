@@ -1,9 +1,11 @@
 const mongoose = require('mongoose');
+const InventoryEvent = require('../models/InventoryEvent');
 const InventoryItem = require('../models/InventoryItem');
 const PriceEntry = require('../models/PriceEntry');
 const ShoppingListItem = require('../models/ShoppingListItem');
 const ShoppingTrip = require('../models/ShoppingTrip');
 const Store = require('../models/Store');
+const { appendDelta, ensureBaselineEvent, roundQuantity } = require('../utils/inventoryLedger');
 
 const MAX_TRIP_ITEMS = 200;
 let transactionSupportPromise;
@@ -184,17 +186,17 @@ async function countLowStock(householdId, session) {
   ).length;
 }
 
-async function applyPantryUpdates({ householdId, userId, tripId, snapshots, session, rollback }) {
+async function applyPantryUpdates({ householdId, userId, tripId, snapshots, session, rollback, effectiveAt }) {
   const totalsByItem = new Map();
   for (const item of snapshots) {
     const key = String(item.itemId);
     const existing = totalsByItem.get(key);
     if (existing) {
-      existing.quantity += item.actualPurchasedQuantity;
+      existing.quantity = roundQuantity(existing.quantity + item.actualPurchasedQuantity);
     } else {
       totalsByItem.set(key, {
         itemId: item.itemId,
-        quantity: item.actualPurchasedQuantity,
+        quantity: roundQuantity(item.actualPurchasedQuantity),
         unit: item.unit
       });
     }
@@ -211,26 +213,40 @@ async function applyPantryUpdates({ householdId, userId, tripId, snapshots, sess
     rollback.inventoryItemIds = updates.map(update => update.itemId);
   }
 
-  await InventoryItem.bulkWrite(updates.map(update => ({
-    updateOne: {
-      filter: { householdId, itemId: update.itemId },
-      update: {
-        $inc: { quantity: update.quantity },
-        $set: {
-          stockStatus: 'have',
-          lastUpdated: new Date(),
-          lastUpdatedBy: userId,
-          lastPurchaseTripId: tripId
-        },
-        $setOnInsert: {
-          householdId,
-          itemId: update.itemId,
-          unit: update.unit
-        }
-      },
-      upsert: true
+  for (const update of updates) {
+    let inventoryItem = await withSession(InventoryItem.findOne({ householdId, itemId: update.itemId }), session);
+    if (!inventoryItem) {
+      inventoryItem = new InventoryItem({
+        householdId,
+        itemId: update.itemId,
+        quantity: 0,
+        stockStatus: 'have',
+        unit: update.unit,
+        lastUpdatedBy: userId,
+        lastPurchaseTripId: tripId,
+        lastUpdated: effectiveAt
+      });
+      await inventoryItem.save(writeOptions(session));
     }
-  })), writeOptions(session, { ordered: true }));
+
+    await ensureBaselineEvent(inventoryItem, { session });
+    await appendDelta(inventoryItem, 'shopping_replenishment', update.quantity, {
+      session,
+      effectiveAt,
+      sourceIdentity: `shopping-trip:${tripId}:${update.itemId}`,
+      sourceType: 'shopping-trip',
+      sourceEntityId: String(tripId),
+      sourceMeta: { actualPurchasedQuantity: update.quantity },
+      createdBy: userId
+    });
+
+    inventoryItem.stockStatus = 'have';
+    inventoryItem.lastUpdatedBy = userId;
+    inventoryItem.lastPurchaseTripId = tripId;
+    inventoryItem.lastUpdated = effectiveAt;
+    if (!inventoryItem.unit && update.unit) inventoryItem.unit = update.unit;
+    await inventoryItem.save(writeOptions(session));
+  }
 
   return updates.length;
 }
@@ -301,7 +317,8 @@ async function executeTrip({ householdId, userId, role, strictPriceReview, reque
       tripId: trip._id,
       snapshots,
       session,
-      rollback
+      rollback,
+      effectiveAt: now
     })
     : 0;
 
@@ -369,6 +386,11 @@ async function rollbackStandaloneCompletion(rollback) {
   if (!rollback.tripId) return;
   const results = await Promise.allSettled([
     restoreDeletedListItems(rollback.deletedListItems),
+    InventoryEvent.deleteMany({
+      householdId: rollback.householdId,
+      sourceType: 'shopping-trip',
+      sourceEntityId: String(rollback.tripId)
+    }),
     restoreInventory(rollback),
     PriceEntry.deleteMany({ householdId: rollback.householdId, shoppingTripId: rollback.tripId }),
     ShoppingTrip.deleteOne({ _id: rollback.tripId, householdId: rollback.householdId })
