@@ -1,9 +1,6 @@
 'use strict';
 
-const {
-  formatPacificTime,
-  isDeploymentWindowOpen
-} = require('./staging-deployment-policy.cjs');
+const { formatPacificTime } = require('./staging-deployment-policy.cjs');
 
 const APP_CI_WORKFLOW = 'ci.yml';
 const DEPLOYMENT_ENVIRONMENT = 'railway-production';
@@ -208,23 +205,9 @@ async function prepare({ github, context, core, now = new Date() }) {
   }
 
   const deploymentId = managedDeployment.deployment.id;
-  if (isDeploymentWindowOpen(now)) {
-    reason = 'The current green main head is ready for Railway production reconciliation.';
-    setPreparationOutputs(core, { action: 'reconcile', targetSha, deploymentId, reason });
-    await summarize(core, { action: 'reconcile', targetSha, reason, now });
-    return;
-  }
-
-  reason = 'Deferred during the 8:00 AM–8:00 PM Pacific blackout.';
-  await setManagedDeploymentStatus({
-    github,
-    context,
-    deploymentId,
-    state: 'queued',
-    description: reason
-  });
-  setPreparationOutputs(core, { action: 'queued', targetSha, deploymentId, reason });
-  await summarize(core, { action: 'queued', targetSha, reason, now });
+  reason = 'The current green main head is ready for Railway production reconciliation.';
+  setPreparationOutputs(core, { action: 'reconcile', targetSha, deploymentId, reason });
+  await summarize(core, { action: 'reconcile', targetSha, reason, now });
 }
 
 async function revalidate({ github, context, core, targetSha, deploymentId, now = new Date() }) {
@@ -242,21 +225,8 @@ async function revalidate({ github, context, core, targetSha, deploymentId, now 
     return;
   }
 
-  if (!isDeploymentWindowOpen(now)) {
-    await setManagedDeploymentStatus({
-      github,
-      context,
-      deploymentId,
-      state: 'queued',
-      description: 'Deferred at the Pacific deployment-window boundary.'
-    });
-    core.setOutput('proceed', 'false');
-    core.setOutput('reason', 'The deployment window closed before Railway reconciliation began.');
-    return;
-  }
-
   core.setOutput('proceed', 'true');
-  core.setOutput('reason', 'The SHA and Pacific deployment window are still valid.');
+  core.setOutput('reason', 'The production SHA is still current and eligible for Railway reconciliation.');
 }
 
 module.exports = {
