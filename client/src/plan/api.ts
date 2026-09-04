@@ -5,12 +5,14 @@ import type {
   MealAllocationProjection,
   MealPlan,
   MealPlanSettings,
+  MealReconciliationStatus,
   MealShoppingPreview,
   PlanDay
 } from './types';
 
 export const mealPlanQueryKey = (weekStart: string) => ['meal-plan', weekStart] as const;
 export const mealAllocationQueryKey = (weekStart: string) => ['meal-allocations', weekStart] as const;
+export const mealReconciliationQueryKey = (mealInstanceId: string) => ['meal-reconciliation', mealInstanceId] as const;
 export const mealPlanSettingsQueryKey = ['meal-plan-settings'] as const;
 export const favoriteMealsQueryKey = ['meal-plan-favorites'] as const;
 
@@ -26,7 +28,35 @@ export function loadMealPlan(weekStart: string) {
 }
 
 export function loadMealAllocations(weekStart: string) {
-  return apiFetch<MealAllocationProjection>(`/api/meal-plan/allocations?weekStart=${encodeURIComponent(weekStart)}`);
+  return apiFetch<MealAllocationProjection>(`/api/inventory/meal-projection?weekStart=${encodeURIComponent(weekStart)}`);
+}
+
+export function loadMealReconciliation(mealInstanceId: string) {
+  return apiFetch<MealReconciliationStatus>(`/api/inventory/meal-reconciliation/${encodeURIComponent(mealInstanceId)}`);
+}
+
+export async function reverseMealPantry(mealInstanceId: string) {
+  const result = await apiFetch<{ status: MealReconciliationStatus }>(
+    `/api/inventory/meal-reconciliation/${encodeURIComponent(mealInstanceId)}/reverse`,
+    { method: 'POST' }
+  );
+  queryClient.setQueryData(mealReconciliationQueryKey(mealInstanceId), result.status);
+  await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+  return result.status;
+}
+
+export async function updateMealPantry(mealInstanceId: string) {
+  const result = await apiFetch<{ status: MealReconciliationStatus }>(
+    `/api/inventory/meal-reconciliation/${encodeURIComponent(mealInstanceId)}/update-pantry`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idempotencyKey: crypto.randomUUID() })
+    }
+  );
+  queryClient.setQueryData(mealReconciliationQueryKey(mealInstanceId), result.status);
+  await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+  return result.status;
 }
 
 export async function saveMealPlan(payload: {
