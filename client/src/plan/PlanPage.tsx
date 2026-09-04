@@ -21,14 +21,18 @@ import {
   loadFavoriteMeals,
   loadMealPlan,
   loadMealPlanSettings,
+  loadMealReconciliation,
   mealPlanQueryKey,
   mealAllocationQueryKey,
   mealPlanSettingsQueryKey,
+  mealReconciliationQueryKey,
   previewMealShoppingNeeds,
+  reverseMealPantry,
   saveFavoriteMeal,
   saveMealPlan,
   saveMealPlanSettings,
   updateFavoriteMeal,
+  updateMealPantry,
   useFavoriteMeal
 } from './api';
 import type {
@@ -104,6 +108,7 @@ function normalizePlan(plan: MealPlan): MealPlan {
       ...day,
       date: String(day.date).slice(0, 10),
       meals: (day.meals || []).map(meal => ({
+        instanceId: meal.instanceId,
         mealType: meal.mealType,
         personName: meal.personName || '',
         personIds: Array.isArray(meal.personIds) ? meal.personIds.map(String) : [],
@@ -183,6 +188,7 @@ export function PlanPage() {
   const [shoppingLoading, setShoppingLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsDraft, setSettingsDraft] = useState<MealPlanSettings | null>(null);
+  const [reconciliationBusy, setReconciliationBusy] = useState(false);
   const revisionRef = useRef(0);
   const lastSavedRef = useRef<MealPlan | null>(null);
   const saveTimerRef = useRef<number | null>(null);
@@ -205,6 +211,19 @@ export function PlanPage() {
     queryKey: mealAllocationQueryKey(weekStart),
     queryFn: () => loadMealAllocations(weekStart),
     enabled: Boolean(weekStart)
+  });
+  const focusedMealInstanceId = useMemo(() => {
+    if (!draft) return '';
+    const day = draft.days[selectedDayIndex];
+    if (!day) return '';
+    const rows = day.meals.filter(meal => meal.mealType === activeMealType);
+    return String(rows[activeRowIndex]?.instanceId || '').trim();
+  }, [activeMealType, activeRowIndex, draft, selectedDayIndex]);
+  const focusedMealDate = draft?.days[selectedDayIndex]?.date || '';
+  const reconciliationQuery = useQuery({
+    queryKey: mealReconciliationQueryKey(focusedMealInstanceId),
+    queryFn: () => loadMealReconciliation(focusedMealInstanceId),
+    enabled: Boolean(focusedMealInstanceId && focusedMealDate && focusedMealDate < isoDate())
   });
 
   useEffect(() => {
@@ -670,6 +689,50 @@ export function PlanPage() {
     }
   };
 
+  const updateActiveMealPantry = async () => {
+    if (!focusedMealInstanceId || reconciliationBusy) return;
+    if (!(await saveCurrentDraftIfNeeded())) return;
+    setReconciliationBusy(true);
+    try {
+      await updateMealPantry(focusedMealInstanceId);
+      await Promise.all([
+        reconciliationQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: mealAllocationQueryKey(weekStart) })
+      ]);
+      showToast('Pantry updated for this meal.', { tone: 'success' });
+    } catch (error) {
+      console.error(error);
+      showToast('Could not update Pantry for this meal.', { tone: 'error' });
+    } finally {
+      setReconciliationBusy(false);
+    }
+  };
+
+  const reverseActiveMealPantry = async () => {
+    if (!focusedMealInstanceId || reconciliationBusy) return;
+    const confirmed = await confirm({
+      title: 'Didn’t make this meal?',
+      message: 'Provista will restore the Pantry usage recorded for this meal. The Plan entry will stay here.',
+      confirmLabel: 'Restore Pantry',
+      cancelLabel: 'Keep Pantry as is'
+    });
+    if (!confirmed) return;
+    setReconciliationBusy(true);
+    try {
+      await reverseMealPantry(focusedMealInstanceId);
+      await Promise.all([
+        reconciliationQuery.refetch(),
+        queryClient.invalidateQueries({ queryKey: mealAllocationQueryKey(weekStart) })
+      ]);
+      showToast('Pantry restored for this meal.', { tone: 'success' });
+    } catch (error) {
+      console.error(error);
+      showToast('Could not restore Pantry for this meal.', { tone: 'error' });
+    } finally {
+      setReconciliationBusy(false);
+    }
+  };
+
   const visibleMealTypes = useMemo<MealType[]>(() => {
     if (settingsQuery.data?.mealPlanMode === 'all') return ['breakfast', 'lunch', 'dinner', 'special'];
     return ['dinner', 'special'];
@@ -746,6 +809,8 @@ export function PlanPage() {
   const pantryShortages = pantryItems.filter(item => Number(item.shoppingQuantity) > 0);
   const pantryCovered = pantryItems.length - pantryShortages.length;
   const nearestShortages = pantryShortages.slice(0, 2);
+  const reconciliation = reconciliationQuery.data;
+  const simpleReconciledItems = reconciliation?.items.filter(item => item.trackingMode === 'simple') || [];
 
   const goToNextTarget = () => {
     if (!nextTarget) return;
@@ -945,6 +1010,20 @@ export function PlanPage() {
               <label className="plan-needs-field"><span>Need for this meal</span><textarea value={activeMeal.notes} disabled={!online} maxLength={2000} rows={2} placeholder="e.g. tortillas, lettuce, salsa" onChange={event => updateMeal(selectedDayIndex, activeMealType, effectiveRowIndex, { notes: event.target.value })} /></label>
               {activeDayAllocations.length > 0 && <div className={activeShoppingCount ? 'plan-coverage-summary plan-coverage-shortage' : 'plan-coverage-summary'}>{activeCoveredCount} covered · {activeShoppingCount} need buying</div>}
               {allocationQuery.isError && <div className="plan-coverage-unavailable">Pantry availability unavailable. You can keep planning.</div>}
+              {reconciliation?.updatedPantry && (
+                <div className="plan-coverage-summary" role="status">
+                  <strong>{reconciliation.reversed ? 'Pantry restored for this meal' : 'Pantry already updated from this meal'}</strong>
+                  {simpleReconciledItems.length > 0 && !reconciliation.reversed && (
+                    <span> · Check {simpleReconciledItems.map(item => item.name).join(', ')} if you no longer have it.</span>
+                  )}
+                  {!reconciliation.reversed && (
+                    <div className="plan-meal-actions">
+                      <button type="button" className="plan-link-button" disabled={!online || reconciliationBusy} onClick={() => void updateActiveMealPantry()}>Update Pantry too</button>
+                      <button type="button" className="plan-link-button plan-danger-link" disabled={!online || reconciliationBusy} onClick={() => void reverseActiveMealPantry()}>Didn’t make this meal</button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="plan-meal-actions">
                 {activeMeal.notes.trim() && <button type="button" className="plan-link-button" disabled={!online || shoppingLoading} onClick={() => void openShoppingReview(activeKey, activeMeal.notes)}>Check shopping needs</button>}
                 {activeMeal.name.trim() && <button type="button" className="plan-link-button" disabled={!online} onClick={() => repeatMeal(selectedDayIndex, activeMealType, effectiveRowIndex)}>Repeat later this week</button>}
