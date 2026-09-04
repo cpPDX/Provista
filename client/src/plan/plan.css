@@ -287,6 +287,7 @@
 .plan-focused-day {
   display: grid;
   gap: 1rem;
+  min-width: 0;
   padding: 1rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
@@ -304,20 +305,24 @@
 .plan-focused-day-heading p,
 .plan-focused-day-heading h2 { margin: 0; }
 .plan-focused-day-heading p { color: var(--text-muted); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; }
-.plan-focused-day-heading > span { color: var(--text-muted); }
+.plan-focused-day-heading > span { color: var(--text-muted); overflow-wrap: anywhere; }
 
 .plan-meal-type-selector,
 .plan-audience-status-list {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  overflow-x: auto;
+  min-width: 0;
+  overflow: visible;
   padding-bottom: 0.2rem;
 }
 
 .plan-meal-type-selector button,
 .plan-audience-status-list button {
   min-height: 44px;
-  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 auto;
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
@@ -325,6 +330,7 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
+  overflow-wrap: anywhere;
 }
 
 .plan-meal-type-selector button[aria-selected='true'],
@@ -335,17 +341,18 @@
 
 .plan-audience-status-list button {
   min-width: 150px;
+  flex-basis: 150px;
   display: grid;
   gap: 0.15rem;
   text-align: left;
 }
 
-.plan-audience-status-list button span { color: var(--text-muted); font-size: 0.8rem; }
+.plan-audience-status-list button span { color: var(--text-muted); font-size: 0.8rem; white-space: normal; overflow-wrap: anywhere; }
 .plan-audience-status-list .plan-add-group { min-width: auto; color: var(--primary); font-weight: 700; }
 
-.plan-focused-meal { display: grid; gap: 0.75rem; }
-.plan-active-audience { display: flex; gap: 0.4rem; color: var(--text-muted); }
-.plan-active-audience strong { color: var(--text); }
+.plan-focused-meal { display: grid; gap: 0.75rem; min-width: 0; }
+.plan-active-audience { display: flex; flex-wrap: wrap; min-width: 0; gap: 0.4rem; color: var(--text-muted); }
+.plan-active-audience strong { min-width: 0; color: var(--text); overflow-wrap: anywhere; }
 
 .plan-coverage-summary,
 .plan-coverage-unavailable {
@@ -454,6 +461,7 @@
 .plan-meal-row {
   display: grid;
   gap: 0.55rem;
+  min-width: 0;
   padding: 0.75rem;
   border-radius: 12px;
   background: var(--surface-subtle, var(--surface-subtle));
@@ -674,6 +682,16 @@
     grid-column: 1 / -1;
     grid-row: 2;
     white-space: normal;
+  }
+
+  .plan-meal-type-selector button {
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+
+  .plan-audience-status-list button,
+  .plan-audience-status-list .plan-add-group {
+    min-width: 0;
+    flex: 1 1 100%;
   }
 
   .plan-meal-topline {

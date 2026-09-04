@@ -14,6 +14,7 @@ import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
 import { useShoppingCheckout } from './checkout';
 import { ListItemContextControls } from './ListItemContextControls';
+import { ListItemEditDialog } from './ListItemEditDialog';
 import { RapidCapture } from './RapidCapture';
 import { StorePreferenceDialog } from './StorePreferenceDialog';
 import { StoreSectionControl, useStoreSections } from './storeSections';
@@ -100,10 +101,16 @@ export function ShoppingListPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   const [storePreferenceItem, setStorePreferenceItem] = useState<ShoppingListItem | null>(null);
+  const [detailItem, setDetailItem] = useState<ShoppingListItem | null>(null);
+  const [quantityItem, setQuantityItem] = useState<ShoppingListItem | null>(null);
+  const detailCloseRef = useRef<HTMLButtonElement>(null);
   const checkSync = useRef(new Map<string, CheckSync>());
 
   const items = listQuery.data || EMPTY_ITEMS;
   const checkedItems = items.filter(item => item.checked);
+  const resolvedDetailItem = detailItem
+    ? items.find(item => item._id === detailItem._id) || detailItem
+    : null;
   const storeSections = useStoreSections(items);
   const searchParams = new URLSearchParams(location.search);
   const fromPlan = searchParams.get('from') === 'plan';
@@ -144,6 +151,21 @@ export function ShoppingListPage() {
       if (result.failed) showToast(`${result.failed} List change${result.failed === 1 ? '' : 's'} could not sync`, { tone: 'error' });
     });
   }, [online, queryClient, showToast]);
+
+  useEffect(() => {
+    if (!resolvedDetailItem) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const timer = window.setTimeout(() => detailCloseRef.current?.focus({ preventScroll: true }), 0);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDetailItem(null);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('keydown', onKeyDown);
+      if (previouslyFocused?.isConnected) previouslyFocused.focus({ preventScroll: true });
+    };
+  }, [resolvedDetailItem?._id]);
 
   const handleListChanged = async () => {
     await queryClient.invalidateQueries({ queryKey });
@@ -304,6 +326,7 @@ export function ShoppingListPage() {
     queryClient.setQueryData<ShoppingListItem[]>(queryKey, current => current?.filter(entry => entry._id !== item._id) || []);
     try {
       const result = await deleteShoppingListItem(item._id);
+      if (detailItem?._id === item._id) setDetailItem(null);
       showToast(result.queued ? 'Removed offline. Will sync when you reconnect.' : `${productName(item)} removed from list`);
     } catch (error) {
       console.error(error);
@@ -455,7 +478,7 @@ export function ShoppingListPage() {
                     <span>{sectionItems.length}</span>
                   </div>
                   {sectionItems.map(item => {
-                    const product = productFor(item);
+                    const price = householdPrice(item);
                     return (
                       <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
                         <button
@@ -467,33 +490,24 @@ export function ShoppingListPage() {
                         >
                           <span className={`react-list-checkbox ${item.checked ? 'checked' : ''}`} aria-hidden="true">{item.checked ? '✓' : ''}</span>
                         </button>
-                        <div className="react-list-item-body">
-                          <h3>{productName(item)}</h3>
-                          <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'}</p>
-                          <ListItemContextControls item={item} online={online} />
-                          <div className="react-list-store-line">
-                            <button
-                              type="button"
-                              className="react-list-store-preference"
-                              aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
-                              onClick={() => setStorePreferenceItem(item)}
-                            >
-                              Store: {explicitStoreName(item)}
-                            </button>
-                            {item.checked && currentShoppingStoreId(item) && (
-                              <small>Current trip: {storeName(items, currentShoppingStoreId(item)) || 'selected store'}</small>
-                            )}
-                          </div>
-                          <StoreSectionControl
-                            item={item}
-                            currentSection={storeSections.sectionFor(item)}
-                            suggestions={storeSections.suggestions}
-                          />
-                          <div className="react-list-price-line">
-                            {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
-                          </div>
-                        </div>
-                        <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
+                        <button
+                          type="button"
+                          className="react-list-item-body react-list-item-open"
+                          aria-label={`Open item details for ${productName(item)}`}
+                          onClick={() => setDetailItem(item)}
+                        >
+                          <strong>{productName(item)}</strong>
+                          <span>Buy {intendedPurchaseQuantity(item)}</span>
+                          {price !== 'No recent household price' && <small>{price}</small>}
+                        </button>
+                        <button
+                          type="button"
+                          className="react-list-quantity-edit"
+                          aria-label={`Edit quantity for ${productName(item)}, currently ${intendedPurchaseQuantity(item)}`}
+                          onClick={() => setQuantityItem(item)}
+                        >
+                          {intendedPurchaseQuantity(item)}
+                        </button>
                       </article>
                     );
                   })}
@@ -516,7 +530,66 @@ export function ShoppingListPage() {
         </div>
       )}
 
-      {storePreferenceItem && <StorePreferenceDialog item={storePreferenceItem} onClose={() => setStorePreferenceItem(null)} />}
+      {resolvedDetailItem && (
+        <div className="react-list-modal-backdrop" role="presentation" onMouseDown={event => {
+          if (event.target === event.currentTarget) setDetailItem(null);
+        }}>
+          <section className="react-list-modal react-list-item-detail" role="dialog" aria-modal="true" aria-labelledby="react-list-item-detail-title">
+            <div className="react-list-modal-heading">
+              <div>
+                <p className="react-list-eyebrow">Item details</p>
+                <h2 id="react-list-item-detail-title">{productName(resolvedDetailItem)}</h2>
+              </div>
+              <button ref={detailCloseRef} type="button" className="react-list-modal-close" aria-label="Close item details" onClick={() => setDetailItem(null)}>✕</button>
+            </div>
+            <div className="react-list-item-detail-content">
+              {(productFor(resolvedDetailItem)?.brand || productFor(resolvedDetailItem)?.category) && (
+                <p>{[productFor(resolvedDetailItem)?.brand, productFor(resolvedDetailItem)?.category].filter(Boolean).join(' · ')}</p>
+              )}
+              <ListItemContextControls item={resolvedDetailItem} online={online} />
+              <section className="react-list-detail-section" aria-labelledby="react-list-store-detail-title">
+                <h3 id="react-list-store-detail-title">Store and section</h3>
+                <button
+                  type="button"
+                  className="react-list-store-preference"
+                  aria-label={`Store preference for ${productName(resolvedDetailItem)}: ${explicitStoreName(resolvedDetailItem)}`}
+                  onClick={() => setStorePreferenceItem(resolvedDetailItem)}
+                >
+                  Store preference: {explicitStoreName(resolvedDetailItem)}
+                </button>
+                {resolvedDetailItem.checked && currentShoppingStoreId(resolvedDetailItem) && (
+                  <small>Current trip: {storeName(items, currentShoppingStoreId(resolvedDetailItem)) || 'selected store'}</small>
+                )}
+                <StoreSectionControl
+                  item={resolvedDetailItem}
+                  currentSection={storeSections.sectionFor(resolvedDetailItem)}
+                  suggestions={storeSections.suggestions}
+                />
+              </section>
+              <section className="react-list-detail-section" aria-labelledby="react-list-price-detail-title">
+                <h3 id="react-list-price-detail-title">Price</h3>
+                <div className="react-list-price-line">
+                  {resolvedDetailItem.checked ? checkout.priceDecisionFor(resolvedDetailItem) : <small>{householdPrice(resolvedDetailItem)}</small>}
+                </div>
+              </section>
+              <button type="button" className="shell-button shell-button-secondary react-list-detail-remove" onClick={() => void removeItem(resolvedDetailItem)}>Remove from list</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {quantityItem && (
+        <ListItemEditDialog
+          item={items.find(item => item._id === quantityItem._id) || quantityItem}
+          onClose={() => setQuantityItem(null)}
+        />
+      )}
+      {storePreferenceItem && (
+        <StorePreferenceDialog
+          item={items.find(item => item._id === storePreferenceItem._id) || storePreferenceItem}
+          onClose={() => setStorePreferenceItem(null)}
+        />
+      )}
       {checkout.dialogs}
     </section>
   );

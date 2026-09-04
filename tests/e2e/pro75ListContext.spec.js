@@ -50,10 +50,13 @@ test.describe('PRO-75 contextual List setup', () => {
     await page.goto('/app/list');
     let card = page.locator(`.list-item[data-id="${listItem._id}"]`);
     await expect(card).toContainText('Buy 1');
-    await expect(card).toContainText('1 required');
+    await card.getByRole('button', { name: `Open item details for ${product.name}` }).click();
+    let details = page.getByRole('dialog', { name: product.name, exact: true });
+    await expect(details).toContainText('1 required');
+    await details.getByRole('button', { name: 'Close item details' }).click();
 
-    await card.getByRole('button', { name: 'Edit quantity' }).click();
-    let quantityDialog = page.getByRole('dialog', { name: `Edit ${product.name}` });
+    await card.getByRole('button', { name: `Edit quantity for ${product.name}, currently 1` }).click();
+    let quantityDialog = page.getByRole('dialog', { name: `Edit ${product.name}`, exact: true });
     await expect(quantityDialog).toHaveCount(1);
     await quantityDialog.getByLabel('Plan to buy').fill('5');
     await quantityDialog.getByRole('button', { name: 'Save quantity' }).click();
@@ -67,17 +70,18 @@ test.describe('PRO-75 contextual List setup', () => {
 
     await card.locator('.list-item-check-wrap').click();
     await expect(card).toHaveClass(/checked/);
-    await expect(card).toContainText(`Current trip: ${currentStore.name}`);
-
-    await card.getByRole('button', { name: 'Edit quantity' }).click();
-    quantityDialog = page.getByRole('dialog', { name: `Edit ${product.name}` });
+    await card.getByRole('button', { name: `Open item details for ${product.name}` }).click();
+    details = page.getByRole('dialog', { name: product.name, exact: true });
+    await expect(details).toContainText(`Current trip: ${currentStore.name}`);
+    await details.getByRole('button', { name: 'Edit quantity' }).click();
+    quantityDialog = page.getByRole('dialog', { name: `Edit ${product.name}`, exact: true });
     await expect(quantityDialog.getByLabel('Plan to buy')).toHaveValue('5');
     await quantityDialog.getByLabel('Actually got').fill('4');
     await quantityDialog.getByRole('button', { name: 'Save quantity' }).click();
-    await expect(card).toContainText('got 4');
+    await expect(details).toContainText('got 4');
 
-    await card.getByRole('button', { name: new RegExp(`Store preference for ${product.name}`) }).click();
-    const storeDialog = page.getByRole('dialog', { name: 'Store preference' });
+    await details.getByRole('button', { name: new RegExp(`Store preference for ${product.name}`) }).click();
+    const storeDialog = page.getByRole('dialog', { name: 'Store preference', exact: true });
     await expect(storeDialog).toHaveCount(1);
     await storeDialog.locator('select').selectOption({ label: 'Another store…' });
     await expect(storeDialog.getByLabel('Store name')).toBeVisible();
@@ -87,12 +91,13 @@ test.describe('PRO-75 contextual List setup', () => {
     await expect(storeDialog).toHaveCount(0);
 
     card = page.locator(`.list-item[data-id="${listItem._id}"]`);
-    await expect(card).toContainText(`Store: ${futureName}`);
-    await expect(card).toContainText(`Current trip: ${currentStore.name}`);
+    await expect(details).toContainText(`Store preference: ${futureName}`);
+    await expect(details).toContainText(`Current trip: ${currentStore.name}`);
     await expect(page.getByRole('region', { name: `Suggested stop ${currentStore.name}` })).toContainText(product.name);
+    await details.getByRole('button', { name: 'Close item details' }).click();
 
     await page.getByRole('button', { name: 'Finish shopping' }).click();
-    const finish = page.getByRole('dialog', { name: 'Finish shopping' });
+    const finish = page.getByRole('dialog', { name: 'Finish shopping', exact: true });
     await expect(finish.getByLabel('Where are you shopping now?')).toHaveValue(currentStore._id);
     await finish.getByRole('button', { name: 'Finish shopping', exact: true }).click();
     await expect(finish).toHaveCount(0);
@@ -117,11 +122,13 @@ test.describe('PRO-75 contextual List setup', () => {
     await page.goto('/app/list');
     const card = page.locator(`.list-item[data-id="${listItem._id}"]`);
     await expect(card).toContainText('Buy 4');
-    await expect(card).toContainText('4 required');
-    await expect(card).toContainText('Not in Pantry');
-    await card.getByRole('button', { name: 'Track it?' }).click();
+    await card.getByRole('button', { name: `Open item details for ${product.name}` }).click();
+    const details = page.getByRole('dialog', { name: product.name, exact: true });
+    await expect(details).toContainText('4 required');
+    await expect(details).toContainText('Not in Pantry');
+    await details.getByRole('button', { name: 'Track it?' }).click();
 
-    const dialog = page.getByRole('dialog', { name: `Track ${product.name}` });
+    const dialog = page.getByRole('dialog', { name: `Track ${product.name}`, exact: true });
     await expect(dialog).toHaveCount(1);
     await expect(dialog).toContainText('Product identified. Choose only how Pantry should track it.');
     await dialog.getByLabel('Exact quantity').check();
@@ -130,9 +137,9 @@ test.describe('PRO-75 contextual List setup', () => {
 
     await expect(dialog).toHaveCount(0);
     await expect(page).toHaveURL(/\/app\/list/);
-    await expect(card).toContainText('Pantry: 2 each on hand');
-    await expect(card).toContainText('Buy 4');
-    await expect(card).toContainText('2 required');
+    await expect(details).toContainText('Pantry: 2 each on hand');
+    await expect(details).toContainText('Buy 4');
+    await expect(details).toContainText('2 required');
 
     const refreshed = await listItemFor(page, product._id);
     expect(refreshed.quantity).toBe(4);
@@ -154,8 +161,10 @@ test.describe('PRO-75 contextual List setup', () => {
     await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
 
     const card = page.locator('.react-list-item', { hasText: product.name });
-    await expect(card.getByRole('button', { name: 'Edit quantity' })).toBeVisible();
-    await expect(card.getByRole('button', { name: new RegExp(`Store preference for ${product.name}`) })).toBeVisible();
+    await expect(card.getByRole('button', { name: `Edit quantity for ${product.name}, currently 2` })).toBeVisible();
+    await card.getByRole('button', { name: `Open item details for ${product.name}` }).click();
+    const details = page.getByRole('dialog', { name: product.name, exact: true });
+    await expect(details.getByRole('button', { name: new RegExp(`Store preference for ${product.name}`) })).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
   });

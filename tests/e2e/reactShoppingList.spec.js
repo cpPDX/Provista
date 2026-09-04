@@ -124,14 +124,16 @@ test.describe('React Shopping List migration', () => {
 
     await page.goto('/app/list');
     const card = page.locator(`.list-item[data-id="${listItem._id}"]`);
-    await card.getByRole('button', { name: `Store preference for ${item.name}: Any store` }).click();
-    const dialog = page.getByRole('dialog', { name: 'Store preference' });
+    await card.getByRole('button', { name: `Open item details for ${item.name}` }).click();
+    const details = page.getByRole('dialog', { name: item.name, exact: true });
+    await details.getByRole('button', { name: `Store preference for ${item.name}: Any store` }).click();
+    const dialog = page.getByRole('dialog', { name: 'Store preference', exact: true });
     await expect(dialog).toBeVisible();
     await dialog.locator('select').selectOption(store._id);
     await dialog.getByRole('button', { name: 'Save preference' }).click();
 
     await expect(dialog).toHaveCount(0);
-    await expect(card.getByRole('button', { name: `Store preference for ${item.name}: ${store.name}` })).toBeVisible();
+    await expect(details.getByRole('button', { name: `Store preference for ${item.name}: ${store.name}` })).toBeVisible();
     await expect.poll(async () => {
       const response = await page.request.get('/api/shopping-list');
       const list = await response.json();
@@ -160,8 +162,10 @@ test.describe('React Shopping List migration', () => {
     await expect(storeGroup.locator('.react-list-section-group[data-section="Pantry"]')).toContainText(pantry.name);
 
     const dairyCard = page.locator('.react-list-item', { hasText: dairy.name });
-    await dairyCard.getByRole('button', { name: `Edit store section for ${dairy.name}: Dairy & Eggs` }).click();
-    const dialog = page.getByRole('dialog', { name: 'Store section' });
+    await dairyCard.getByRole('button', { name: `Open item details for ${dairy.name}` }).click();
+    const details = page.getByRole('dialog', { name: dairy.name, exact: true });
+    await details.getByRole('button', { name: `Edit store section for ${dairy.name}: Dairy & Eggs` }).click();
+    const dialog = page.getByRole('dialog', { name: 'Store section', exact: true });
     const input = dialog.getByRole('combobox', { name: 'Section' });
     await expect(input).toHaveAttribute('aria-autocomplete', 'list');
     await input.fill('International Foods');
@@ -169,6 +173,7 @@ test.describe('React Shopping List migration', () => {
 
     await expect(dialog).toHaveCount(0);
     await expect(storeGroup.locator('.react-list-section-group[data-section="International Foods"]')).toContainText(dairy.name);
+    await details.getByRole('button', { name: 'Close item details' }).click();
     await page.reload();
     const reloadedGroup = page.getByRole('region', { name: `Suggested stop ${store.name}` });
     await expect(reloadedGroup.locator('.react-list-section-group[data-section="International Foods"]')).toContainText(dairy.name);
@@ -246,7 +251,7 @@ test.describe('React Shopping List migration', () => {
     await expect(page.locator('.shell-toast-region')).toContainText('rolled back');
   });
 
-  test('keeps recent prices compact and edits purchase price entirely in React', async ({ page }) => {
+  test('keeps recent prices in item details and edits purchase price entirely in React', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const storeResponse = await page.request.post('/api/stores', { data: { name: `React Inline Price Store ${suffix}` } });
     expect(storeResponse.ok()).toBeTruthy();
@@ -260,7 +265,9 @@ test.describe('React Shopping List migration', () => {
     await page.goto('/app/list');
     const card = page.locator(`.list-item[data-id="${listItem._id}"]`);
     await card.locator('.list-item-check-wrap').click();
-    const choices = card.locator('.purchase-price-choice');
+    await card.getByRole('button', { name: `Open item details for ${item.name}` }).click();
+    const details = page.getByRole('dialog', { name: item.name, exact: true });
+    const choices = details.locator('.purchase-price-choice');
     await expect(choices.locator('.purchase-price-choice-status')).toHaveText('Bought · using recent $4.29');
     await choices.getByRole('button', { name: 'Change' }).click();
     await expect(choices.getByRole('button', { name: 'Use recent $4.29' })).toBeVisible();
@@ -268,19 +275,19 @@ test.describe('React Shopping List migration', () => {
     await expect(choices.getByRole('button', { name: 'Later' })).toBeVisible();
 
     await choices.getByRole('button', { name: 'Update price' }).click();
-    const priceDialog = page.getByRole('dialog', { name: 'Update price' });
+    const priceDialog = page.getByRole('dialog', { name: 'Update price', exact: true });
     await expect(priceDialog).toBeVisible();
     await page.fill('#inline-price-value', '4.99');
     await priceDialog.getByRole('button', { name: 'Use this price' }).click();
-    await expect(card.locator('.purchase-price-choice-status')).toHaveText('Bought · $4.99 recorded');
+    await expect(details.locator('.purchase-price-choice-status')).toHaveText('Bought · $4.99 recorded');
 
-    await card.getByRole('button', { name: 'Change' }).click();
-    await card.getByRole('button', { name: 'Later' }).click();
-    await expect(card.locator('.purchase-price-choice-status')).toHaveText('Bought · price later');
-    await card.getByRole('button', { name: 'Add price' }).click();
+    await details.getByRole('button', { name: 'Change' }).click();
+    await details.getByRole('button', { name: 'Later' }).click();
+    await expect(details.locator('.purchase-price-choice-status')).toHaveText('Bought · price later');
+    await details.getByRole('button', { name: 'Add price' }).click();
     await page.fill('#inline-price-value', '4.29');
-    await page.getByRole('dialog', { name: 'Update price' }).getByRole('button', { name: 'Use this price' }).click();
-    await expect(card.locator('.purchase-price-choice-status')).toHaveText('Bought · $4.29 recorded');
+    await page.getByRole('dialog', { name: 'Update price', exact: true }).getByRole('button', { name: 'Use this price' }).click();
+    await expect(details.locator('.purchase-price-choice-status')).toHaveText('Bought · $4.29 recorded');
   });
 
   test('finishes one active React shopping stop and leaves another store for later', async ({ page }) => {
@@ -298,7 +305,7 @@ test.describe('React Shopping List migration', () => {
     await page.locator(`.list-item[data-id="${first.listItem._id}"] .list-item-check-wrap`).click();
     await expect(page.locator('#cart-bar-label')).toContainText(firstStore.name);
     await page.locator('#btn-done-shopping').click();
-    const dialog = page.getByRole('dialog', { name: 'Finish shopping' });
+    const dialog = page.getByRole('dialog', { name: 'Finish shopping', exact: true });
     await expect(dialog.locator('#parent-trip-store')).toHaveValue(firstStore._id);
     await dialog.locator('#parent-finish-shopping').click();
     await expect(dialog).toHaveCount(0, { timeout: 10000 });
@@ -352,13 +359,10 @@ test.describe('React Shopping List migration', () => {
       ids.forEach(id => document.querySelector(`.list-item[data-id="${id}"] .list-item-check-wrap`)?.click());
     }, listItems.map(item => item._id));
     await expect(page.locator('.list-item.checked')).toHaveCount(20);
-    await expect(page.locator('.purchase-price-choice')).toHaveCount(20);
-    await expect(page.locator('.purchase-price-attention')).toHaveCount(3);
-    await expect(page.locator('.purchase-price-choice-status', { hasText: 'using recent' })).toHaveCount(17);
-    await expect(page.getByRole('button', { name: 'Add price' })).toHaveCount(3);
+    await expect(page.locator('.react-list-item .purchase-price-choice')).toHaveCount(0);
 
     await page.locator('#btn-done-shopping').click();
-    const dialog = page.getByRole('dialog', { name: 'Finish shopping' });
+    const dialog = page.getByRole('dialog', { name: 'Finish shopping', exact: true });
     await expect(dialog.locator('#parent-trip-store')).toHaveValue(store._id);
     await expect(dialog.locator('#parent-trip-price-summary')).toContainText('3 prices will be reviewed later');
     await expect(dialog.locator('.finish-shopping-confirmed')).toContainText('17 recorded prices');
