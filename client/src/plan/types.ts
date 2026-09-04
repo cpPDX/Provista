@@ -9,6 +9,7 @@ export interface PlanPerson {
 }
 
 export interface PlanMeal {
+  instanceId?: string;
   mealType: MealType;
   personName?: string;
   personIds: string[];
@@ -94,6 +95,7 @@ export interface MealAllocationProjection {
   weekStart: string | null;
   itemSummaries: MealAllocationSummary[];
   mealAllocations: Array<{
+    instanceId?: string | null;
     date: string;
     dayIndex: number;
     mealIndex: number;
