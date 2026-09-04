@@ -17,10 +17,15 @@ async function createPantryItem(page, item, data = {}) {
   return response.json();
 }
 
-function inventoryMatches(items, name) {
+function pantryProduct(entry) {
+  return entry.itemId && typeof entry.itemId === 'object' ? entry.itemId : null;
+}
+
+function inventoryMatchesResolved(items, { id, name }) {
   return items.filter(entry => {
-    const product = entry.itemId && typeof entry.itemId === 'object' ? entry.itemId : null;
-    return product?.name === name;
+    const product = pantryProduct(entry);
+    if (!product) return false;
+    return id ? String(product._id) === String(id) : product.name === name;
   });
 }
 
@@ -55,27 +60,40 @@ test.describe('PRO-61 Pantry-backed produce planning', () => {
 
   test('creates or reuses the shared catalog identity and never duplicates the Pantry item', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
-    const name = `PRO61 Arugula ${suffix}`;
+    const requestedName = `PRO61 Arugula ${suffix}`;
+
+    // Resolve through the same deterministic parser/matcher the UI uses. The
+    // canonical identity can intentionally differ from the raw text the parent
+    // typed (for example, a seeded “Arugula” catalog item).
+    const matchResponse = await page.request.post('/api/items/match', {
+      data: { text: requestedName }
+    });
+    expect(matchResponse.ok()).toBeTruthy();
+    const match = await matchResponse.json();
+    const suggestion = match.suggestions[0];
+    const resolved = suggestion?.item
+      ? { id: suggestion.item._id, name: suggestion.item.name }
+      : { id: null, name: requestedName };
 
     await page.goto('/app/plan');
     const view = page.getByRole('region', { name: 'Produce to use this week' });
     const input = view.getByLabel('Add produce you already have');
-    await input.fill(name);
+    await input.fill(requestedName);
     await view.getByRole('button', { name: 'Add to Pantry' }).click();
-    await expect(view).toContainText(name);
+    await expect(view).toContainText(resolved.name);
 
     let inventoryResponse = await page.request.get('/api/inventory');
     expect(inventoryResponse.ok()).toBeTruthy();
     let inventory = await inventoryResponse.json();
-    expect(inventoryMatches(inventory, name)).toHaveLength(1);
+    expect(inventoryMatchesResolved(inventory, resolved)).toHaveLength(1);
 
-    await input.fill(name);
+    await input.fill(requestedName);
     await view.getByRole('button', { name: 'Add to Pantry' }).click();
-    await expect(page.getByText(`${name} is already in Pantry.`)).toBeVisible();
+    await expect(page.getByText(`${resolved.name} is already in Pantry.`)).toBeVisible();
 
     inventoryResponse = await page.request.get('/api/inventory');
     expect(inventoryResponse.ok()).toBeTruthy();
     inventory = await inventoryResponse.json();
-    expect(inventoryMatches(inventory, name)).toHaveLength(1);
+    expect(inventoryMatchesResolved(inventory, resolved)).toHaveLength(1);
   });
 });
