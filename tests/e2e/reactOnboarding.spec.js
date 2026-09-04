@@ -68,12 +68,25 @@ test.describe('React action-based onboarding', () => {
     // Once the item POST succeeds, onboarding completion must not wait for a
     // secondary List refetch. Hold that refetch open to exercise CI-like latency.
     let releaseListRefresh = () => {};
+    let markListRefreshFinished = () => {};
     const listRefreshBlocked = new Promise(resolve => {
       releaseListRefresh = resolve;
     });
+    const listRefreshFinished = new Promise(resolve => {
+      markListRefreshFinished = resolve;
+    });
     await page.route('**/api/shopping-list', async route => {
-      if (route.request().method() === 'GET') await listRefreshBlocked;
-      await route.continue();
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+
+      await listRefreshBlocked;
+      try {
+        await route.continue();
+      } finally {
+        markListRefreshFinished();
+      }
     });
 
     const input = page.locator('#react-rapid-list-input');
@@ -86,6 +99,7 @@ test.describe('React action-based onboarding', () => {
       await expect(page).toHaveURL(/\/app$/, { timeout: 10000 });
     } finally {
       releaseListRefresh();
+      await listRefreshFinished;
       await page.unroute('**/api/shopping-list');
     }
 
