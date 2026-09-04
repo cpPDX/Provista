@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../shell/ToastProvider';
-import { createStore, loadStores, updateShoppingListItem } from './api';
+import { createStore, updateShoppingListItem } from './api';
+import { storesQueryKey, storesQueryOptions } from './storesQuery';
 import { entityId, productName, type ShoppingListItem, type StoreRef } from './types';
 
 const listQueryKey = ['shopping-list'] as const;
@@ -15,7 +16,7 @@ interface StorePreferenceDialogProps {
 export function StorePreferenceDialog({ item, onClose }: StorePreferenceDialogProps) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const storesQuery = useQuery({ queryKey: ['stores'], queryFn: loadStores });
+  const storesQuery = useQuery(storesQueryOptions);
   const [storeId, setStoreId] = useState(entityId(item.storeId));
   const [addingStore, setAddingStore] = useState(false);
   const [newStoreName, setNewStoreName] = useState('');
@@ -79,7 +80,7 @@ export function StorePreferenceDialog({ item, onClose }: StorePreferenceDialogPr
 
     try {
       const store = await createStore(name);
-      queryClient.setQueryData<StoreRef[]>(['stores'], current =>
+      queryClient.setQueryData<StoreRef[]>(storesQueryKey, current =>
         [...(current || []).filter(entry => entry._id !== store._id), store]
           .sort((left, right) => left.name.localeCompare(right.name))
       );
@@ -155,7 +156,7 @@ export function StorePreferenceDialog({ item, onClose }: StorePreferenceDialogPr
                 ref={selectRef}
                 value={storeId}
                 onChange={event => handleStoreChange(event.target.value)}
-                disabled={storesQuery.isPending || saving}
+                disabled={storesQuery.isPending || storesQuery.isError || saving}
               >
                 <option value="">Any store</option>
                 {(storesQuery.data || []).map(store => <option key={store._id} value={store._id}>{store.name}</option>)}
@@ -180,7 +181,13 @@ export function StorePreferenceDialog({ item, onClose }: StorePreferenceDialogPr
             </div>
           )}
 
-          {storesQuery.isError && !addingStore && <div className="react-list-inline-error" role="alert">Could not load household stores.</div>}
+          {storesQuery.isPending && !addingStore && <div className="react-list-inline-status" role="status">Loading stores…</div>}
+          {storesQuery.isError && !addingStore && (
+            <div className="react-list-inline-error" role="alert">
+              <span>Couldn’t load stores.</span>
+              <button type="button" className="shell-button shell-button-secondary" onClick={() => void storesQuery.refetch()}>Retry</button>
+            </div>
+          )}
           {error && <div className="react-list-inline-error" role="alert">{error}</div>}
 
           <div className="react-list-modal-actions">
