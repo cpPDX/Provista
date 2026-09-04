@@ -130,7 +130,7 @@ test.describe('PRO-76 reconciled Plan workflow', () => {
     expect(savedInstanceId).toBe(initialInstanceId);
 
     await page.getByRole('button', { name: 'Didn’t make this meal' }).click();
-    const confirmation = page.getByRole('dialog', { name: 'Didn’t make this meal?' });
+    const confirmation = page.getByRole('alertdialog', { name: 'Didn’t make this meal?' });
     await confirmation.getByRole('button', { name: 'Restore Pantry' }).click();
     await expect(page.getByText('Pantry restored for this meal')).toBeVisible();
     expect(await inventoryQuantity(page, item._id)).toBe(4);
