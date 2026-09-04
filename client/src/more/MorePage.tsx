@@ -1,7 +1,8 @@
 import { useAuth } from '../auth/AuthProvider';
+import { useConfirm } from '../shell/DialogProvider';
 import './more.css';
 
-type MoreIconName = 'insights' | 'account' | 'household' | 'products' | 'stores' | 'import' | 'about' | 'tour';
+type MoreIconName = 'insights' | 'account' | 'household' | 'products' | 'stores' | 'import' | 'about' | 'tour' | 'signout';
 
 interface MoreDestination {
   id: string;
@@ -53,12 +54,26 @@ function MoreIcon({ name }: { name: MoreIconName }) {
   if (name === 'tour') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5" /><path d="m15 17 4 4" /></svg>;
   }
+  if (name === 'signout') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10" /></svg>;
+  }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></svg>;
 }
 
 export function MorePage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, logout } = useAuth();
+  const confirm = useConfirm();
   const visibleDestinations = destinations.filter(destination => !destination.adminOnly || isAdmin);
+
+  const handleLogout = async () => {
+    const confirmed = await confirm({
+      title: 'Sign out?',
+      message: 'You’ll return to the Provista welcome page. Your household data stays saved.',
+      confirmLabel: 'Sign out',
+      cancelLabel: 'Stay signed in'
+    });
+    if (confirmed) await logout();
+  };
 
   return (
     <section className="more-page" aria-labelledby="more-title">
@@ -79,6 +94,14 @@ export function MorePage() {
             <span className="more-card-arrow" aria-hidden="true">→</span>
           </a>
         ))}
+        <button type="button" className="more-card more-card-button" onClick={() => void handleLogout()}>
+          <span className="more-card-icon"><MoreIcon name="signout" /></span>
+          <span className="more-card-copy">
+            <strong>Sign out</strong>
+            <small>End this session on this device</small>
+          </span>
+          <span className="more-card-arrow" aria-hidden="true">→</span>
+        </button>
       </div>
     </section>
   );
