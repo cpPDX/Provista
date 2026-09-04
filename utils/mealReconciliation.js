@@ -1,7 +1,8 @@
+const InventoryEvent = require('../models/InventoryEvent');
 const InventoryItem = require('../models/InventoryItem');
 const Item = require('../models/Item');
 const MealPlan = require('../models/MealPlan');
-const { appendDelta, roundQuantity } = require('./inventoryLedger');
+const { appendDelta, roundQuantity, syncMaterializedQuantity } = require('./inventoryLedger');
 const { matchCatalogItem } = require('./itemMatching');
 const { effectiveTrackingMode, flattenMeals } = require('./mealAllocations');
 const { parseMealShoppingNotes } = require('./mealShopping');
@@ -156,10 +157,159 @@ async function reconcileHouseholdMeals({ householdId, timeZone = 'UTC', now = ne
   return result;
 }
 
+async function mealConsumptionEvents(householdId, mealInstanceId) {
+  return InventoryEvent.find({
+    householdId,
+    type: 'meal_consumption',
+    'sourceMeta.mealInstanceId': mealInstanceId
+  }).sort({ effectiveAt: 1, recordedAt: 1, _id: 1 });
+}
+
+async function reverseMealConsumption({ householdId, mealInstanceId, createdBy = null }) {
+  const originals = await mealConsumptionEvents(householdId, mealInstanceId);
+  const reversedInventoryIds = new Set();
+  let reversedCount = 0;
+
+  for (const original of originals) {
+    const inventory = await InventoryItem.findOne({
+      _id: original.inventoryItemId,
+      householdId
+    });
+    if (!inventory) continue;
+
+    await appendDelta(inventory, 'reversal', -(Number(original.quantityDelta) || 0), {
+      // Reverse at the original effective time so a newer absolute physical
+      // count still supersedes both the consumption and its reversal.
+      effectiveAt: original.effectiveAt,
+      sourceIdentity: `meal-reversal:${original._id}`,
+      sourceType: 'meal-plan-undo',
+      sourceEntityId: original.sourceEntityId,
+      sourceMeta: {
+        mealInstanceId,
+        originalEventId: String(original._id),
+        reason: 'meal-not-made'
+      },
+      reversesEventId: original._id,
+      createdBy
+    });
+    reversedInventoryIds.add(String(inventory._id));
+    reversedCount += 1;
+  }
+
+  return {
+    mealInstanceId,
+    reversedCount,
+    inventoryItemCount: reversedInventoryIds.size
+  };
+}
+
+async function correctMealConsumption({
+  householdId,
+  mealInstanceId,
+  itemId,
+  actualQuantity,
+  idempotencyKey,
+  createdBy = null
+}) {
+  const desired = Number(actualQuantity);
+  if (!Number.isFinite(desired) || desired < 0) {
+    const error = new Error('actualQuantity must be a non-negative number');
+    error.status = 400;
+    throw error;
+  }
+  const key = String(idempotencyKey || '').trim();
+  if (!key) {
+    const error = new Error('idempotencyKey is required');
+    error.status = 400;
+    throw error;
+  }
+
+  const original = await InventoryEvent.findOne({
+    householdId,
+    itemId,
+    type: 'meal_consumption',
+    'sourceMeta.mealInstanceId': mealInstanceId
+  });
+  if (!original) {
+    const error = new Error('No reconciled Pantry usage was found for this meal item');
+    error.status = 404;
+    throw error;
+  }
+
+  const reversed = await InventoryEvent.exists({
+    householdId,
+    type: 'reversal',
+    reversesEventId: original._id
+  });
+  if (reversed) {
+    const error = new Error('This meal usage was already reversed');
+    error.status = 409;
+    throw error;
+  }
+
+  const corrections = await InventoryEvent.find({
+    householdId,
+    itemId,
+    type: 'correction',
+    'sourceMeta.originalEventId': String(original._id)
+  }).lean();
+  const currentDelta = roundQuantity(
+    (Number(original.quantityDelta) || 0) +
+    corrections.reduce((sum, event) => sum + (Number(event.quantityDelta) || 0), 0)
+  );
+  const desiredDelta = -roundQuantity(desired);
+  const correctionDelta = roundQuantity(desiredDelta - currentDelta);
+
+  const inventory = await InventoryItem.findOne({
+    _id: original.inventoryItemId,
+    householdId
+  });
+  if (!inventory) {
+    const error = new Error('Pantry item was not found');
+    error.status = 404;
+    throw error;
+  }
+
+  if (correctionDelta === 0) {
+    await syncMaterializedQuantity(inventory);
+    return {
+      mealInstanceId,
+      itemId: String(itemId),
+      actualQuantity: roundQuantity(desired),
+      correctionDelta: 0,
+      changed: false
+    };
+  }
+
+  await appendDelta(inventory, 'correction', correctionDelta, {
+    effectiveAt: original.effectiveAt,
+    sourceIdentity: `meal-correction:${original._id}:${key}`,
+    sourceType: 'meal-plan-correction',
+    sourceEntityId: original.sourceEntityId,
+    sourceMeta: {
+      mealInstanceId,
+      originalEventId: String(original._id),
+      actualQuantity: roundQuantity(desired),
+      previousConsumption: roundQuantity(Math.max(0, -currentDelta))
+    },
+    createdBy
+  });
+
+  return {
+    mealInstanceId,
+    itemId: String(itemId),
+    actualQuantity: roundQuantity(desired),
+    correctionDelta,
+    changed: true
+  };
+}
+
 module.exports = {
   RECONCILIATION_VERSION,
+  correctMealConsumption,
   localDateKey,
   mealSourceIdentity,
   reconcileHouseholdMeals,
-  resolveMealNeedsForReconciliation
+  resolveMealNeedsForReconciliation,
+  reverseMealConsumption
 };
