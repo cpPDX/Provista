@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
@@ -30,6 +30,7 @@ function AuthenticatedShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const [bootstrapping, setBootstrapping] = useState(false);
+  const resumeRecordingKey = useRef<string | null>(null);
 
   const markerKey = session ? `gt_new_household_${session.user._id}` : null;
   const markerPresent = Boolean(markerKey && localStorage.getItem(markerKey));
@@ -61,11 +62,18 @@ function AuthenticatedShell() {
     if (!onboarding?.required || onboarding.status !== 'in_progress') return;
 
     const resumeKey = `provista_onboarding_resume_${session.household?._id || session.user.householdId || 'household'}_${onboarding.startedAt || 'active'}`;
-    if (sessionStorage.getItem(resumeKey)) return;
-    sessionStorage.setItem(resumeKey, '1');
+    if (sessionStorage.getItem(resumeKey) || resumeRecordingKey.current === resumeKey) return;
+
+    resumeRecordingKey.current = resumeKey;
     void recordOnboardingResume()
-      .then(next => queryClient.setQueryData(onboardingQueryKey, next))
-      .catch(error => console.info('Could not record onboarding resume:', error));
+      .then(next => {
+        sessionStorage.setItem(resumeKey, '1');
+        queryClient.setQueryData(onboardingQueryKey, next);
+      })
+      .catch(error => console.info('Could not record onboarding resume:', error))
+      .finally(() => {
+        if (resumeRecordingKey.current === resumeKey) resumeRecordingKey.current = null;
+      });
   }, [markerPresent, onboardingQuery.data, queryClient, session]);
 
   const onboarding = onboardingQuery.data;
