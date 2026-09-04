@@ -67,29 +67,23 @@ function resolveMealNeedsForReconciliation(meal, items, usageByItemId = new Map(
   return { needs: [...resolved.values()], unresolved };
 }
 
-async function ensurePersistedMealIdentities(plans) {
-  for (const plan of plans) {
-    let changed = false;
-    for (const day of (plan.days || [])) {
-      for (const meal of (day.meals || [])) {
-        if (!String(meal.instanceId || '').trim()) {
-          // The schema default is applied when assigning undefined then validating.
-          meal.instanceId = undefined;
-          changed = true;
-        }
-      }
-    }
-    if (changed) {
-      plan.markModified('days');
-      await plan.save();
-    }
+async function persistLegacyMealIdentities(householdId) {
+  // Query the stored BSON rather than hydrated documents: the schema default can
+  // make a missing legacy value look present in memory even before it is saved.
+  const legacyPlans = await MealPlan.find({
+    householdId,
+    'days.meals.instanceId': { $exists: false }
+  });
+  for (const plan of legacyPlans) {
+    plan.markModified('days');
+    await plan.save();
   }
 }
 
 async function reconcileHouseholdMeals({ householdId, timeZone = 'UTC', now = new Date() }) {
   const today = localDateKey(now, timeZone);
+  await persistLegacyMealIdentities(householdId);
   const plans = await MealPlan.find({ householdId }).sort({ weekStart: 1 });
-  await ensurePersistedMealIdentities(plans);
 
   const [items, inventoryItems] = await Promise.all([
     Item.find({ householdId }).select('name brand category unit aliases').lean(),
