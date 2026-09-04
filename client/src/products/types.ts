@@ -1,3 +1,10 @@
+export interface ProductAlias {
+  _id: string;
+  text: string;
+  source?: string;
+  confirmedAt?: string;
+}
+
 export interface ProductRef {
   _id: string;
   name: string;
@@ -9,6 +16,8 @@ export interface ProductRef {
   upc?: string | null;
   upcSource?: 'scan' | 'backfill' | 'manual' | null;
   upcPendingLookup?: boolean;
+  aliases?: ProductAlias[];
+  lastPurchasedAt?: string | null;
 }
 
 export interface CatalogProductInput {

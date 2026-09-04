@@ -7,6 +7,7 @@ import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
 import { PlanPage } from '../plan/PlanPage';
 import { MorePage } from '../more/MorePage';
+import { ProductCatalogPage } from '../products/ProductCatalogPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
 import { NavIcon } from './NavIcon';
@@ -46,7 +47,7 @@ export function AppShell() {
       ? 'inventory'
       : location.pathname === '/app/plan'
         ? 'meal-plan'
-        : location.pathname === '/app/more'
+        : location.pathname.startsWith('/app/more')
           ? 'more'
           : 'home';
 
@@ -111,7 +112,9 @@ export function AppShell() {
             : currentTab === 'meal-plan'
               ? <PlanPage />
               : currentTab === 'more'
-                ? <MorePage />
+                ? location.pathname === '/app/more/products'
+                  ? <ProductCatalogPage />
+                  : <MorePage />
               : <HomePage />}
       </main>
 
