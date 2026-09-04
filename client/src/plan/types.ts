@@ -109,3 +109,17 @@ export interface MealAllocationProjection {
   }>;
   unresolvedNeeds: Array<Record<string, unknown>>;
 }
+
+export interface MealReconciliationStatus {
+  mealInstanceId: string;
+  updatedPantry: boolean;
+  reversed: boolean;
+  items: Array<{
+    itemId: string;
+    name: string;
+    unit: string;
+    trackingMode: 'simple' | 'exact';
+    consumedQuantity: number | null;
+    reversed: boolean;
+  }>;
+}
