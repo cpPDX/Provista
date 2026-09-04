@@ -8,5 +8,6 @@ export const storesQueryOptions = {
   queryFn: loadStores,
   staleTime: storesStaleTimeMs,
   retry: false,
+  retryOnMount: false,
   refetchOnMount: false
 } as const;
