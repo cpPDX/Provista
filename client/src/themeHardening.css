@@ -1,8 +1,3 @@
-:root[data-theme='light'] .shell-theme-toggle svg path {
-  fill: currentColor;
-  stroke: none;
-}
-
 .react-list-modal-backdrop {
   background: var(--overlay);
 }
