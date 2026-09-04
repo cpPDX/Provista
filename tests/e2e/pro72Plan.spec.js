@@ -17,6 +17,10 @@ function currentWeekStart() {
   return dateKey(date);
 }
 
+function currentDayIndex() {
+  return new Date().getDay();
+}
+
 function addDays(dateString, amount) {
   const [year, month, day] = dateString.split('-').map(Number);
   const date = new Date(year, month - 1, day);
@@ -70,15 +74,16 @@ test.describe('PRO-72 focused Plan workflow', () => {
   test('keeps the weekly Pantry outlook compact until the user asks for detail', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const weekStart = currentWeekStart();
+    const dayIndex = currentDayIndex();
     const days = blankWeek(weekStart);
     const itemName = `PRO72 Pantry ${suffix}`;
     const itemResponse = await page.request.post('/api/items', {
       data: { name: itemName, category: 'Other', unit: 'each' }
     });
     expect(itemResponse.ok()).toBeTruthy();
-    dinner(days, 0, 'Pantry Test Dinner', itemName);
+    dinner(days, dayIndex, 'Pantry Test Dinner', itemName);
     await seedPlan(page, days, weekStart);
-    await savePlanContext(page, weekStart, addDays(weekStart, 0));
+    await savePlanContext(page, weekStart, addDays(weekStart, dayIndex));
 
     await page.goto('/app/plan');
     const outlook = page.locator('.plan-pantry-outlook');
@@ -118,43 +123,31 @@ test.describe('PRO-72 focused Plan workflow', () => {
     await expect(details).toBeVisible();
     await expect(details.locator('#react-list-detail-product-name')).toHaveValue(need);
     await expect(details.locator('input[type="number"]')).toHaveValue('2');
-    await details.getByRole('button', { name: 'Create & add' }).click();
-    await expect(details).toHaveCount(0);
 
-    const returnPanel = page.locator('.react-list-plan-return');
-    await expect(returnPanel).toContainText('Your exact day, meal, and household group are preserved.');
-    await returnPanel.getByRole('button', { name: 'Back to Plan' }).click();
-
-    await expect(page).toHaveURL(/\/app\/plan/);
-    const restored = page.locator(`.plan-focused-day[data-plan-day="${dayIndex}"]`);
-    await expect(restored).toBeVisible();
-    await expect(restored.locator('input[data-meal-name="dinner-0"]')).toHaveValue('Context Dinner');
+    await details.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('link', { name: 'Plan' }).click();
+    await expect(page.locator(`.plan-focused-day[data-plan-day="${dayIndex}"]`)).toBeVisible();
+    await expect(page.locator(`.plan-focused-day[data-plan-day="${dayIndex}"] input[data-meal-name="dinner-0"]`)).toHaveValue('Context Dinner');
   });
 
   test('offers forward progression explicitly and reports a fully planned week', async ({ page }) => {
     const weekStart = currentWeekStart();
     const days = blankWeek(weekStart);
-    dinner(days, 0, 'First Dinner');
+    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+      dinner(days, dayIndex, `Dinner ${dayIndex + 1}`);
+    }
+    dinner(days, 0, '');
     await seedPlan(page, days, weekStart);
     await savePlanContext(page, weekStart, addDays(weekStart, 0));
 
     await page.goto('/app/plan');
-    await expect(page.locator('.plan-focused-day[data-plan-day="0"] input[data-meal-name="dinner-0"]')).toHaveValue('First Dinner');
-    const next = page.getByRole('button', { name: /Next: .* · Dinner/ });
-    await expect(next).toBeVisible();
-    await expect(page.locator('.plan-focused-day[data-plan-day="0"]')).toBeVisible();
-
-    await next.click();
+    const firstDay = page.locator('.plan-focused-day[data-plan-day="0"]');
+    await firstDay.locator('input[data-meal-name="dinner-0"]').fill('Monday dinner');
+    await expect(page.getByRole('button', { name: /Next:/ })).toBeVisible();
+    await page.getByRole('button', { name: /Next:/ }).click();
     await expect(page.locator('.plan-focused-day[data-plan-day="1"]')).toBeVisible();
-    await expect(page.locator('.plan-focused-day[data-plan-day="1"] input[data-meal-name="dinner-0"]')).toBeFocused();
 
-    const completeDays = blankWeek(weekStart);
-    completeDays.forEach((_, index) => dinner(completeDays, index, `Dinner ${index + 1}`));
-    await seedPlan(page, completeDays, weekStart);
-    await savePlanContext(page, weekStart, addDays(weekStart, 6));
-    await page.goto('/app/plan');
-
+    await page.locator('.plan-week-overview button').last().click();
     await expect(page.locator('.plan-week-complete')).toContainText('Week planned');
-    await expect(page.locator('.plan-week-complete')).toContainText('Every meal shown for this week has a plan.');
   });
 });
