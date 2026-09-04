@@ -125,7 +125,7 @@ test.describe('PRO-72 focused Plan workflow', () => {
     await expect(details.locator('input[type="number"]')).toHaveValue('2');
 
     await details.getByRole('button', { name: 'Cancel' }).click();
-    await page.getByRole('link', { name: 'Plan' }).click();
+    await page.getByRole('button', { name: 'Plan' }).click();
     await expect(page.locator(`.plan-focused-day[data-plan-day="${dayIndex}"]`)).toBeVisible();
     await expect(page.locator(`.plan-focused-day[data-plan-day="${dayIndex}"] input[data-meal-name="dinner-0"]`)).toHaveValue('Context Dinner');
   });
@@ -133,21 +133,30 @@ test.describe('PRO-72 focused Plan workflow', () => {
   test('offers forward progression explicitly and reports a fully planned week', async ({ page }) => {
     const weekStart = currentWeekStart();
     const days = blankWeek(weekStart);
+    const firstOpenDay = currentDayIndex();
+    const secondOpenDay = Math.min(firstOpenDay + 1, 6);
+
     for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
       dinner(days, dayIndex, `Dinner ${dayIndex + 1}`);
     }
-    dinner(days, 0, '');
+    dinner(days, firstOpenDay, '');
+    if (secondOpenDay !== firstOpenDay) dinner(days, secondOpenDay, '');
+
     await seedPlan(page, days, weekStart);
-    await savePlanContext(page, weekStart, addDays(weekStart, 0));
+    await savePlanContext(page, weekStart, addDays(weekStart, firstOpenDay));
 
     await page.goto('/app/plan');
-    const firstDay = page.locator('.plan-focused-day[data-plan-day="0"]');
-    await firstDay.locator('input[data-meal-name="dinner-0"]').fill('Monday dinner');
-    await expect(page.getByRole('button', { name: /Next:/ })).toBeVisible();
-    await page.getByRole('button', { name: /Next:/ }).click();
-    await expect(page.locator('.plan-focused-day[data-plan-day="1"]')).toBeVisible();
+    const firstDay = page.locator(`.plan-focused-day[data-plan-day="${firstOpenDay}"]`);
+    await firstDay.locator('input[data-meal-name="dinner-0"]').fill('First open dinner');
 
-    await page.locator('.plan-week-overview button').last().click();
+    if (secondOpenDay !== firstOpenDay) {
+      await expect(page.getByRole('button', { name: /Next:/ })).toBeVisible();
+      await page.getByRole('button', { name: /Next:/ }).click();
+      const secondDay = page.locator(`.plan-focused-day[data-plan-day="${secondOpenDay}"]`);
+      await expect(secondDay).toBeVisible();
+      await secondDay.locator('input[data-meal-name="dinner-0"]').fill('Final open dinner');
+    }
+
     await expect(page.locator('.plan-week-complete')).toContainText('Week planned');
   });
 });
