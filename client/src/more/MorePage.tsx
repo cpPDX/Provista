@@ -12,20 +12,22 @@ interface MoreDestination {
   section?: string;
   action?: string;
   adminOnly?: boolean;
+  reactHref?: string;
 }
 
 const destinations: MoreDestination[] = [
   { id: 'insights', label: 'Insights', detail: 'Price history and household spending', icon: 'insights', section: 'insights' },
   { id: 'account', label: 'My Account', detail: 'Profile, password, and personal preferences', icon: 'account', section: 'account' },
   { id: 'household', label: 'Household', detail: 'People, roles, invitations, and defaults', icon: 'household', section: 'household' },
-  { id: 'products', label: 'Manage products', detail: 'Household grocery catalog and product details', icon: 'products', section: 'items', adminOnly: true },
+  { id: 'products', label: 'Manage products', detail: 'Household grocery catalog and product details', icon: 'products', reactHref: '/app/more/products', adminOnly: true },
   { id: 'stores', label: 'Stores', detail: 'Shopping locations and store sections', icon: 'stores', section: 'stores', adminOnly: true },
   { id: 'import', label: 'Import prices', detail: 'Bring in household price history from CSV', icon: 'import', action: 'csv-import', adminOnly: true },
   { id: 'about', label: 'Help & About', detail: 'How Provista works and where to get started', icon: 'about', section: 'about' },
   { id: 'tour', label: 'App Tour', detail: 'Walk through the household grocery workflow', icon: 'tour', action: 'app-tour' }
 ];
 
-function legacyHref(destination: MoreDestination) {
+function destinationHref(destination: MoreDestination) {
+  if (destination.reactHref) return destination.reactHref;
   const params = new URLSearchParams({ tab: 'more' });
   if (destination.section) params.set('section', destination.section);
   if (destination.action) params.set('action', destination.action);
@@ -85,7 +87,7 @@ export function MorePage() {
 
       <div className="more-grid">
         {visibleDestinations.map(destination => (
-          <a className="more-card" href={legacyHref(destination)} key={destination.id}>
+          <a className="more-card" href={destinationHref(destination)} key={destination.id}>
             <span className="more-card-icon"><MoreIcon name={destination.icon} /></span>
             <span className="more-card-copy">
               <strong>{destination.label}</strong>
