@@ -14,6 +14,18 @@ export interface ShoppingMutationResult {
   queued: boolean;
 }
 
+export interface GeneratedShoppingNeedResult {
+  addedCount: number;
+  skippedCount: number;
+  addedItems: Array<{
+    itemId: string;
+    name?: string;
+    quantity: number;
+    requiredQuantity?: number;
+    quantitySource?: 'system' | 'user';
+  }>;
+}
+
 export interface MatchCandidate extends ProductRef {
   score?: number;
   matchSource?: string;
@@ -52,6 +64,12 @@ export interface ShoppingTripResult {
   pendingPriceCount: number;
   lowStockCount: number;
   idempotent: boolean;
+}
+
+export interface StoreSectionsResult {
+  defaults: string[];
+  suggestions: string[];
+  saved: Array<{ itemId: string; storeSection: string }>;
 }
 
 function shouldUseOfflineFallback(error: unknown): boolean {
@@ -99,7 +117,13 @@ export async function addShoppingListItem(
       _id: localId,
       itemId: product,
       storeId: storeId || null,
+      shoppingStoreId: null,
       quantity,
+      intendedPurchaseQuantity: quantity,
+      requiredQuantity: null,
+      actualPurchasedQuantity: null,
+      remainingRequiredQuantity: 0,
+      quantitySource: 'user',
       checked: false,
       addedAt: new Date().toISOString()
     };
@@ -115,9 +139,28 @@ export async function addShoppingListItem(
   }
 }
 
+export async function addGeneratedShoppingNeed(itemId: string, quantity: number): Promise<GeneratedShoppingNeedResult> {
+  return apiFetch<GeneratedShoppingNeedResult>('/api/shopping-list/from-meal', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: [{ itemId, quantity }] })
+  });
+}
+
+export type ShoppingListPatch = Partial<Pick<
+  ShoppingListItem,
+  | 'checked'
+  | 'quantity'
+  | 'intendedPurchaseQuantity'
+  | 'requiredQuantity'
+  | 'actualPurchasedQuantity'
+  | 'storeId'
+  | 'shoppingStoreId'
+>>;
+
 export async function updateShoppingListItem(
   id: string,
-  patch: Partial<Pick<ShoppingListItem, 'checked' | 'quantity' | 'storeId'>>,
+  patch: ShoppingListPatch,
   snapshot: ShoppingListItem
 ): Promise<ShoppingMutationResult> {
   try {
@@ -126,7 +169,9 @@ export async function updateShoppingListItem(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch)
     });
-    const merged = { ...snapshot, ...response, ...patch };
+    // The patch is useful for optimistic/offline state, but a successful server
+    // response is canonical (for example, populated Store refs rather than IDs).
+    const merged = { ...snapshot, ...patch, ...response };
     await cacheShoppingItem(merged).catch(() => undefined);
     return { data: merged, queued: false };
   } catch (error) {
@@ -179,6 +224,26 @@ export async function addCatalogAlias(itemId: string, text: string): Promise<voi
 
 export async function loadStores(): Promise<StoreRef[]> {
   return apiFetch<StoreRef[]>('/api/stores');
+}
+
+export async function createStore(name: string): Promise<StoreRef> {
+  return apiFetch<StoreRef>('/api/stores', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name.trim() })
+  });
+}
+
+export async function loadStoreSections(): Promise<StoreSectionsResult> {
+  return apiFetch<StoreSectionsResult>('/api/item-sections');
+}
+
+export async function updateStoreSection(itemId: string, storeSection: string): Promise<{ _id: string; storeSection: string }> {
+  return apiFetch<{ _id: string; storeSection: string }>(`/api/item-sections/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ storeSection })
+  });
 }
 
 export async function completeShoppingTrip(input: {

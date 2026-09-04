@@ -13,11 +13,15 @@ import { useDirtyState } from '../shell/DirtyStateProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deleteShoppingListItem, loadShoppingList, updateShoppingListItem } from './api';
 import { useShoppingCheckout } from './checkout';
+import { ListItemContextControls } from './ListItemContextControls';
 import { RapidCapture } from './RapidCapture';
 import { StorePreferenceDialog } from './StorePreferenceDialog';
+import { StoreSectionControl, useStoreSections } from './storeSections';
 import { processShoppingQueue } from './storage';
 import {
+  currentShoppingStoreId,
   entityId,
+  intendedPurchaseQuantity,
   plannedStoreId,
   plannedStoreName,
   preferredStoreId,
@@ -33,7 +37,9 @@ const EMPTY_ITEMS: ShoppingListItem[] = [];
 
 interface CheckSync {
   serverChecked: boolean;
+  serverShoppingStoreId: string | null;
   desiredChecked: boolean;
+  desiredShoppingStoreId: string | null;
   processing: boolean;
   promise?: Promise<boolean>;
 }
@@ -54,6 +60,7 @@ function inferActiveStore(items: ShoppingListItem[]): string | null {
 function storeName(items: ShoppingListItem[], id: string | null): string {
   if (!id) return '';
   for (const item of items) {
+    if (entityId(item.shoppingStoreId) === id && item.shoppingStoreId && typeof item.shoppingStoreId !== 'string') return item.shoppingStoreId.name;
     if (entityId(item.storeId) === id && item.storeId && typeof item.storeId !== 'string') return item.storeId.name;
     if (entityId(item.tripStore) === id && item.tripStore) return item.tripStore.name;
     const usual = item.priceContext?.usualStore;
@@ -97,6 +104,14 @@ export function ShoppingListPage() {
 
   const items = listQuery.data || EMPTY_ITEMS;
   const checkedItems = items.filter(item => item.checked);
+  const storeSections = useStoreSections(items);
+  const searchParams = new URLSearchParams(location.search);
+  const fromPlan = searchParams.get('from') === 'plan';
+  const planDetailName = searchParams.get('detail')?.trim() || '';
+  const planDetailQuantity = Math.max(1, Number(searchParams.get('quantity')) || 1);
+  const initialPlanDetail = fromPlan && planDetailName
+    ? { name: planDetailName, quantity: planDetailQuantity }
+    : null;
   const onboardingActive = Boolean(
     onboardingQuery.data?.required &&
     onboardingQuery.data.firstAction === 'list' &&
@@ -141,8 +156,6 @@ export function ShoppingListPage() {
       showToast('Your shopping list has a start. Home is ready.', { tone: 'success', durationMs: 4500 });
       navigate('/app', { replace: true });
     } catch (error) {
-      // The server is authoritative: updating a pre-existing item does not
-      // satisfy onboarding because it is not a new List outcome after choice.
       console.info('Onboarding completion is not ready yet:', error);
     }
   };
@@ -158,9 +171,18 @@ export function ShoppingListPage() {
     }
   };
 
-  const updateCheckedCache = (id: string, checked: boolean) => {
+  const updateCheckedCache = (id: string, checked: boolean, shoppingStoreId: string | null) => {
     queryClient.setQueryData<ShoppingListItem[]>(queryKey, current =>
-      current?.map(item => item._id === id ? { ...item, checked } : item) || []
+      current?.map(item => item._id === id
+        ? {
+            ...item,
+            checked,
+            shoppingStoreId: checked ? shoppingStoreId : null,
+            actualPurchasedQuantity: checked
+              ? (item.actualPurchasedQuantity ?? intendedPurchaseQuantity(item))
+              : null
+          }
+        : item) || []
     );
   };
 
@@ -171,19 +193,30 @@ export function ShoppingListPage() {
     let queued = false;
 
     try {
-      while (sync.serverChecked !== sync.desiredChecked) {
+      while (
+        sync.serverChecked !== sync.desiredChecked ||
+        sync.serverShoppingStoreId !== sync.desiredShoppingStoreId
+      ) {
         const target = sync.desiredChecked;
+        const targetStoreId = target ? sync.desiredShoppingStoreId : null;
         const snapshot = queryClient.getQueryData<ShoppingListItem[]>(queryKey)?.find(item => item._id === id);
         if (!snapshot) throw new Error('Shopping-list item is no longer available');
-        const result = await updateShoppingListItem(id, { checked: target }, snapshot);
+        const result = await updateShoppingListItem(id, {
+          checked: target,
+          shoppingStoreId: targetStoreId
+        }, snapshot);
         queued ||= result.queued;
         sync.serverChecked = target;
+        sync.serverShoppingStoreId = targetStoreId;
+        queryClient.setQueryData<ShoppingListItem[]>(queryKey, current =>
+          current?.map(item => item._id === id ? { ...item, ...result.data } : item) || []
+        );
       }
       checkSync.current.delete(id);
       if (queued) showToast('Saved offline. Will sync when you reconnect.');
       return true;
     } catch (error) {
-      updateCheckedCache(id, sync.serverChecked);
+      updateCheckedCache(id, sync.serverChecked, sync.serverShoppingStoreId);
       checkSync.current.delete(id);
       console.error(error);
       showToast('Could not save that item. Your check-off was rolled back.', { tone: 'error', durationMs: 4000 });
@@ -194,6 +227,10 @@ export function ShoppingListPage() {
   };
 
   const handleCheck = async (item: ShoppingListItem, checked: boolean) => {
+    let shoppingStoreId: string | null = checked
+      ? (activeStoreId || plannedStoreId(item) || usualStoreId(items) || null)
+      : null;
+
     if (checked && activeStoreId) {
       const preferredId = preferredStoreId(item);
       if (preferredId && preferredId !== activeStoreId) {
@@ -206,6 +243,7 @@ export function ShoppingListPage() {
           cancelLabel: `Leave for ${preferredName}`
         });
         if (!buyHere) return;
+        shoppingStoreId = activeStoreId;
       }
     }
 
@@ -213,16 +251,19 @@ export function ShoppingListPage() {
     if (!sync) {
       sync = {
         serverChecked: Boolean(item.checked),
+        serverShoppingStoreId: currentShoppingStoreId(item) || null,
         desiredChecked: Boolean(item.checked),
+        desiredShoppingStoreId: currentShoppingStoreId(item) || null,
         processing: false
       };
       checkSync.current.set(item._id, sync);
     }
     sync.desiredChecked = checked;
-    updateCheckedCache(item._id, checked);
+    sync.desiredShoppingStoreId = shoppingStoreId;
+    updateCheckedCache(item._id, checked, shoppingStoreId);
 
     if (checked && !activeStoreId) {
-      setActiveStoreId(plannedStoreId(item) || usualStoreId(items) || null);
+      setActiveStoreId(shoppingStoreId);
     } else if (!checked && checkedItems.length === 1 && checkedItems[0]?._id === item._id) {
       setActiveStoreId(null);
     }
@@ -303,13 +344,8 @@ export function ShoppingListPage() {
   const threshold = Number(context?.savingsThreshold || 0);
   const showStoreSuggestion = Boolean(context?.additionalStore?.name && savings >= threshold);
 
-  const openShoppingTool = (action: 'review-low-stock' | 'scan-list-item') => {
-    if (action === 'review-low-stock') {
-      void requestNavigation(() => navigate('/app/pantry'));
-      return;
-    }
-    const params = new URLSearchParams({ tab: 'list', action });
-    window.location.assign(`/app?${params.toString()}`);
+  const reviewLowStock = () => {
+    void requestNavigation(() => navigate('/app/pantry'));
   };
 
   return (
@@ -330,12 +366,23 @@ export function ShoppingListPage() {
         </aside>
       )}
 
+      {fromPlan && (
+        <aside className="react-list-store-suggestion react-list-plan-return">
+          <strong>Adding a need from Plan</strong>
+          <span>{planDetailName ? `${planDetailName} is prefilled with quantity ${planDetailQuantity}. ` : ''}Your exact day, meal, and household group are preserved.</span>
+          <button type="button" className="shell-button shell-button-secondary" onClick={() => navigate('/app/plan')}>Back to Plan</button>
+        </aside>
+      )}
+
       {!online && <div className="react-list-offline" role="status">Offline · check-offs and simple List changes will sync when you reconnect.</div>}
 
       <RapidCapture
         items={items}
         online={online}
+        storeId={activeStoreId}
         onListChanged={handleListChanged}
+        initialDetail={initialPlanDetail}
+        onInitialDetailResolved={() => navigate('/app/list?from=plan', { replace: true })}
       />
 
       <div className="react-list-toolbar">
@@ -361,9 +408,8 @@ export function ShoppingListPage() {
         <details className="react-list-more-tools">
           <summary>More shopping tools</summary>
           <div>
-            <button type="button" onClick={() => openShoppingTool('review-low-stock')}>Review low stock</button>
-            <button type="button" onClick={() => openShoppingTool('scan-list-item')}>Scan item</button>
-            <small>Low-stock review opens React Pantry. Scanner support remains on the compatibility screen until its migration work is complete.</small>
+            <button type="button" onClick={reviewLowStock}>Review low stock</button>
+            <small>Barcode scanning is available directly with Add groceries so the primary capture tools stay together.</small>
           </div>
         </details>
       </div>
@@ -402,36 +448,57 @@ export function ShoppingListPage() {
                 <h2>{groupName === 'Any store' ? 'No store preference' : `Suggested: ${groupName}`}</h2>
                 <span>{groupItems.length} item{groupItems.length === 1 ? '' : 's'}</span>
               </div>
-              {groupItems.map(item => {
-                const product = productFor(item);
-                return (
-                  <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
-                    <button
-                      type="button"
-                      className="list-item-check-wrap react-list-check"
-                      aria-label={`${item.checked ? 'Uncheck' : 'Mark as purchased'} ${productName(item)}`}
-                      aria-pressed={item.checked}
-                      onClick={() => void handleCheck(item, !item.checked)}
-                    >
-                      <span className={`react-list-checkbox ${item.checked ? 'checked' : ''}`} aria-hidden="true">{item.checked ? '✓' : ''}</span>
-                    </button>
-                    <div className="react-list-item-body">
-                      <h3>{productName(item)}</h3>
-                      <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'} · qty {item.quantity}</p>
-                      <button
-                        type="button"
-                        className="react-list-store-preference"
-                        aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
-                        onClick={() => setStorePreferenceItem(item)}
-                      >
-                        Store: {explicitStoreName(item)}
-                      </button>
-                      {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
-                    </div>
-                    <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
-                  </article>
-                );
-              })}
+              {storeSections.group(groupItems).map(([sectionName, sectionItems]) => (
+                <div className="react-list-section-group" data-section={sectionName} key={sectionName}>
+                  <div className="react-list-section-heading">
+                    <h3>{sectionName}</h3>
+                    <span>{sectionItems.length}</span>
+                  </div>
+                  {sectionItems.map(item => {
+                    const product = productFor(item);
+                    return (
+                      <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
+                        <button
+                          type="button"
+                          className="list-item-check-wrap react-list-check"
+                          aria-label={`${item.checked ? 'Uncheck' : 'Mark as purchased'} ${productName(item)}`}
+                          aria-pressed={item.checked}
+                          onClick={() => void handleCheck(item, !item.checked)}
+                        >
+                          <span className={`react-list-checkbox ${item.checked ? 'checked' : ''}`} aria-hidden="true">{item.checked ? '✓' : ''}</span>
+                        </button>
+                        <div className="react-list-item-body">
+                          <h3>{productName(item)}</h3>
+                          <p>{[product?.brand, product?.category].filter(Boolean).join(' · ') || 'Grocery'}</p>
+                          <ListItemContextControls item={item} online={online} />
+                          <div className="react-list-store-line">
+                            <button
+                              type="button"
+                              className="react-list-store-preference"
+                              aria-label={`Store preference for ${productName(item)}: ${explicitStoreName(item)}`}
+                              onClick={() => setStorePreferenceItem(item)}
+                            >
+                              Store: {explicitStoreName(item)}
+                            </button>
+                            {item.checked && currentShoppingStoreId(item) && (
+                              <small>Current trip: {storeName(items, currentShoppingStoreId(item)) || 'selected store'}</small>
+                            )}
+                          </div>
+                          <StoreSectionControl
+                            item={item}
+                            currentSection={storeSections.sectionFor(item)}
+                            suggestions={storeSections.suggestions}
+                          />
+                          <div className="react-list-price-line">
+                            {item.checked ? checkout.priceDecisionFor(item) : <small>{householdPrice(item)}</small>}
+                          </div>
+                        </div>
+                        <button type="button" className="react-list-remove" aria-label={`Remove ${productName(item)} from the list`} onClick={() => void removeItem(item)}>✕</button>
+                      </article>
+                    );
+                  })}
+                </div>
+              ))}
             </section>
           ))}
         </div>

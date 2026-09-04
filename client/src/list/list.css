@@ -59,6 +59,7 @@
   align-items: flex-end;
   gap: 0.75rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .react-list-controls label {
@@ -71,7 +72,11 @@
 }
 
 .react-list-controls select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   min-height: 44px;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   background: var(--surface);
@@ -417,11 +422,13 @@
 
   .react-list-controls {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .react-list-controls label {
     min-width: 0;
+    max-width: 100%;
   }
 
   .react-list-clear-filter {

@@ -43,7 +43,10 @@ const householdSchema = new mongoose.Schema({
     strictPriceReview: { type: Boolean, default: false },
     usualStoreId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', default: null },
     additionalStopSavingsThreshold: { type: Number, min: 0, default: 10 },
-    priceFreshnessDays: { type: Number, min: 1, max: 365, default: 30 }
+    priceFreshnessDays: { type: Number, min: 1, max: 365, default: 30 },
+    // Captured from an authenticated household client. This becomes the
+    // durable boundary for meal reconciliation, rather than server-local time.
+    timeZone: { type: String, trim: true, default: null }
   },
   // Null for households that predate action-based onboarding. A new household
   // opts into this durable state only when the React client consumes the

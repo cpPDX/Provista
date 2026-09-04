@@ -14,7 +14,24 @@ async function createItem(cookie, name = 'Section Test Item') {
     .send({ name, category: 'Other', unit: 'each' });
 }
 
-describe('PUT /api/item-sections/:id', () => {
+describe('item store sections', () => {
+  it('returns familiar defaults plus reusable household custom sections', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const item = await createItem(cookie);
+
+    const update = await request(app)
+      .put(`/api/item-sections/${item.body._id}`)
+      .set('Cookie', cookie)
+      .send({ storeSection: 'Bulk Foods' });
+    expect(update.status).toBe(200);
+
+    const sections = await request(app).get('/api/item-sections').set('Cookie', cookie);
+    expect(sections.status).toBe(200);
+    expect(sections.body.defaults).toEqual(expect.arrayContaining(['Produce', 'Dairy & Eggs', 'Frozen', 'Other']));
+    expect(sections.body.suggestions).toContain('Bulk Foods');
+    expect(sections.body.saved).toContainEqual({ itemId: item.body._id, storeSection: 'Bulk Foods' });
+  });
+
   it('persists a household store-section correction', async () => {
     const { cookie } = await createOwnerSession(app);
     const item = await createItem(cookie);
@@ -46,16 +63,34 @@ describe('PUT /api/item-sections/:id', () => {
     expect(update.body.storeSection).toBe('Household');
   });
 
-  it('rejects unknown sections instead of guessing', async () => {
+  it('accepts a concise custom section and preserves it verbatim', async () => {
     const { cookie } = await createOwnerSession(app);
     const item = await createItem(cookie);
 
     const update = await request(app)
       .put(`/api/item-sections/${item.body._id}`)
       .set('Cookie', cookie)
-      .send({ storeSection: 'Aisle 12' });
+      .send({ storeSection: 'International Foods' });
 
-    expect(update.status).toBe(400);
+    expect(update.status).toBe(200);
+    expect(update.body.storeSection).toBe('International Foods');
+  });
+
+  it('rejects empty or excessively long sections', async () => {
+    const { cookie } = await createOwnerSession(app);
+    const item = await createItem(cookie);
+
+    const empty = await request(app)
+      .put(`/api/item-sections/${item.body._id}`)
+      .set('Cookie', cookie)
+      .send({ storeSection: '   ' });
+    expect(empty.status).toBe(400);
+
+    const long = await request(app)
+      .put(`/api/item-sections/${item.body._id}`)
+      .set('Cookie', cookie)
+      .send({ storeSection: 'x'.repeat(81) });
+    expect(long.status).toBe(400);
   });
 
   it('cannot update an item from another household', async () => {

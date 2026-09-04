@@ -1,4 +1,4 @@
-const { buildMealAllocationProjection } = require('../../utils/mealAllocations');
+const { buildMealAllocationProjection, safeUnit } = require('../../utils/mealAllocations');
 
 const items = [
   { _id: 'onion', name: 'White Onion', unit: 'each' },
@@ -195,5 +195,20 @@ describe('weekly meal allocation projection', () => {
     expect(result.unresolvedNeeds).toEqual([
       expect.objectContaining({ sourceText: 'Tortillas', quantity: 2, matchStatus: 'ambiguous' })
     ]);
+  });
+
+  it('never exposes numeric-only stored values as display units', () => {
+    expect(safeUnit('1')).toBe('');
+    expect(safeUnit('2.5')).toBe('');
+    expect(safeUnit('each')).toBe('each');
+
+    const result = buildMealAllocationProjection({
+      plan: plan([[meal('Dinner', 'Chicken Breast')]]),
+      items: [{ _id: 'chicken', name: 'Chicken Breast', unit: '1' }],
+      inventoryItems: [{ itemId: 'chicken', trackingMode: 'exact', quantity: 0, unit: '1' }]
+    });
+
+    expect(result.itemSummaries[0]).toMatchObject({ unit: '', shoppingQuantity: 1 });
+    expect(result.mealAllocations[0]).toMatchObject({ unit: '', quantity: 1 });
   });
 });

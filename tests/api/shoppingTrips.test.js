@@ -1,5 +1,7 @@
 const request = require('supertest');
 const app = require('../../server');
+const InventoryEvent = require('../../models/InventoryEvent');
+const InventoryItem = require('../../models/InventoryItem');
 const db = require('../helpers/db');
 const { createOwnerSession } = require('../helpers/auth');
 
@@ -30,6 +32,28 @@ async function createDeferredTrip() {
 }
 
 describe('deferred shopping prices', () => {
+  it('records Pantry replenishment as an attributable inventory event', async () => {
+    const fixture = await createDeferredTrip();
+
+    const inventory = await InventoryItem.findOne({ itemId: fixture.item.body._id }).lean();
+    expect(inventory).toMatchObject({ quantity: 1, stockStatus: 'have' });
+
+    const events = await InventoryEvent.find({ inventoryItemId: inventory._id }).sort({ effectiveAt: 1 }).lean();
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'baseline',
+        absoluteQuantity: 0
+      }),
+      expect.objectContaining({
+        type: 'shopping_replenishment',
+        quantityDelta: 1,
+        sourceType: 'shopping-trip',
+        sourceEntityId: fixture.tripId,
+        sourceIdentity: `shopping-trip:${fixture.tripId}:${fixture.item.body._id}`
+      })
+    ]));
+  });
+
   it('keeps Later items actionable and updates Spend when resolved', async () => {
     const fixture = await createDeferredTrip();
 

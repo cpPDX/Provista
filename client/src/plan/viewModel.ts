@@ -1,6 +1,7 @@
 import type { MealAllocationProjection, MealType, PlanDay, PlanMeal } from './types';
 
 export type PlanningStatus = 'unplanned' | 'partial' | 'planned';
+type StandardMealType = Exclude<MealType, 'special'>;
 
 export interface MealContextStatus {
   meal: PlanMeal;
@@ -14,6 +15,13 @@ export interface DayPlanStatus {
   contextCount: number;
   hasSeparateMeal: boolean;
   shortageCount: number;
+}
+
+export interface PlanningTarget {
+  dayIndex: number;
+  mealType: MealType;
+  rowIndex: number;
+  meal: PlanMeal;
 }
 
 export function mealContexts(day: PlanDay, mealType: MealType): MealContextStatus[] {
@@ -61,4 +69,27 @@ export function nextUnfinishedContext(day: PlanDay, mealType: MealType, afterRow
   return contexts.find(context => context.rowIndex > afterRowIndex && !context.planned)
     || contexts.find(context => !context.planned)
     || null;
+}
+
+export function nextPlanningTarget(
+  days: PlanDay[],
+  enabledMealTypes: MealType[],
+  currentDayIndex: number,
+  currentMealType: MealType
+): PlanningTarget | null {
+  const mealTypes = enabledMealTypes.filter((type): type is StandardMealType => type !== 'special');
+  const currentMealIndex = currentMealType === 'special'
+    ? mealTypes.length - 1
+    : Math.max(0, mealTypes.indexOf(currentMealType));
+
+  for (let dayIndex = currentDayIndex; dayIndex < days.length; dayIndex += 1) {
+    const startMealIndex = dayIndex === currentDayIndex ? currentMealIndex + 1 : 0;
+    for (let mealIndex = startMealIndex; mealIndex < mealTypes.length; mealIndex += 1) {
+      const mealType = mealTypes[mealIndex];
+      const unfinished = mealContexts(days[dayIndex], mealType).find(context => !context.planned);
+      if (unfinished) return { dayIndex, mealType, rowIndex: unfinished.rowIndex, meal: unfinished.meal };
+    }
+  }
+
+  return null;
 }

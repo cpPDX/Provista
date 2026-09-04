@@ -9,12 +9,22 @@ export class ApiError extends Error {
   }
 }
 
+function browserTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const timeZone = browserTimeZone();
   const response = await fetch(path, {
     ...init,
     credentials: 'include',
     headers: {
       Accept: 'application/json',
+      ...(timeZone ? { 'X-Provista-Timezone': timeZone } : {}),
       ...init.headers
     }
   });

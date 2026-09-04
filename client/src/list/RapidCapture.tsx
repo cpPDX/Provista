@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useAuth } from '../auth/AuthProvider';
+import { BarcodeResolverDialog } from '../products/BarcodeResolverDialog';
 import { ProductPickerField } from '../products/ProductPickerField';
+import type { ExternalPriceRefreshResult, ProductPriceContext, ProductRef as CatalogProductRef } from '../products/types';
 import { useToast } from '../shell/ToastProvider';
 import {
   addCatalogAlias,
+  addGeneratedShoppingNeed,
   addShoppingListItem,
   createCatalogProduct,
   matchShoppingText,
@@ -23,7 +27,10 @@ interface ReviewToken {
 interface RapidCaptureProps {
   items: ShoppingListItem[];
   online: boolean;
+  storeId?: string | null;
   onListChanged: () => void | Promise<void>;
+  initialDetail?: { name: string; quantity: number } | null;
+  onInitialDetailResolved?: () => void;
 }
 
 interface AddBatchResult {
@@ -66,10 +73,23 @@ function unresolvedTokens(suggestions: ShoppingMatchSuggestion[]): ReviewToken[]
     }));
 }
 
-export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps) {
+function money(value: number) {
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value);
+}
+
+export function RapidCapture({
+  items,
+  online,
+  storeId = null,
+  onListChanged,
+  initialDetail = null,
+  onInitialDetailResolved
+}: RapidCaptureProps) {
   const { showToast } = useToast();
+  const { session } = useAuth();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const detailNameRef = useRef<HTMLInputElement>(null);
+  const initialDetailRef = useRef('');
   const [text, setText] = useState('');
   const [status, setStatus] = useState<{ message: string; tone?: 'success' | 'warning' }>({ message: '' });
   const [matching, setMatching] = useState(false);
@@ -81,8 +101,23 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
   const [detailUnit, setDetailUnit] = useState('each');
   const [selectedProduct, setSelectedProduct] = useState<ProductRef | null>(null);
   const [detailSaving, setDetailSaving] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
 
   const currentToken = reviewTokens[0] || null;
+  const barcodeEnabled = Boolean(session?.features.barcodeScanning);
+
+  useEffect(() => {
+    if (!initialDetail?.name.trim()) return;
+    const quantity = Math.min(MAX_QUANTITY, Math.max(1, Number(initialDetail.quantity) || 1));
+    const key = `${initialDetail.name.trim()}|${quantity}`;
+    if (initialDetailRef.current === key) return;
+    initialDetailRef.current = key;
+    const token = { name: initialDetail.name.trim(), quantity };
+    setCapture(null);
+    setText(serializeToken(token));
+    setReviewTokens([token]);
+    setStatus({ message: 'Plan sent this need with its quantity. Add only the missing product details.', tone: 'warning' });
+  }, [initialDetail?.name, initialDetail?.quantity]);
 
   useEffect(() => {
     if (!currentToken) return;
@@ -93,6 +128,14 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
     setSelectedProduct(null);
     window.setTimeout(() => detailNameRef.current?.focus(), 0);
   }, [currentToken?.name, currentToken?.quantity]);
+
+  useEffect(() => {
+    const openBarcode = () => {
+      if (barcodeEnabled && online) setBarcodeOpen(true);
+    };
+    window.addEventListener('provista:open-list-barcode', openBarcode);
+    return () => window.removeEventListener('provista:open-list-barcode', openBarcode);
+  }, [barcodeEnabled, online]);
 
   const addProductQuantity = async (product: ProductRef, quantity: number) => {
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY) {
@@ -106,6 +149,22 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
       return updateShoppingListItem(existing._id, { quantity: nextQuantity }, existing);
     }
     return addShoppingListItem(product, quantity);
+  };
+
+  const addPlanRequiredProduct = async (product: ProductRef, quantity: number): Promise<{ queued: boolean }> => {
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY) {
+      throw new Error(`Quantity must be between 1 and ${MAX_QUANTITY}`);
+    }
+
+    const existing = items.find(item => !item.checked && entityId(item.itemId) === product._id);
+    if (existing) {
+      const requiredQuantity = Math.max(Number(existing.requiredQuantity) || 0, quantity);
+      const result = await updateShoppingListItem(existing._id, { requiredQuantity }, existing);
+      return { queued: result.queued };
+    }
+
+    await addGeneratedShoppingNeed(product._id, quantity);
+    return { queued: false };
   };
 
   const addMatchedSuggestions = async (suggestions: ShoppingMatchSuggestion[]): Promise<AddBatchResult> => {
@@ -127,6 +186,42 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
 
     if (addedCount) await onListChanged();
     return { addedCount, queuedCount, failed };
+  };
+
+  const addScannedProduct = async (product: CatalogProductRef) => {
+    try {
+      const result = await addProductQuantity(product, 1);
+      await onListChanged();
+      setStatus({
+        message: result.queued ? `${product.name} added offline and will sync later.` : `${product.name} added from barcode.`,
+        tone: 'success'
+      });
+      showToast(`${product.name} added to List`, { tone: 'success' });
+    } catch (error) {
+      console.error(error);
+      setStatus({ message: error instanceof Error ? error.message : 'Could not add that scanned item.', tone: 'warning' });
+      showToast('Could not add that scanned item.', { tone: 'error' });
+      throw error;
+    }
+  };
+
+  const showScannedPriceContext = (
+    product: CatalogProductRef,
+    context: ProductPriceContext | null,
+    refresh: ExternalPriceRefreshResult | null
+  ) => {
+    if (!refresh) return;
+    if (refresh.status === 'found' && refresh.observation) {
+      const observed = Number(refresh.observation.price ?? refresh.observation.salePrice ?? refresh.observation.regularPrice);
+      if (Number.isFinite(observed)) {
+        showToast(`Observed ${money(observed)}${refresh.store?.name ? ` at ${refresh.store.name}` : ''} · public price`, { durationMs: 4500 });
+        return;
+      }
+    }
+    const paid = context?.householdPrice;
+    if (paid && Number.isFinite(Number(paid.pricePerUnit))) {
+      showToast(`Last paid ${money(Number(paid.pricePerUnit))}${paid.store?.name ? ` at ${paid.store.name}` : ''} for ${product.name}`, { durationMs: 4500 });
+    }
   };
 
   const submitCapture = async (event: FormEvent) => {
@@ -232,7 +327,9 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
         });
       }
 
-      const result = await addProductQuantity(product, detailQuantity);
+      const result = initialDetail
+        ? await addPlanRequiredProduct(product, detailQuantity)
+        : await addProductQuantity(product, detailQuantity);
       await onListChanged();
       if (currentToken.name.trim().toLowerCase() !== product.name.trim().toLowerCase()) {
         void addCatalogAlias(product._id, currentToken.name).catch(error => {
@@ -246,8 +343,10 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
       if (remaining.length) {
         setStatus({ message: `${remaining.length} ${remaining.length === 1 ? 'item still needs' : 'items still need'} details.`, tone: 'warning' });
       } else {
+        setText('');
         setStatus({ message: result.queued ? 'All items added; the last change will sync when you reconnect.' : 'All items added.', tone: 'success' });
         showToast('All groceries added', { tone: 'success' });
+        if (initialDetail) onInitialDetailResolved?.();
         window.setTimeout(() => inputRef.current?.focus(), 0);
       }
     } catch (error) {
@@ -312,6 +411,14 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
             {matching ? 'Matching…' : 'Add to list'}
           </button>
         </div>
+        {barcodeEnabled && (
+          <div className="react-rapid-scan-row">
+            <button type="button" className="shell-button shell-button-secondary" disabled={!online || matching} onClick={() => setBarcodeOpen(true)}>
+              Scan item
+            </button>
+            <span>Fastest for a packaged grocery. Manual UPC entry is always available.</span>
+          </div>
+        )}
         <div className="react-rapid-meta">
           <span id="react-rapid-hint">Type several items at once. Separate with commas; quantities can be natural language or x2.</span>
           <span id="react-rapid-status" role="status" aria-live="polite" data-state={status.tone || ''}>{status.message}</span>
@@ -360,6 +467,16 @@ export function RapidCapture({ items, online, onListChanged }: RapidCaptureProps
           </div>
         )}
       </form>
+
+      {barcodeOpen && (
+        <BarcodeResolverDialog
+          purpose="list"
+          storeId={storeId}
+          onClose={() => setBarcodeOpen(false)}
+          onResolved={addScannedProduct}
+          onPriceContext={showScannedPriceContext}
+        />
+      )}
 
       {currentToken && (
         <div className="react-list-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closeDetails(); }}>

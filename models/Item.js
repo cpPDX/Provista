@@ -11,6 +11,11 @@ const STORE_SECTIONS = [
   'Other'
 ];
 
+function normalizeUnit(value) {
+  const unit = String(value || '').trim();
+  return !unit || /^\d+(?:\.\d+)?$/.test(unit) ? 'each' : unit;
+}
+
 const itemAliasSchema = new mongoose.Schema({
   text: { type: String, required: true, trim: true, maxlength: 120 },
   normalized: { type: String, required: true, trim: true, maxlength: 120 },
@@ -28,16 +33,16 @@ const itemSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   brand: { type: String, trim: true, default: '' },
   category: { type: String, required: true, trim: true },
-  unit: { type: String, required: true, trim: true },
+  unit: { type: String, required: true, trim: true, set: normalizeUnit },
   size: { type: Number, default: null },
   barcode: { type: String, trim: true },
   upc: { type: String, trim: true, default: null },
   upcSource: { type: String, enum: ['scan', 'backfill', 'manual'], default: null },
   upcPendingLookup: { type: Boolean, default: false },
-  // A household-confirmed shopping department. Null means the List may use a
-  // deterministic category mapping, but that inference is never persisted as
-  // if the user confirmed it.
-  storeSection: { type: String, enum: STORE_SECTIONS, default: null },
+  // A household-confirmed shopping department. The familiar STORE_SECTIONS
+  // remain suggestions, not a closed taxonomy: households can use a concise
+  // custom label that matches the way their stores are organized.
+  storeSection: { type: String, trim: true, maxlength: 80, default: null },
   // Provider-specific product identifiers. UPC remains the preferred shared
   // identifier, but providers can cache their own IDs here when needed.
   externalIds: { type: Map, of: String, default: {} },
@@ -58,3 +63,4 @@ itemSchema.index({ householdId: 1, 'aliases.normalized': 1 });
 
 module.exports = mongoose.model('Item', itemSchema);
 module.exports.STORE_SECTIONS = STORE_SECTIONS;
+module.exports.normalizeUnit = normalizeUnit;

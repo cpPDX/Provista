@@ -21,6 +21,11 @@ function itemId(value) {
   return String(value?._id || value || '');
 }
 
+function safeUnit(value) {
+  const unit = String(value || '').trim();
+  return unit && !/^\d+(?:\.\d+)?$/.test(unit) ? unit : '';
+}
+
 function effectiveTrackingMode(inventory) {
   if (!inventory) return null;
   if (inventory.trackingMode === 'exact' || inventory.lowStockThreshold != null) return 'exact';
@@ -51,6 +56,7 @@ function flattenMeals(plan) {
     for (const [mealIndex, meal] of (day?.meals || []).entries()) {
       if (!String(meal?.notes || '').trim()) continue;
       meals.push({
+        instanceId: String(meal?.instanceId || '').trim() || null,
         date,
         dateKey: date.toISOString().slice(0, 10),
         dayIndex,
@@ -77,6 +83,7 @@ function resolveMealNeeds(meal, items, usageByItemId) {
     const match = matchCatalogItem(parsed, items, { usageByItemId });
     if (match.matchStatus !== 'matched' || !match.item) {
       unresolved.push({
+        instanceId: meal.instanceId,
         date: meal.dateKey,
         dayIndex: meal.dayIndex,
         mealIndex: meal.mealIndex,
@@ -192,7 +199,7 @@ function itemSummary(state) {
   return {
     itemId: itemId(state.item),
     name: state.item.name,
-    unit: state.inventory?.unit || state.item.unit || '',
+    unit: safeUnit(state.inventory?.unit) || safeUnit(state.item.unit),
     trackingMode: state.mode,
     pantryStatus: state.pantryStatus,
     onHandQuantity: state.onHandQuantity,
@@ -213,7 +220,8 @@ function buildMealAllocationProjection({
   items = [],
   inventoryItems = [],
   listItems = [],
-  usageByItemId = new Map()
+  usageByItemId = new Map(),
+  notBeforeDateKey = null
 }) {
   const inventoryByItemId = new Map(inventoryItems.map(entry => [itemId(entry.itemId), entry]));
   const listQuantities = aggregateListQuantities(listItems);
@@ -222,6 +230,7 @@ function buildMealAllocationProjection({
   const unresolvedNeeds = [];
 
   for (const meal of flattenMeals(plan)) {
+    if (notBeforeDateKey && meal.dateKey < notBeforeDateKey) continue;
     const resolved = resolveMealNeeds(meal, items, usageByItemId);
     unresolvedNeeds.push(...resolved.unresolved);
 
@@ -237,6 +246,7 @@ function buildMealAllocationProjection({
         ? simpleAllocation(state, need.quantity)
         : exactAllocation(state, need.quantity);
       mealAllocations.push({
+        instanceId: meal.instanceId,
         date: meal.dateKey,
         dayIndex: meal.dayIndex,
         mealIndex: meal.mealIndex,
@@ -244,7 +254,7 @@ function buildMealAllocationProjection({
         mealName: meal.mealName,
         itemId: id,
         name: need.item.name,
-        unit: state.inventory?.unit || need.item.unit || '',
+        unit: safeUnit(state.inventory?.unit) || safeUnit(need.item.unit),
         sourceTexts: need.sourceTexts,
         quantity: need.quantity,
         trackingMode: state.mode,
@@ -276,5 +286,6 @@ module.exports = {
   buildMealAllocationProjection,
   effectiveTrackingMode,
   flattenMeals,
-  roundQuantity
+  roundQuantity,
+  safeUnit
 };

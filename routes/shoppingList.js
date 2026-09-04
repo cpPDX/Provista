@@ -20,12 +20,20 @@ function roundCurrency(value) {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+function parseQuantity(value, label, { allowZero = false } = {}) {
+  const quantity = Number(value);
+  const valid = Number.isFinite(quantity) && quantity <= 99 && (allowZero ? quantity >= 0 : quantity > 0);
+  if (!valid) throw new Error(`${label} must be ${allowZero ? 'zero or more' : 'greater than 0'} and no more than 99`);
+  return quantity;
+}
+
 // GET /api/shopping-list - list with price context
 router.get('/', requireAuth, async (req, res) => {
   try {
     const listItems = await ShoppingListItem.find({ householdId: req.user.householdId })
       .populate('itemId', 'name brand category unit size isOrganic')
       .populate('storeId', 'name')
+      .populate('shoppingStoreId', 'name')
       .populate('addedBy', 'name')
       .sort({ checked: 1, addedAt: -1 })
       .lean();
@@ -119,6 +127,18 @@ router.get('/', requireAuth, async (req, res) => {
 
     const enriched = listItems.map(listItem => {
       const obj = { ...listItem };
+      const intendedPurchaseQuantity = Number(listItem.quantity) || 1;
+      const requiredQuantity = listItem.requiredQuantity == null ? null : Math.max(0, Number(listItem.requiredQuantity) || 0);
+      obj.intendedPurchaseQuantity = intendedPurchaseQuantity;
+      obj.requiredQuantity = requiredQuantity;
+      obj.quantitySource = listItem.quantitySource === 'system' ? 'system' : 'user';
+      obj.actualPurchasedQuantity = listItem.actualPurchasedQuantity == null
+        ? (listItem.checked ? intendedPurchaseQuantity : null)
+        : Number(listItem.actualPurchasedQuantity);
+      obj.remainingRequiredQuantity = requiredQuantity == null
+        ? 0
+        : Math.max(0, requiredQuantity - intendedPurchaseQuantity);
+
       if (!listItem.itemId) return obj;
       const itemKey = String(listItem.itemId._id);
       const context = priceContextByItem.get(itemKey) || {
@@ -157,8 +177,9 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/shopping-list/from-meal - add reviewed meal-note matches in one
-// household-scoped batch, skipping anything already on the list.
+// POST /api/shopping-list/from-meal - add reviewed system needs in one
+// household-scoped batch. Existing List items absorb the requirement without
+// overwriting a parent's explicit intended-purchase quantity.
 router.post('/from-meal', requireAuth, async (req, res) => {
   try {
     if (!Array.isArray(req.body.items) || req.body.items.length === 0) {
@@ -171,11 +192,13 @@ router.post('/from-meal', requireAuth, async (req, res) => {
     const requestedById = new Map();
     for (const entry of req.body.items) {
       const itemId = String(entry?.itemId || '');
-      const quantity = Number(entry?.quantity ?? 1);
-      if (!mongoose.isValidObjectId(itemId)) return res.status(400).json({ error: 'Each itemId must be valid' });
-      if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 99) {
-        return res.status(400).json({ error: 'Each quantity must be greater than 0 and no more than 99' });
+      let quantity;
+      try {
+        quantity = parseQuantity(entry?.quantity ?? 1, 'Each quantity');
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
       }
+      if (!mongoose.isValidObjectId(itemId)) return res.status(400).json({ error: 'Each itemId must be valid' });
       const existing = requestedById.get(itemId);
       requestedById.set(itemId, Math.max(existing || 0, quantity));
     }
@@ -192,28 +215,59 @@ router.post('/from-meal', requireAuth, async (req, res) => {
     const existingListItems = await ShoppingListItem.find({
       householdId,
       itemId: { $in: itemIds }
-    }).select('itemId').lean();
-    const existingIds = new Set(existingListItems.map(entry => String(entry.itemId)));
+    }).select('itemId quantity requiredQuantity quantitySource checked').lean();
+    const existingById = new Map(existingListItems.map(entry => [String(entry.itemId), entry]));
+    const existingIds = new Set(existingById.keys());
     const now = new Date();
     const documents = itemIds
       .filter(itemId => !existingIds.has(itemId))
-      .map(itemId => ({
-        householdId,
-        itemId,
-        quantity: requestedById.get(itemId),
-        addedBy: req.user._id,
-        addedAt: now
-      }));
+      .map(itemId => {
+        const quantity = requestedById.get(itemId);
+        return {
+          householdId,
+          itemId,
+          quantity,
+          requiredQuantity: quantity,
+          quantitySource: 'system',
+          actualPurchasedQuantity: null,
+          addedBy: req.user._id,
+          addedAt: now
+        };
+      });
 
     if (documents.length) await ShoppingListItem.insertMany(documents);
+
+    const requirementUpdates = [];
+    for (const [itemId, existing] of existingById) {
+      const requested = requestedById.get(itemId);
+      const previousRequired = existing.requiredQuantity == null ? 0 : Number(existing.requiredQuantity) || 0;
+      const nextRequired = Math.max(previousRequired, requested);
+      const set = { requiredQuantity: nextRequired };
+      if (existing.quantitySource === 'system' && !existing.checked) {
+        set.quantity = Math.max(Number(existing.quantity) || 0, nextRequired);
+      }
+      requirementUpdates.push({
+        updateOne: {
+          filter: { _id: existing._id, householdId },
+          update: { $set: set }
+        }
+      });
+    }
+    if (requirementUpdates.length) {
+      await ShoppingListItem.bulkWrite(requirementUpdates, { ordered: true });
+    }
+
     const catalogById = new Map(catalogItems.map(item => [String(item._id), item]));
     res.status(documents.length ? 201 : 200).json({
       addedCount: documents.length,
       skippedCount: existingIds.size,
+      requirementUpdatedCount: requirementUpdates.length,
       addedItems: documents.map(document => ({
         itemId: String(document.itemId),
         name: catalogById.get(String(document.itemId))?.name,
-        quantity: document.quantity
+        quantity: document.quantity,
+        requiredQuantity: document.requiredQuantity,
+        quantitySource: document.quantitySource
       })),
       skippedItems: [...existingIds].map(itemId => ({
         itemId,
@@ -250,10 +304,7 @@ router.post('/complete', requireAuth, async (req, res) => {
 router.post('/', requireAuth, async (req, res) => {
   try {
     if (!req.body.itemId) return res.status(400).json({ error: 'itemId is required' });
-    const quantity = Number(req.body.quantity ?? 1);
-    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 99) {
-      return res.status(400).json({ error: 'quantity must be greater than 0 and no more than 99' });
-    }
+    const quantity = parseQuantity(req.body.quantity ?? 1, 'quantity');
     const itemExists = await Item.exists({ _id: req.body.itemId, householdId: req.user.householdId });
     if (!itemExists) return res.status(404).json({ error: 'Item not found in this household' });
     const storeId = req.body.storeId || null;
@@ -264,7 +315,11 @@ router.post('/', requireAuth, async (req, res) => {
       householdId: req.user.householdId,
       itemId: req.body.itemId,
       quantity,
+      requiredQuantity: null,
+      quantitySource: 'user',
+      actualPurchasedQuantity: null,
       storeId,
+      shoppingStoreId: null,
       addedBy: req.user._id,
       addedAt: new Date()
     });
@@ -279,15 +334,47 @@ router.post('/', requireAuth, async (req, res) => {
 // PUT /api/shopping-list/:id - update (all roles)
 router.put('/:id', requireAuth, async (req, res) => {
   try {
+    const current = await ShoppingListItem.findOne({
+      _id: req.params.id,
+      householdId: req.user.householdId
+    });
+    if (!current) return res.status(404).json({ error: 'Item not found' });
+
     const update = {};
-    if (req.body.checked !== undefined) update.checked = Boolean(req.body.checked);
-    if (req.body.quantity !== undefined) {
-      const quantity = Number(req.body.quantity);
-      if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 99) {
-        return res.status(400).json({ error: 'quantity must be greater than 0 and no more than 99' });
-      }
+    const nextChecked = req.body.checked !== undefined ? Boolean(req.body.checked) : Boolean(current.checked);
+
+    if (req.body.quantity !== undefined || req.body.intendedPurchaseQuantity !== undefined) {
+      const quantity = parseQuantity(
+        req.body.intendedPurchaseQuantity !== undefined ? req.body.intendedPurchaseQuantity : req.body.quantity,
+        'quantity'
+      );
       update.quantity = quantity;
+      update.quantitySource = 'user';
     }
+
+    if (req.body.requiredQuantity !== undefined) {
+      update.requiredQuantity = req.body.requiredQuantity === null
+        ? null
+        : parseQuantity(req.body.requiredQuantity, 'requiredQuantity', { allowZero: true });
+    }
+
+    if (req.body.checked !== undefined) {
+      update.checked = nextChecked;
+      if (!nextChecked) {
+        update.actualPurchasedQuantity = null;
+        update.shoppingStoreId = null;
+      } else if (current.actualPurchasedQuantity == null && req.body.actualPurchasedQuantity === undefined) {
+        update.actualPurchasedQuantity = (update.quantity ?? Number(current.quantity)) || 1;
+      }
+    }
+
+    if (req.body.actualPurchasedQuantity !== undefined) {
+      if (!nextChecked) {
+        return res.status(400).json({ error: 'actualPurchasedQuantity can only be set for a checked item' });
+      }
+      update.actualPurchasedQuantity = parseQuantity(req.body.actualPurchasedQuantity, 'actualPurchasedQuantity');
+    }
+
     if (req.body.storeId !== undefined) {
       const storeId = req.body.storeId || null;
       if (storeId && !(await Store.exists({ _id: storeId, householdId: req.user.householdId }))) {
@@ -295,13 +382,27 @@ router.put('/:id', requireAuth, async (req, res) => {
       }
       update.storeId = storeId;
     }
+
+    if (req.body.shoppingStoreId !== undefined) {
+      const shoppingStoreId = req.body.shoppingStoreId || null;
+      if (shoppingStoreId && !(await Store.exists({ _id: shoppingStoreId, householdId: req.user.householdId }))) {
+        return res.status(404).json({ error: 'Shopping store not found in this household' });
+      }
+      if (!nextChecked && shoppingStoreId) {
+        return res.status(400).json({ error: 'shoppingStoreId can only be set for a checked item' });
+      }
+      update.shoppingStoreId = shoppingStoreId;
+    }
+
     if (!Object.keys(update).length) return res.status(400).json({ error: 'Nothing to update' });
     const item = await ShoppingListItem.findOneAndUpdate(
       { _id: req.params.id, householdId: req.user.householdId },
       { $set: update },
       { new: true, runValidators: true }
-    ).populate('itemId', 'name brand category unit size isOrganic');
-    if (!item) return res.status(404).json({ error: 'Item not found' });
+    )
+      .populate('itemId', 'name brand category unit size isOrganic')
+      .populate('storeId', 'name')
+      .populate('shoppingStoreId', 'name');
     res.json(item);
   } catch (err) {
     res.status(400).json({ error: err.message });

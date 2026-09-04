@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useOnlineStatus } from '../app/useOnlineStatus';
 import { useAuth } from '../auth/AuthProvider';
+import { BarcodeResolverDialog } from '../products/BarcodeResolverDialog';
+import type { ExternalPriceRefreshResult, ProductPriceContext, ProductRef } from '../products/types';
 import { useConfirm } from '../shell/DialogProvider';
 import { useToast } from '../shell/ToastProvider';
 import { deletePantryItem, loadPantry, updatePantryItem } from './api';
@@ -38,7 +40,7 @@ interface QuantitySync {
 }
 
 type DialogState =
-  | { mode: 'add'; prefill: string }
+  | { mode: 'add'; prefill: string; product?: ProductRef | null }
   | { mode: 'edit'; itemId: string }
   | null;
 
@@ -56,17 +58,23 @@ function exactSummary(item: PantryItem) {
   return `${quantityText} · Provista marks low at ${item.lowStockThreshold}${unit ? ` ${unit}` : ''}`;
 }
 
+function money(value: number) {
+  return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value);
+}
+
 export function PantryPage() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
   const { showToast } = useToast();
-  const { isAdmin } = useAuth();
+  const { isAdmin, session } = useAuth();
   const online = useOnlineStatus();
   const pantryQuery = useQuery({ queryKey, queryFn: loadPantry });
   const [search, setSearch] = useState('');
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
   const statusSync = useRef(new Map<string, StatusSync>());
   const quantitySync = useRef(new Map<string, QuantitySync>());
+  const barcodeEnabled = Boolean(session?.features.barcodeScanning);
 
   const items = pantryQuery.data || [];
   const visibleItems = useMemo(() => {
@@ -259,6 +267,30 @@ export function PantryPage() {
     showToast(wasAdd ? 'Item is now tracked in Pantry' : 'Pantry tracking updated', { tone: 'success' });
   };
 
+  const beginScannedTracking = async (product: ProductRef) => {
+    setBarcodeOpen(false);
+    setDialog({ mode: 'add', prefill: '', product });
+  };
+
+  const showScannedPriceContext = (
+    product: ProductRef,
+    context: ProductPriceContext | null,
+    refresh: ExternalPriceRefreshResult | null
+  ) => {
+    if (!refresh) return;
+    if (refresh.status === 'found' && refresh.observation) {
+      const observed = Number(refresh.observation.price ?? refresh.observation.salePrice ?? refresh.observation.regularPrice);
+      if (Number.isFinite(observed)) {
+        showToast(`Observed ${money(observed)}${refresh.store?.name ? ` at ${refresh.store.name}` : ''} · public price`, { durationMs: 4500 });
+        return;
+      }
+    }
+    const paid = context?.householdPrice;
+    if (paid && Number.isFinite(Number(paid.pricePerUnit))) {
+      showToast(`Last paid ${money(Number(paid.pricePerUnit))}${paid.store?.name ? ` at ${paid.store.name}` : ''} for ${product.name}`, { durationMs: 4500 });
+    }
+  };
+
   const editingItem = dialog?.mode === 'edit'
     ? items.find(item => item._id === dialog.itemId) || null
     : null;
@@ -271,9 +303,16 @@ export function PantryPage() {
           <h1 id="pantry-react-title">Pantry</h1>
           <p id="pantry-page-help">Mark staples Running low or Out and Provista will surface them on Home and in List review.</p>
         </div>
-        <button id="btn-add-inventory" type="button" className="shell-button shell-button-primary" disabled={!online} onClick={() => setDialog({ mode: 'add', prefill: search.trim() })}>
-          Track item
-        </button>
+        <div className="pantry-heading-actions">
+          {barcodeEnabled && (
+            <button type="button" className="shell-button shell-button-secondary" disabled={!online} onClick={() => setBarcodeOpen(true)}>
+              Scan package
+            </button>
+          )}
+          <button id="btn-add-inventory" type="button" className="shell-button shell-button-primary" disabled={!online} onClick={() => setDialog({ mode: 'add', prefill: search.trim() })}>
+            Track item
+          </button>
+        </div>
       </div>
 
       {!online && (
@@ -321,6 +360,11 @@ export function PantryPage() {
                 <button type="button" className="shell-button shell-button-primary" disabled={!online} onClick={() => setDialog({ mode: 'add', prefill: search.trim() })}>
                   Track “{search.trim()}”
                 </button>
+                {barcodeEnabled && (
+                  <button type="button" className="shell-button shell-button-secondary" disabled={!online} onClick={() => setBarcodeOpen(true)}>
+                    Scan to track
+                  </button>
+                )}
                 <button type="button" className="shell-button shell-button-secondary" onClick={() => setSearch('')}>Clear search</button>
               </div>
             </>
@@ -328,6 +372,11 @@ export function PantryPage() {
             <>
               <strong>Nothing tracked yet.</strong>
               <p>Track staples you want Provista to surface when they’re low.</p>
+              {barcodeEnabled && (
+                <button type="button" className="shell-button shell-button-secondary" disabled={!online} onClick={() => setBarcodeOpen(true)}>
+                  Scan first package
+                </button>
+              )}
             </>
           )}
         </div>
@@ -393,10 +442,20 @@ export function PantryPage() {
         </div>
       )}
 
+      {barcodeOpen && (
+        <BarcodeResolverDialog
+          purpose="pantry"
+          onClose={() => setBarcodeOpen(false)}
+          onResolved={beginScannedTracking}
+          onPriceContext={showScannedPriceContext}
+        />
+      )}
+
       {dialog?.mode === 'add' && (
         <PantryItemDialog
           mode="add"
           prefill={dialog.prefill}
+          initialProduct={dialog.product || null}
           online={online}
           onClose={() => setDialog(null)}
           onSaved={handleSaved}
