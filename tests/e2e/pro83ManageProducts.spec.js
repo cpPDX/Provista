@@ -113,7 +113,7 @@ test.describe('PRO-83 React Manage Products', () => {
     await cleanup.getByLabel('Product to keep').selectOption(target._id);
     await cleanup.getByRole('button', { name: 'Review merge' }).click();
 
-    const confirmation = page.getByRole('dialog', { name: `Merge ${source.name} into ${target.name}?`, exact: true });
+    const confirmation = page.getByRole('alertdialog', { name: `Merge ${source.name} into ${target.name}?`, exact: true });
     await expect(confirmation).toContainText(`Price history, Shopping List entries, and Pantry references will move to ${target.name}`);
     await confirmation.getByRole('button', { name: 'Merge products', exact: true }).click();
 
