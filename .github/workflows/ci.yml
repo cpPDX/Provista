@@ -34,7 +34,7 @@ jobs:
         run: npm ci
 
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=high
+        run: node .github/scripts/audit-production-dependencies.cjs
 
       - name: Build React migration client
         run: npm run client:build
@@ -127,8 +127,10 @@ jobs:
           node --check tests/e2e/pro75ListContext.spec.js
           node --check tests/e2e/pro76Reconciliation.spec.js
           node --check tests/e2e/reactOnboarding.spec.js
+          node --check .github/scripts/audit-production-dependencies.cjs
           node --check .github/scripts/staging-deployment-policy.cjs
           node --check .github/scripts/prepare-staging-deployment.cjs
+          node --check .github/scripts/prepare-production-deployment.cjs
           node --check tests/ci/prepareStagingDeployment.test.js
           node --check tests/ci/stagingDeploymentPolicy.test.js
 
