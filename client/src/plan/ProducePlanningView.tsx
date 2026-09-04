@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createPantryItem, loadPantry } from '../pantry/api';
 import { pantryProduct, pantryProductName, pantryUnit, type PantryItem } from '../pantry/types';
-import { createCatalogProduct, searchCatalog } from '../products/api';
+import { createCatalogProduct, matchCatalogText } from '../products/api';
 import type { ProductRef } from '../products/types';
 import { useToast } from '../shell/ToastProvider';
 import {
@@ -110,14 +110,15 @@ export function ProducePlanningView() {
     setBusy(true);
     setCandidates([]);
     try {
-      const matches = await searchCatalog(requestedName);
-      if (matches.length === 1) {
+      const result = await matchCatalogText(requestedName);
+      const suggestion = result.suggestions[0];
+      if (suggestion?.matchStatus === 'matched' && suggestion.item) {
         setBusy(false);
-        await trackProduct(matches[0]);
+        await trackProduct(suggestion.item);
         return;
       }
-      if (matches.length > 1) {
-        setCandidates(matches.slice(0, 6));
+      if (suggestion?.matchStatus === 'ambiguous' && suggestion.candidates.length) {
+        setCandidates(suggestion.candidates.slice(0, 6));
         return;
       }
 
@@ -130,7 +131,7 @@ export function ProducePlanningView() {
       await trackProduct(created);
     } catch (error) {
       console.error(error);
-      showToast('Could not look up that produce item.', { tone: 'error' });
+      showToast('Could not match that produce item.', { tone: 'error' });
     } finally {
       setBusy(false);
     }
@@ -200,7 +201,7 @@ export function ProducePlanningView() {
         </div>
       </div>
 
-      {candidates.length > 1 && (
+      {candidates.length > 0 && (
         <div className="plan-produce-candidates" role="group" aria-label="Choose matching produce">
           <strong>Which item did you mean?</strong>
           {candidates.map(product => (
