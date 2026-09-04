@@ -6,6 +6,11 @@ const InventoryItem = require('../models/InventoryItem');
 const Item = require('../models/Item');
 const { appendAbsoluteCount, ensureBaselineEvent } = require('../utils/inventoryLedger');
 const { reconcileHouseholdMeals } = require('../utils/mealReconciliation');
+const {
+  reconciliationStatus,
+  reverseMealConsumption,
+  updatePantryFromCurrentMeal
+} = require('../services/mealReconciliationActions');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -78,9 +83,6 @@ async function reconcileForRequest(req) {
     timeZone = reportedTimeZone;
     await Household.findByIdAndUpdate(req.user.householdId, { $set: { 'settings.timeZone': reportedTimeZone } });
   }
-  // Older/offline clients may not have established a household timezone yet.
-  // Do not guess with server time; reconciliation begins once a household-local
-  // timezone has been captured by an authenticated client.
   if (!timeZone) return;
 
   await reconcileHouseholdMeals({ householdId: req.user.householdId, timeZone });
@@ -111,6 +113,43 @@ router.get('/history', requireAuth, async (req, res) => {
     res.json(events);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+router.get('/meal-reconciliation/:mealInstanceId', requireAuth, async (req, res) => {
+  try {
+    res.json(await reconciliationStatus(req.user.householdId, req.params.mealInstanceId));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: serverErr(err) });
+  }
+});
+
+router.post('/meal-reconciliation/:mealInstanceId/reverse', requireAuth, async (req, res) => {
+  try {
+    const result = await reverseMealConsumption({
+      householdId: req.user.householdId,
+      mealInstanceId: req.params.mealInstanceId,
+      createdBy: req.user._id
+    });
+    res.json({ ...result, status: await reconciliationStatus(req.user.householdId, req.params.mealInstanceId) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: serverErr(err) });
+  }
+});
+
+router.post('/meal-reconciliation/:mealInstanceId/update-pantry', requireAuth, async (req, res) => {
+  try {
+    res.json(await updatePantryFromCurrentMeal({
+      householdId: req.user.householdId,
+      mealInstanceId: req.params.mealInstanceId,
+      idempotencyKey: req.body?.idempotencyKey,
+      createdBy: req.user._id
+    }));
+  } catch (err) {
+    res.status(err.status || 500).json({
+      error: serverErr(err),
+      ...(err.unresolved ? { unresolved: err.unresolved } : {})
+    });
   }
 });
 
