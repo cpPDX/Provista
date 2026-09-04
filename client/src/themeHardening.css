@@ -36,3 +36,9 @@
   color: var(--text);
   box-shadow: var(--card-shadow);
 }
+
+@media (max-width: 560px) {
+  .shell-desktop-signout {
+    display: none;
+  }
+}
