@@ -42,9 +42,16 @@
   border-radius: 0.95rem;
   background: var(--surface);
   color: var(--text);
+  text-align: left;
   text-decoration: none;
   box-shadow: 0 1px 2px rgb(16 24 40 / 5%);
   transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+.more-card-button {
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
 }
 
 .more-card:hover {

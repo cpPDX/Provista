@@ -113,6 +113,8 @@ test.describe('React migration shell', () => {
     await createHouseholdSession(page, 'Logout');
 
     await page.goto('/react-preview/');
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/more$/);
     await page.getByRole('button', { name: 'Sign out' }).click();
 
     const dialog = page.getByRole('alertdialog');

@@ -97,7 +97,7 @@ export function AppShell() {
         </div>
         <div className="shell-header-actions">
           <ThemeToggle />
-          <button type="button" className="shell-button shell-button-secondary" onClick={() => void handleLogout()}>
+          <button type="button" className="shell-button shell-button-secondary shell-desktop-signout" onClick={() => void handleLogout()}>
             Sign out
           </button>
         </div>
