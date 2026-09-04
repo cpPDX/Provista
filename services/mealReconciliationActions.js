@@ -7,8 +7,7 @@ const { effectiveTrackingMode } = require('../utils/mealAllocations');
 const {
   correctMealConsumption,
   mealSourceIdentity,
-  resolveMealNeedsForReconciliation,
-  reverseMealConsumption
+  resolveMealNeedsForReconciliation
 } = require('../utils/mealReconciliation');
 
 async function findMealContext(householdId, mealInstanceId) {
@@ -85,6 +84,70 @@ async function reconciliationStatus(householdId, mealInstanceId) {
         reversed: reversedIds.has(String(event._id))
       };
     })
+  };
+}
+
+async function reverseMealConsumption({ householdId, mealInstanceId, createdBy = null }) {
+  const originals = await InventoryEvent.find({
+    householdId,
+    type: 'meal_consumption',
+    'sourceMeta.mealInstanceId': mealInstanceId
+  }).sort({ effectiveAt: 1, recordedAt: 1, _id: 1 });
+  const reversedInventoryIds = new Set();
+  let reversedCount = 0;
+
+  for (const original of originals) {
+    const existing = await InventoryEvent.findOne({
+      householdId,
+      type: 'reversal',
+      reversesEventId: original._id
+    });
+    if (existing) {
+      reversedInventoryIds.add(String(original.inventoryItemId));
+      reversedCount += 1;
+      continue;
+    }
+
+    const [inventory, corrections] = await Promise.all([
+      InventoryItem.findOne({ _id: original.inventoryItemId, householdId }),
+      InventoryEvent.find({
+        householdId,
+        type: 'correction',
+        'sourceMeta.originalEventId': String(original._id)
+      }).lean()
+    ]);
+    if (!inventory) continue;
+
+    const correctedDelta = roundQuantity(
+      (Number(original.quantityDelta) || 0) +
+      corrections.reduce((sum, event) => sum + (Number(event.quantityDelta) || 0), 0)
+    );
+
+    await appendDelta(inventory, 'reversal', -correctedDelta, {
+      // Reverse the meal's complete effective consumption, including any
+      // appended corrections, at the original effective time. Newer physical
+      // counts therefore remain authoritative.
+      effectiveAt: original.effectiveAt,
+      sourceIdentity: `meal-reversal:${original._id}`,
+      sourceType: 'meal-plan-undo',
+      sourceEntityId: original.sourceEntityId,
+      sourceMeta: {
+        mealInstanceId,
+        originalEventId: String(original._id),
+        correctedConsumptionDelta: correctedDelta,
+        reason: 'meal-not-made'
+      },
+      reversesEventId: original._id,
+      createdBy
+    });
+    reversedInventoryIds.add(String(inventory._id));
+    reversedCount += 1;
+  }
+
+  return {
+    mealInstanceId,
+    reversedCount,
+    inventoryItemCount: reversedInventoryIds.size
   };
 }
 
