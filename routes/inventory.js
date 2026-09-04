@@ -4,8 +4,12 @@ const Household = require('../models/Household');
 const InventoryEvent = require('../models/InventoryEvent');
 const InventoryItem = require('../models/InventoryItem');
 const Item = require('../models/Item');
+const MealPlan = require('../models/MealPlan');
+const PriceEntry = require('../models/PriceEntry');
+const ShoppingListItem = require('../models/ShoppingListItem');
 const { appendAbsoluteCount, ensureBaselineEvent } = require('../utils/inventoryLedger');
-const { reconcileHouseholdMeals } = require('../utils/mealReconciliation');
+const { buildMealAllocationProjection } = require('../utils/mealAllocations');
+const { localDateKey, reconcileHouseholdMeals } = require('../utils/mealReconciliation');
 const {
   reconciliationStatus,
   reverseMealConsumption,
@@ -73,19 +77,23 @@ function validTimeZone(value) {
   }
 }
 
-async function reconcileForRequest(req) {
+async function householdTimeZone(req) {
   const household = await Household.findById(req.user.householdId).select('settings.timeZone');
-  if (!household) return;
-
+  if (!household) return null;
   const reportedTimeZone = validTimeZone(req.get('x-provista-timezone'));
   let timeZone = validTimeZone(household.settings?.timeZone);
   if (!timeZone && reportedTimeZone) {
     timeZone = reportedTimeZone;
     await Household.findByIdAndUpdate(req.user.householdId, { $set: { 'settings.timeZone': reportedTimeZone } });
   }
-  if (!timeZone) return;
+  return timeZone;
+}
 
+async function reconcileForRequest(req) {
+  const timeZone = await householdTimeZone(req);
+  if (!timeZone) return null;
   await reconcileHouseholdMeals({ householdId: req.user.householdId, timeZone });
+  return timeZone;
 }
 
 router.get('/low-stock', requireAuth, async (req, res) => {
@@ -113,6 +121,49 @@ router.get('/history', requireAuth, async (req, res) => {
     res.json(events);
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+router.get('/meal-projection', requireAuth, async (req, res) => {
+  try {
+    const { weekStart } = req.query;
+    if (!weekStart) return res.status(400).json({ error: 'weekStart query param required' });
+    const weekStartDate = new Date(`${weekStart}T00:00:00.000Z`);
+    if (Number.isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
+
+    const timeZone = await reconcileForRequest(req);
+    const householdId = req.user.householdId;
+    const [plan, items, listItems, inventoryItems, priceUsage] = await Promise.all([
+      MealPlan.findOne({ householdId, weekStart: weekStartDate }).lean(),
+      Item.find({ householdId }).select('name brand category unit aliases').lean(),
+      ShoppingListItem.find({ householdId, checked: false }).select('itemId quantity checked').lean(),
+      InventoryItem.find({ householdId }).select('itemId quantity trackingMode stockStatus unit lowStockThreshold').lean(),
+      PriceEntry.aggregate([
+        { $match: { householdId } },
+        { $group: { _id: '$itemId', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    const usageByItemId = new Map(priceUsage.map(entry => [String(entry._id), entry.count]));
+    listItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 5);
+    });
+    inventoryItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 3);
+    });
+
+    res.json(buildMealAllocationProjection({
+      plan: plan || { weekStart: weekStartDate, days: [] },
+      items,
+      listItems,
+      inventoryItems,
+      usageByItemId,
+      notBeforeDateKey: timeZone ? localDateKey(new Date(), timeZone) : null
+    }));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: serverErr(err) });
   }
 });
 
