@@ -3,7 +3,7 @@ const InventoryItem = require('../models/InventoryItem');
 const Item = require('../models/Item');
 const MealPlan = require('../models/MealPlan');
 const { appendDelta, roundQuantity } = require('../utils/inventoryLedger');
-const { effectiveTrackingMode, flattenMeals } = require('../utils/mealAllocations');
+const { effectiveTrackingMode } = require('../utils/mealAllocations');
 const {
   correctMealConsumption,
   mealSourceIdentity,
@@ -14,8 +14,26 @@ const {
 async function findMealContext(householdId, mealInstanceId) {
   const plans = await MealPlan.find({ householdId, 'days.meals.instanceId': mealInstanceId });
   for (const plan of plans) {
-    const meal = flattenMeals(plan).find(entry => entry.instanceId === mealInstanceId);
-    if (meal) return { plan, meal };
+    for (const [dayIndex, day] of plan.days.entries()) {
+      const date = new Date(day.date);
+      if (Number.isNaN(date.getTime())) continue;
+      for (const [mealIndex, storedMeal] of day.meals.entries()) {
+        if (String(storedMeal.instanceId || '') !== mealInstanceId) continue;
+        return {
+          plan,
+          meal: {
+            instanceId: mealInstanceId,
+            date,
+            dateKey: date.toISOString().slice(0, 10),
+            dayIndex,
+            mealIndex,
+            mealType: storedMeal.mealType,
+            mealName: String(storedMeal.name || '').trim(),
+            notes: storedMeal.notes || ''
+          }
+        };
+      }
+    }
   }
   return null;
 }
