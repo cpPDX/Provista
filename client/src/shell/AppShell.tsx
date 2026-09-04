@@ -5,7 +5,7 @@ import { HomePage } from '../home/HomePage';
 import '../home/home.css';
 import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
-import { PlanPage } from '../plan/PlanPage';
+import { PlanRoute } from '../plan/PlanRoute';
 import { MorePage } from '../more/MorePage';
 import { ProductCatalogPage } from '../products/ProductCatalogPage';
 import { useConfirm } from './DialogProvider';
@@ -110,7 +110,7 @@ export function AppShell() {
           : currentTab === 'inventory'
             ? <PantryPage />
             : currentTab === 'meal-plan'
-              ? <PlanPage />
+              ? <PlanRoute />
               : currentTab === 'more'
                 ? location.pathname === '/app/more/products'
                   ? <ProductCatalogPage />
