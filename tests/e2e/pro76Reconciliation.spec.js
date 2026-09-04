@@ -47,6 +47,13 @@ async function inventoryQuantity(page, itemId) {
   return Number(entry.quantity);
 }
 
+async function inventoryHistory(page, itemId) {
+  const response = await page.request.get('/api/inventory/history');
+  expect(response.ok()).toBeTruthy();
+  const events = await response.json();
+  return events.filter(event => String(event.itemId?._id || event.itemId) === String(itemId));
+}
+
 test.describe('PRO-76 reconciled Plan workflow', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     await loginAsReactHomeUser(page, baseURL);
@@ -68,6 +75,9 @@ test.describe('PRO-76 reconciled Plan workflow', () => {
     expect(itemResponse.ok()).toBeTruthy();
     const item = await itemResponse.json();
 
+    // This count is recorded now, after the historical meal's effective date.
+    // It is therefore the newer assertion of physical truth and must continue
+    // to win even as historical meal events are reconciled and corrected.
     const pantryResponse = await page.request.post('/api/inventory', {
       data: { itemId: item._id, trackingMode: 'exact', quantity: 4, unit: 'each' }
     });
@@ -95,13 +105,23 @@ test.describe('PRO-76 reconciled Plan workflow', () => {
 
     await page.goto('/app/plan');
     await expect(page.getByText('Pantry already updated from this meal')).toBeVisible();
-    expect(await inventoryQuantity(page, item._id)).toBe(2);
+    expect(await inventoryQuantity(page, item._id)).toBe(4);
+
+    let history = await inventoryHistory(page, item._id);
+    const consumption = history.find(event => event.type === 'meal_consumption' && event.sourceMeta?.mealInstanceId === initialInstanceId);
+    expect(consumption).toBeTruthy();
+    expect(Number(consumption.quantityDelta)).toBe(-2);
 
     const needs = page.getByLabel('Need for this meal');
     await needs.fill(`${itemName} x1`);
     await page.getByRole('button', { name: 'Update Pantry too' }).click();
     await expect(page.getByText('Pantry updated for this meal.')).toBeVisible();
-    expect(await inventoryQuantity(page, item._id)).toBe(3);
+    expect(await inventoryQuantity(page, item._id)).toBe(4);
+
+    history = await inventoryHistory(page, item._id);
+    const correction = history.find(event => event.type === 'correction' && event.sourceMeta?.mealInstanceId === initialInstanceId);
+    expect(correction).toBeTruthy();
+    expect(Number(correction.quantityDelta)).toBe(1);
 
     const savedPlanResponse = await page.request.get(`/api/meal-plan?weekStart=${encodeURIComponent(weekStart)}`);
     expect(savedPlanResponse.ok()).toBeTruthy();
@@ -114,5 +134,10 @@ test.describe('PRO-76 reconciled Plan workflow', () => {
     await confirmation.getByRole('button', { name: 'Restore Pantry' }).click();
     await expect(page.getByText('Pantry restored for this meal')).toBeVisible();
     expect(await inventoryQuantity(page, item._id)).toBe(4);
+
+    history = await inventoryHistory(page, item._id);
+    const reversal = history.find(event => event.type === 'reversal' && String(event.reversesEventId || '') === String(consumption._id));
+    expect(reversal).toBeTruthy();
+    expect(Number(reversal.quantityDelta)).toBe(1);
   });
 });
