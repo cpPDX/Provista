@@ -1,102 +1,547 @@
 @import './checkout.css';
 
-.react-list-page { display: grid; gap: 1rem; padding-bottom: 7.5rem; }
-.react-list-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; }
-.react-list-heading h1 { margin: 0.1rem 0 0.35rem; }
-.react-list-heading p { margin: 0; color: var(--shell-muted, var(--text-muted)); }
-.react-list-eyebrow { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.react-list-page {
+  display: grid;
+  gap: 1rem;
+  padding-bottom: 7.5rem;
+}
+
+.react-list-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.react-list-heading h1 {
+  margin: 0.1rem 0 0.35rem;
+}
+
+.react-list-heading p {
+  margin: 0;
+  color: var(--shell-muted, var(--text-muted));
+}
+
+.react-list-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .react-list-offline,
 .react-list-store-suggestion,
-.react-list-state { border: 1px solid rgba(33, 171, 205, 0.22); border-radius: 1rem; background: var(--surface); padding: 1rem; }
-.react-list-offline { background: var(--warning-bg); border-color: var(--warning-border); font-weight: 700; }
-.react-list-store-suggestion { display: grid; gap: 0.25rem; }
+.react-list-state {
+  border: 1px solid rgba(33, 171, 205, 0.22);
+  border-radius: 1rem;
+  background: var(--surface);
+  padding: 1rem;
+}
+
+.react-list-offline {
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
+  font-weight: 700;
+}
+
+.react-list-store-suggestion {
+  display: grid;
+  gap: 0.25rem;
+}
+
 .react-list-store-suggestion small,
-.react-list-state span { color: var(--text-muted); }
-.react-list-controls { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; min-width: 0; }
-.react-list-controls label { display: grid; gap: 0.3rem; min-width: 10rem; font-size: 0.78rem; font-weight: 700; color: var(--text-muted); }
-.react-list-controls select { width: 100%; min-width: 0; max-width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--surface); padding: 0 0.75rem; font: inherit; color: var(--text); }
-.react-list-clear-filter { min-height: 44px; border: 0; background: transparent; color: var(--accent-strong); font-weight: 800; }
-.react-list-state { display: grid; justify-items: start; gap: 0.65rem; }
-.react-list-groups { display: grid; gap: 1rem; }
-.react-list-group { display: grid; gap: 0.55rem; }
-.react-list-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; color: var(--text-muted); }
-.react-list-group-heading h2 { margin: 0; font-size: 0.95rem; }
-.react-list-group-heading span { font-size: 0.8rem; font-weight: 700; }
+.react-list-state span {
+  color: var(--text-muted);
+}
 
-.react-list-item { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 0.45rem; min-width: 0; border: 1px solid var(--border); border-radius: 0.85rem; background: var(--surface); padding: 0.4rem 0.5rem; transition: opacity 120ms ease, background 120ms ease; }
-.react-list-item.checked { background: var(--accent-subtle); }
-.react-list-item.checked .react-list-item-open strong { text-decoration: line-through; color: var(--text-muted); }
+.react-list-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.react-list-controls label {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 10rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.react-list-controls select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  padding: 0 0.75rem;
+  font: inherit;
+  color: var(--text);
+}
+
+.react-list-clear-filter {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.react-list-state {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+}
+
+.react-list-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.react-list-group {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.react-list-group-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-muted);
+}
+
+.react-list-group-heading h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.react-list-group-heading span {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.react-list-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: var(--surface);
+  padding: 0.4rem 0.5rem;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+
+.react-list-item.checked {
+  background: var(--accent-subtle);
+}
+
+.react-list-item.checked .react-list-item-open strong {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
 .react-list-check,
-.react-list-quantity-edit { min-width: 44px; min-height: 44px; border: 0; background: transparent; display: grid; place-items: center; }
-.react-list-checkbox { width: 28px; height: 28px; display: grid; place-items: center; border: 2px solid var(--border-strong); border-radius: 50%; font-weight: 900; }
-.react-list-checkbox.checked { border-color: var(--accent-strong); background: var(--accent-strong); color: #fff; }
-.react-list-item-body { min-width: 0; }
-.react-list-item-open { width: 100%; min-height: 48px; display: grid; align-content: center; gap: 0.08rem; border: 0; background: transparent; padding: 0.15rem 0; color: inherit; text-align: left; font: inherit; cursor: pointer; }
-.react-list-item-open strong { min-width: 0; overflow-wrap: anywhere; font-size: 1rem; }
+.react-list-quantity-edit {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+}
+
+.react-list-checkbox {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  font-weight: 900;
+}
+
+.react-list-checkbox.checked {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: #fff;
+}
+
+.react-list-item-body {
+  min-width: 0;
+}
+
+.react-list-item-open {
+  width: 100%;
+  min-height: 48px;
+  display: grid;
+  align-content: center;
+  gap: 0.08rem;
+  border: 0;
+  background: transparent;
+  padding: 0.15rem 0;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.react-list-item-open strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
 .react-list-item-open span,
-.react-list-item-open small { color: var(--text-muted); }
-.react-list-item-open span { font-size: 0.82rem; font-weight: 700; }
-.react-list-item-open small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.76rem; }
-.react-list-quantity-edit { border-radius: 0.65rem; background: var(--surface-subtle); color: var(--text); font: inherit; font-weight: 800; cursor: pointer; }
-.react-list-quantity-edit::before { content: '×'; margin-right: 1px; color: var(--text-muted); font-weight: 600; }
+.react-list-item-open small {
+  color: var(--text-muted);
+}
 
-.react-list-cart { position: fixed; z-index: 20; left: max(0.75rem, env(safe-area-inset-left)); right: max(0.75rem, env(safe-area-inset-right)); bottom: calc(4.8rem + env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: space-between; gap: 1rem; max-width: 760px; margin: 0 auto; border: 1px solid rgba(33, 171, 205, 0.32); border-radius: 1rem; background: rgba(255, 255, 255, 0.98); box-shadow: 0 12px 30px rgba(16, 24, 40, 0.18); padding: 0.75rem; }
-.react-list-cart > div { display: grid; gap: 0.15rem; }
-.react-list-cart span { font-size: 0.78rem; color: var(--text-muted); }
+.react-list-item-open span {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
 
-.react-rapid-capture { display: grid; gap: 0.55rem; border: 1px solid rgba(33, 171, 205, 0.25); border-radius: 1rem; background: var(--surface); padding: 0.9rem; }
-.react-rapid-capture > label { font-weight: 800; }
-.react-rapid-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.65rem; align-items: stretch; }
+.react-list-item-open small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+}
+
+.react-list-quantity-edit {
+  border-radius: 0.65rem;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.react-list-quantity-edit::before {
+  content: '×';
+  margin-right: 1px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.react-list-cart {
+  position: fixed;
+  z-index: 20;
+  left: max(0.75rem, env(safe-area-inset-left));
+  right: max(0.75rem, env(safe-area-inset-right));
+  bottom: calc(4.8rem + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 760px;
+  margin: 0 auto;
+  border: 1px solid rgba(33, 171, 205, 0.32);
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.18);
+  padding: 0.75rem;
+}
+
+.react-list-cart > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.react-list-cart span {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.react-rapid-capture {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid rgba(33, 171, 205, 0.25);
+  border-radius: 1rem;
+  background: var(--surface);
+  padding: 0.9rem;
+}
+
+.react-rapid-capture > label {
+  font-weight: 800;
+}
+
+.react-rapid-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: stretch;
+}
+
 .react-rapid-row textarea,
 .react-list-modal input,
-.react-list-modal select { width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--surface); padding: 0.7rem 0.8rem; color: var(--text); font: inherit; font-size: 16px; }
-.react-rapid-row textarea { min-height: 48px; max-height: 9rem; resize: vertical; }
-.react-rapid-meta { display: grid; gap: 0.25rem; color: var(--text-muted); font-size: 0.8rem; }
-#react-rapid-status[data-state='success'] { color: var(--success); font-weight: 700; }
-#react-rapid-status[data-state='warning'] { color: var(--warning-strong); font-weight: 700; }
-.react-rapid-preview { display: grid; gap: 0.7rem; border-top: 1px solid var(--border); padding-top: 0.75rem; }
-.react-rapid-preview ul { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
-.react-rapid-preview li { display: grid; gap: 0.1rem; border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.65rem 0.75rem; }
-.react-rapid-preview li small { color: var(--text-muted); }
-.react-rapid-preview li.react-rapid-ambiguous,
-.react-rapid-preview li.react-rapid-unmatched { border-color: var(--warning-border); background: var(--warning-bg); }
-.react-rapid-actions,
-.react-list-modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+.react-list-modal select {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  padding: 0.7rem 0.8rem;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
 
-.react-list-modal-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 1rem; background: rgba(16, 24, 40, 0.55); }
-.react-list-modal { width: min(100%, 560px); max-height: min(88vh, 760px); overflow: auto; border-radius: 1rem; background: var(--surface); box-shadow: 0 24px 80px rgba(16, 24, 40, 0.3); padding: 1rem; }
-.react-list-modal form { display: grid; gap: 0.9rem; }
+.react-rapid-row textarea {
+  min-height: 48px;
+  max-height: 9rem;
+  resize: vertical;
+}
+
+.react-rapid-meta {
+  display: grid;
+  gap: 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+#react-rapid-status[data-state='success'] {
+  color: var(--success);
+  font-weight: 700;
+}
+
+#react-rapid-status[data-state='warning'] {
+  color: var(--warning-strong);
+  font-weight: 700;
+}
+
+.react-rapid-preview {
+  display: grid;
+  gap: 0.7rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.react-rapid-preview ul {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.react-rapid-preview li {
+  display: grid;
+  gap: 0.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.react-rapid-preview li small {
+  color: var(--text-muted);
+}
+
+.react-rapid-preview li.react-rapid-ambiguous,
+.react-rapid-preview li.react-rapid-unmatched {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+
+.react-rapid-actions,
+.react-list-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.react-list-modal-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(16, 24, 40, 0.55);
+}
+
+.react-list-modal {
+  width: min(100%, 560px);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+  border-radius: 1rem;
+  background: var(--surface);
+  box-shadow: 0 24px 80px rgba(16, 24, 40, 0.3);
+  padding: 1rem;
+}
+
+.react-list-modal form {
+  display: grid;
+  gap: 0.9rem;
+}
+
 .react-list-modal form > label,
-.react-list-detail-grid label { display: grid; gap: 0.35rem; color: var(--text); font-size: 0.86rem; font-weight: 700; }
-.react-list-modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.react-list-detail-grid label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.react-list-modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .react-list-modal-heading h2,
-.react-list-modal-heading p { margin: 0; }
-.react-list-modal-close { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--text-muted); font-size: 1rem; }
-.react-list-product-options { display: grid; gap: 0.45rem; margin: 0; border: 1px solid var(--border); border-radius: 0.85rem; padding: 0.75rem; }
-.react-list-product-options legend { padding: 0 0.25rem; font-size: 0.85rem; font-weight: 800; }
-.react-list-product-options label { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 0.45rem; min-height: 44px; }
-.react-list-product-options input[type='radio'] { width: 20px; height: 20px; }
-.react-list-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem; }
-.react-list-item-detail { width: min(100%, 520px); }
-.react-list-item-detail-content { display: grid; gap: 0.9rem; margin-top: 0.85rem; }
-.react-list-item-detail-content > p { margin: 0; color: var(--text-muted); }
-.react-list-detail-section { display: grid; gap: 0.5rem; padding-top: 0.8rem; border-top: 1px solid var(--border); }
-.react-list-detail-section h3 { margin: 0; font-size: 0.9rem; }
-.react-list-detail-section small { color: var(--text-muted); }
-.react-list-detail-remove { justify-self: start; }
+.react-list-modal-heading p {
+  margin: 0;
+}
+
+.react-list-modal-close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.react-list-product-options {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  padding: 0.75rem;
+}
+
+.react-list-product-options legend {
+  padding: 0 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.react-list-product-options label {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+}
+
+.react-list-product-options input[type='radio'] {
+  width: 20px;
+  height: 20px;
+}
+
+.react-list-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.react-list-item-detail {
+  width: min(100%, 520px);
+}
+
+.react-list-item-detail-content {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 0.85rem;
+}
+
+.react-list-item-detail-content > p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.react-list-detail-section {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.react-list-detail-section h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.react-list-detail-section small {
+  color: var(--text-muted);
+}
+
+.react-list-detail-remove {
+  justify-self: start;
+}
 
 @media (max-width: 620px) {
-  .react-list-heading { align-items: stretch; flex-direction: column; }
-  .react-list-controls { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .react-list-controls label { min-width: 0; max-width: 100%; }
-  .react-list-clear-filter { grid-column: 1 / -1; justify-self: start; }
-  .react-list-cart { align-items: stretch; flex-direction: column; }
+  .react-list-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .react-list-controls {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .react-list-controls label {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .react-list-clear-filter {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .react-list-cart {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .react-rapid-row,
-  .react-list-detail-grid { grid-template-columns: 1fr; }
+  .react-list-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
   .react-rapid-actions,
-  .react-list-modal-actions { display: grid; grid-template-columns: 1fr; }
-  .react-list-modal { align-self: end; max-height: 92vh; border-radius: 1rem 1rem 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom)); }
-  .react-list-item { grid-template-columns: 44px minmax(0, 1fr) 44px; padding: 0.35rem 0.4rem; }
-  .react-list-item-open small { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
-  .react-list-detail-remove { width: 100%; }
+  .react-list-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .react-list-modal {
+    align-self: end;
+    max-height: 92vh;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .react-list-item {
+    padding: 0.35rem 0.4rem;
+  }
+
+  .react-list-item-open small {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  .react-list-detail-remove {
+    width: 100%;
+  }
 }
