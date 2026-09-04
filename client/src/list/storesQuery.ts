@@ -7,5 +7,6 @@ export const storesQueryOptions = {
   queryKey: storesQueryKey,
   queryFn: loadStores,
   staleTime: storesStaleTimeMs,
-  retry: false
+  retry: false,
+  refetchOnMount: false
 } as const;
