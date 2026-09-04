@@ -168,18 +168,22 @@ export function ShoppingListPage() {
   }, [resolvedDetailItem?._id]);
 
   const handleListChanged = async () => {
+    if (onboardingActive) {
+      try {
+        const next = await completeFirstAction();
+        queryClient.setQueryData(onboardingQueryKey, next);
+        void queryClient.invalidateQueries({ queryKey });
+        void queryClient.invalidateQueries({ queryKey: ['home'], refetchType: 'none' });
+        showToast('Your shopping list has a start. Home is ready.', { tone: 'success', durationMs: 4500 });
+        navigate('/app', { replace: true });
+      } catch (error) {
+        console.info('Onboarding completion is not ready yet:', error);
+      }
+      return;
+    }
+
     await queryClient.invalidateQueries({ queryKey });
     await queryClient.invalidateQueries({ queryKey: ['home'], refetchType: 'none' });
-    if (!onboardingActive) return;
-
-    try {
-      const next = await completeFirstAction();
-      queryClient.setQueryData(onboardingQueryKey, next);
-      showToast('Your shopping list has a start. Home is ready.', { tone: 'success', durationMs: 4500 });
-      navigate('/app', { replace: true });
-    } catch (error) {
-      console.info('Onboarding completion is not ready yet:', error);
-    }
   };
 
   const changeFirstAction = async () => {
