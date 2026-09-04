@@ -7,7 +7,6 @@ import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
 import { PlanPage } from '../plan/PlanPage';
 import { MorePage } from '../more/MorePage';
-import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
 import { NavIcon } from './NavIcon';
 import { ThemeToggle } from './ThemeToggle';
@@ -22,8 +21,7 @@ const navItems = [
 ] as const;
 
 export function AppShell() {
-  const { session, logout } = useAuth();
-  const confirm = useConfirm();
+  const { session } = useAuth();
   const { requestNavigation } = useDirtyState();
   const { showToast } = useToast();
   const location = useLocation();
@@ -69,16 +67,6 @@ export function AppShell() {
     });
   };
 
-  const handleLogout = async () => {
-    const confirmed = await confirm({
-      title: 'Sign out?',
-      message: 'You’ll return to the Provista welcome page. Your household data stays saved.',
-      confirmLabel: 'Sign out',
-      cancelLabel: 'Stay signed in'
-    });
-    if (confirmed) await logout();
-  };
-
   return (
     <div className="shell-app">
       {session.offlineSession && (
@@ -97,9 +85,6 @@ export function AppShell() {
         </div>
         <div className="shell-header-actions">
           <ThemeToggle />
-          <button type="button" className="shell-button shell-button-secondary" onClick={() => void handleLogout()}>
-            Sign out
-          </button>
         </div>
       </header>
 
