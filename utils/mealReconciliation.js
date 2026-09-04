@@ -20,14 +20,12 @@ function localDateKey(now = new Date(), timeZone = 'UTC') {
 }
 
 function mealSourceIdentity({ householdId, planId, meal, itemId }) {
+  const mealIdentity = meal.instanceId || [planId, meal.dateKey, meal.dayIndex, meal.mealIndex].join(':');
   return [
     'meal-consumption',
     `v${RECONCILIATION_VERSION}`,
     householdId,
-    planId,
-    meal.dateKey,
-    meal.dayIndex,
-    meal.mealIndex,
+    mealIdentity,
     itemId
   ].join(':');
 }
@@ -40,6 +38,7 @@ function resolveMealNeedsForReconciliation(meal, items, usageByItemId = new Map(
     const match = matchCatalogItem(parsed, items, { usageByItemId });
     if (match.matchStatus !== 'matched' || !match.item) {
       unresolved.push({
+        instanceId: meal.instanceId,
         date: meal.dateKey,
         dayIndex: meal.dayIndex,
         mealIndex: meal.mealIndex,
@@ -68,22 +67,38 @@ function resolveMealNeedsForReconciliation(meal, items, usageByItemId = new Map(
   return { needs: [...resolved.values()], unresolved };
 }
 
+async function ensurePersistedMealIdentities(plans) {
+  for (const plan of plans) {
+    let changed = false;
+    for (const day of (plan.days || [])) {
+      for (const meal of (day.meals || [])) {
+        if (!String(meal.instanceId || '').trim()) {
+          // The schema default is applied when assigning undefined then validating.
+          meal.instanceId = undefined;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      plan.markModified('days');
+      await plan.save();
+    }
+  }
+}
+
 async function reconcileHouseholdMeals({ householdId, timeZone = 'UTC', now = new Date() }) {
   const today = localDateKey(now, timeZone);
-  const [plans, items, inventoryItems] = await Promise.all([
-    MealPlan.find({ householdId }).sort({ weekStart: 1 }).lean(),
+  const plans = await MealPlan.find({ householdId }).sort({ weekStart: 1 });
+  await ensurePersistedMealIdentities(plans);
+
+  const [items, inventoryItems] = await Promise.all([
     Item.find({ householdId }).select('name brand category unit aliases').lean(),
     InventoryItem.find({ householdId })
   ]);
 
   const inventoryByItemId = new Map(inventoryItems.map(entry => [String(entry.itemId), entry]));
   const usageByItemId = new Map(inventoryItems.map(entry => [String(entry.itemId), 3]));
-  const result = {
-    createdOrReused: 0,
-    simpleUsageRecorded: 0,
-    unresolved: [],
-    skippedUntracked: 0
-  };
+  const result = { createdOrReused: 0, unresolved: [], skippedSimple: 0, skippedUntracked: 0 };
 
   for (const plan of plans) {
     for (const meal of flattenMeals(plan)) {
@@ -105,41 +120,39 @@ async function reconcileHouseholdMeals({ householdId, timeZone = 'UTC', now = ne
           meal,
           itemId
         });
-        const trackingMode = effectiveTrackingMode(inventory);
-        const commonMeta = {
+        const sourceMeta = {
           reconciliationVersion: RECONCILIATION_VERSION,
+          mealInstanceId: meal.instanceId,
           mealDate: meal.dateKey,
           dayIndex: meal.dayIndex,
           mealIndex: meal.mealIndex,
           mealType: meal.mealType,
           mealName: meal.mealName,
-          sourceTexts: need.sourceTexts,
-          trackingMode
+          sourceTexts: need.sourceTexts
         };
 
-        if (trackingMode === 'simple') {
+        if (effectiveTrackingMode(inventory) !== 'exact') {
+          // Retain an idempotent usage/uncertainty signal without making simple
+          // tracking quantitative or changing Have / Running low / Out.
           await appendDelta(inventory, 'meal_consumption', 0, {
-            effectiveAt: new Date(`${meal.dateKey}T12:00:00.000Z`),
+            effectiveAt: new Date(`${meal.dateKey}T00:00:00.000Z`),
             sourceIdentity,
-            sourceType: 'meal-plan',
+            sourceType: 'meal-plan-simple-usage',
             sourceEntityId: String(plan._id),
-            sourceMeta: {
-              ...commonMeta,
-              uncertainQuantity: true,
-              plannedQuantity: need.quantity
-            }
+            sourceMeta: { ...sourceMeta, trackingMode: 'simple', uncertainAfterUse: true }
           });
+          result.skippedSimple += 1;
           result.createdOrReused += 1;
-          result.simpleUsageRecorded += 1;
           continue;
         }
 
         await appendDelta(inventory, 'meal_consumption', -Math.abs(need.quantity), {
-          effectiveAt: new Date(`${meal.dateKey}T12:00:00.000Z`),
+          // Effective date is authoritative; no meal-time assumption is invented.
+          effectiveAt: new Date(`${meal.dateKey}T00:00:00.000Z`),
           sourceIdentity,
           sourceType: 'meal-plan',
           sourceEntityId: String(plan._id),
-          sourceMeta: commonMeta
+          sourceMeta
         });
         result.createdOrReused += 1;
       }
