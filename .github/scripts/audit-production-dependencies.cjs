@@ -4,6 +4,9 @@ const fs = require('node:fs');
 
 const BULK_ADVISORY_URL = 'https://registry.npmjs.org/-/npm/v1/security/advisories/bulk';
 const BLOCKING_SEVERITIES = new Set(['high', 'critical']);
+const BATCH_SIZE = 20;
+const REQUEST_TIMEOUT_MS = 20_000;
+const MAX_ATTEMPTS = 2;
 
 function packageNameFromPath(packagePath, metadata) {
   if (metadata?.name) return metadata.name;
@@ -51,39 +54,67 @@ function blockingAdvisories(report) {
   return findings;
 }
 
+function chunkInventory(inventory, batchSize = BATCH_SIZE) {
+  const entries = Object.entries(inventory);
+  const batches = [];
+  for (let index = 0; index < entries.length; index += batchSize) {
+    batches.push(Object.fromEntries(entries.slice(index, index + batchSize)));
+  }
+  return batches;
+}
+
 async function fetchBulkAdvisories(payload) {
-  const response = await fetch(BULK_ADVISORY_URL, {
-    method: 'POST',
-    headers: {
-      accept: 'application/json',
-      'content-type': 'application/json',
-      'user-agent': `provista-ci node/${process.version}`
-    },
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(60_000)
-  });
+  let lastError;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(BULK_ADVISORY_URL, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+          'user-agent': `provista-ci node/${process.version}`
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      });
 
-  const body = await response.text();
-  if (!response.ok) {
-    throw new Error(`npm Bulk Advisory endpoint returned ${response.status}: ${body.slice(0, 500)}`);
-  }
+      const body = await response.text();
+      if (!response.ok) {
+        throw new Error(`npm Bulk Advisory endpoint returned ${response.status}: ${body.slice(0, 500)}`);
+      }
 
-  try {
-    return JSON.parse(body);
-  } catch (error) {
-    throw new Error(`npm Bulk Advisory endpoint returned invalid JSON: ${error.message}`);
+      try {
+        return JSON.parse(body);
+      } catch (error) {
+        throw new Error(`npm Bulk Advisory endpoint returned invalid JSON: ${error.message}`);
+      }
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(`Bulk Advisory request attempt ${attempt} failed; retrying: ${error.message}`);
+      }
+    }
   }
+  throw lastError;
 }
 
 async function main() {
   const lockfile = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-  const payload = buildProductionInventory(lockfile);
-  const packageCount = Object.keys(payload).length;
+  const inventory = buildProductionInventory(lockfile);
+  const packageCount = Object.keys(inventory).length;
   if (!packageCount) throw new Error('No production dependencies found in package-lock.json');
 
-  console.log(`Auditing ${packageCount} production package names via npm Bulk Advisory API...`);
-  const report = await fetchBulkAdvisories(payload);
-  const findings = blockingAdvisories(report);
+  const batches = chunkInventory(inventory);
+  console.log(
+    `Auditing ${packageCount} production package names via npm Bulk Advisory API in ${batches.length} batch(es)...`
+  );
+
+  const findings = [];
+  for (let index = 0; index < batches.length; index += 1) {
+    console.log(`Auditing batch ${index + 1}/${batches.length} (${Object.keys(batches[index]).length} package names)...`);
+    const report = await fetchBulkAdvisories(batches[index]);
+    findings.push(...blockingAdvisories(report));
+  }
 
   if (!findings.length) {
     console.log('No high or critical production dependency advisories found.');
@@ -109,5 +140,6 @@ if (require.main === module) {
 module.exports = {
   blockingAdvisories,
   buildProductionInventory,
+  chunkInventory,
   packageNameFromPath
 };
