@@ -67,15 +67,20 @@ jobs:
           node --check models/FavoriteMeal.js
           node --check models/Household.js
           node --check models/InventoryItem.js
+          node --check models/InventoryEvent.js
           node --check models/Item.js
+          node --check models/MealPlan.js
           node --check models/PriceObservation.js
           node --check models/ShoppingTrip.js
           node --check models/User.js
           node --check services/completeShoppingTrip.js
+          node --check services/mealReconciliationActions.js
           node --check services/externalPricing/providerRegistry.js
           node --check services/externalPricing/openPricesProvider.js
           node --check services/passwordResetEmail.js
+          node --check utils/inventoryLedger.js
           node --check utils/mealAllocations.js
+          node --check utils/mealReconciliation.js
           node --check utils/mealShopping.js
           node --check routes/barcode.js
           node --check routes/mealPlan.js
@@ -90,10 +95,13 @@ jobs:
           node --check routes/spend.js
           node --check routes/stores.js
           node --check tests/api/externalPrices.test.js
+          node --check tests/api/inventoryLedger.unit.test.js
           node --check tests/api/itemUnit.unit.test.js
           node --check tests/api/mealAllocations.unit.test.js
+          node --check tests/api/mealReconciliationCorrections.test.js
           node --check tests/api/mealShopping.test.js
           node --check tests/api/onboarding.test.js
+          node --check tests/api/pro76Regression.test.js
           node --check tests/api/shoppingQuantityProvenance.test.js
           node --check tests/api/uxBatch1.test.js
           node --check tests/e2e/prices.spec.js
@@ -117,6 +125,7 @@ jobs:
           node --check tests/e2e/pro72Plan.spec.js
           node --check tests/e2e/pro21Barcode.spec.js
           node --check tests/e2e/pro75ListContext.spec.js
+          node --check tests/e2e/pro76Reconciliation.spec.js
           node --check tests/e2e/reactOnboarding.spec.js
           node --check .github/scripts/staging-deployment-policy.cjs
           node --check .github/scripts/prepare-staging-deployment.cjs
@@ -166,4 +175,4 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
 
       - name: Run critical household, latency, onboarding, Plan, and mobile accessibility tests
-        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/household.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js tests/e2e/releaseFeedback.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js tests/e2e/reactPantry.spec.js tests/e2e/reactPlan.spec.js tests/e2e/pro72Plan.spec.js tests/e2e/pro21Barcode.spec.js tests/e2e/pro75ListContext.spec.js tests/e2e/reactOnboarding.spec.js
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/help.spec.js tests/e2e/prices.spec.js tests/e2e/shoppingList.spec.js tests/e2e/rapidShoppingCapture.spec.js tests/e2e/inventory.spec.js tests/e2e/mealPlan.spec.js tests/e2e/destructiveActions.spec.js tests/e2e/household.spec.js tests/e2e/accessibility.spec.js tests/e2e/uxBatch1.spec.js tests/e2e/releaseFeedback.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js tests/e2e/reactPantry.spec.js tests/e2e/reactPlan.spec.js tests/e2e/pro72Plan.spec.js tests/e2e/pro21Barcode.spec.js tests/e2e/pro75ListContext.spec.js tests/e2e/pro76Reconciliation.spec.js tests/e2e/reactOnboarding.spec.js

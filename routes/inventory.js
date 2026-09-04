@@ -1,7 +1,20 @@
 const express = require('express');
 const router = express.Router();
+const Household = require('../models/Household');
+const InventoryEvent = require('../models/InventoryEvent');
 const InventoryItem = require('../models/InventoryItem');
 const Item = require('../models/Item');
+const MealPlan = require('../models/MealPlan');
+const PriceEntry = require('../models/PriceEntry');
+const ShoppingListItem = require('../models/ShoppingListItem');
+const { appendAbsoluteCount, ensureBaselineEvent } = require('../utils/inventoryLedger');
+const { buildMealAllocationProjection } = require('../utils/mealAllocations');
+const { localDateKey, reconcileHouseholdMeals } = require('../utils/mealReconciliation');
+const {
+  reconciliationStatus,
+  reverseMealConsumption,
+  updatePantryFromCurrentMeal
+} = require('../services/mealReconciliationActions');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -53,8 +66,39 @@ function parseTrackingMode(value, fallback = 'simple') {
   return value;
 }
 
+function validTimeZone(value) {
+  const timeZone = String(value || '').trim();
+  if (!timeZone) return null;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    return timeZone;
+  } catch (_) {
+    return null;
+  }
+}
+
+async function householdTimeZone(req) {
+  const household = await Household.findById(req.user.householdId).select('settings.timeZone');
+  if (!household) return null;
+  const reportedTimeZone = validTimeZone(req.get('x-provista-timezone'));
+  let timeZone = validTimeZone(household.settings?.timeZone);
+  if (!timeZone && reportedTimeZone) {
+    timeZone = reportedTimeZone;
+    await Household.findByIdAndUpdate(req.user.householdId, { $set: { 'settings.timeZone': reportedTimeZone } });
+  }
+  return timeZone;
+}
+
+async function reconcileForRequest(req) {
+  const timeZone = await householdTimeZone(req);
+  if (!timeZone) return null;
+  await reconcileHouseholdMeals({ householdId: req.user.householdId, timeZone });
+  return timeZone;
+}
+
 router.get('/low-stock', requireAuth, async (req, res) => {
   try {
+    await reconcileForRequest(req);
     const items = await InventoryItem.find({ householdId: req.user.householdId })
       .populate('itemId', 'name brand unit size category isOrganic')
       .lean();
@@ -67,8 +111,102 @@ router.get('/low-stock', requireAuth, async (req, res) => {
   }
 });
 
+router.get('/history', requireAuth, async (req, res) => {
+  try {
+    const events = await InventoryEvent.find({ householdId: req.user.householdId })
+      .populate('itemId', 'name brand unit')
+      .sort({ effectiveAt: -1, recordedAt: -1, _id: -1 })
+      .limit(200)
+      .lean();
+    res.json(events);
+  } catch (err) {
+    res.status(500).json({ error: serverErr(err) });
+  }
+});
+
+router.get('/meal-projection', requireAuth, async (req, res) => {
+  try {
+    const { weekStart } = req.query;
+    if (!weekStart) return res.status(400).json({ error: 'weekStart query param required' });
+    const weekStartDate = new Date(`${weekStart}T00:00:00.000Z`);
+    if (Number.isNaN(weekStartDate.getTime())) return res.status(400).json({ error: 'Invalid weekStart date' });
+
+    const timeZone = await reconcileForRequest(req);
+    const householdId = req.user.householdId;
+    const [plan, items, listItems, inventoryItems, priceUsage] = await Promise.all([
+      MealPlan.findOne({ householdId, weekStart: weekStartDate }).lean(),
+      Item.find({ householdId }).select('name brand category unit aliases').lean(),
+      ShoppingListItem.find({ householdId, checked: false }).select('itemId quantity checked').lean(),
+      InventoryItem.find({ householdId }).select('itemId quantity trackingMode stockStatus unit lowStockThreshold').lean(),
+      PriceEntry.aggregate([
+        { $match: { householdId } },
+        { $group: { _id: '$itemId', count: { $sum: 1 } } }
+      ])
+    ]);
+
+    const usageByItemId = new Map(priceUsage.map(entry => [String(entry._id), entry.count]));
+    listItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 5);
+    });
+    inventoryItems.forEach(entry => {
+      const id = String(entry.itemId);
+      usageByItemId.set(id, (usageByItemId.get(id) || 0) + 3);
+    });
+
+    res.json(buildMealAllocationProjection({
+      plan: plan || { weekStart: weekStartDate, days: [] },
+      items,
+      listItems,
+      inventoryItems,
+      usageByItemId,
+      notBeforeDateKey: timeZone ? localDateKey(new Date(), timeZone) : null
+    }));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: serverErr(err) });
+  }
+});
+
+router.get('/meal-reconciliation/:mealInstanceId', requireAuth, async (req, res) => {
+  try {
+    res.json(await reconciliationStatus(req.user.householdId, req.params.mealInstanceId));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: serverErr(err) });
+  }
+});
+
+router.post('/meal-reconciliation/:mealInstanceId/reverse', requireAuth, async (req, res) => {
+  try {
+    const result = await reverseMealConsumption({
+      householdId: req.user.householdId,
+      mealInstanceId: req.params.mealInstanceId,
+      createdBy: req.user._id
+    });
+    res.json({ ...result, status: await reconciliationStatus(req.user.householdId, req.params.mealInstanceId) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: serverErr(err) });
+  }
+});
+
+router.post('/meal-reconciliation/:mealInstanceId/update-pantry', requireAuth, async (req, res) => {
+  try {
+    res.json(await updatePantryFromCurrentMeal({
+      householdId: req.user.householdId,
+      mealInstanceId: req.params.mealInstanceId,
+      idempotencyKey: req.body?.idempotencyKey,
+      createdBy: req.user._id
+    }));
+  } catch (err) {
+    res.status(err.status || 500).json({
+      error: serverErr(err),
+      ...(err.unresolved ? { unresolved: err.unresolved } : {})
+    });
+  }
+});
+
 router.get('/', requireAuth, async (req, res) => {
   try {
+    await reconcileForRequest(req);
     const items = await InventoryItem.find({ householdId: req.user.householdId })
       .populate('itemId', 'name brand category unit size isOrganic')
       .sort({ lastUpdated: -1 })
@@ -97,8 +235,6 @@ router.post('/', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'stockStatus must be have, low, or out' });
     }
 
-    // Backward compatibility: older clients represented exact tracking by
-    // sending quantity/threshold without a stockStatus or trackingMode.
     const legacyExactIntent = req.body.trackingMode === undefined &&
       requestedStatus === undefined &&
       (req.body.quantity !== undefined || lowStockThreshold !== undefined);
@@ -142,8 +278,16 @@ router.post('/', requireAuth, async (req, res) => {
         $setOnInsert: { householdId: req.user.householdId, itemId }
       },
       { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
-    ).populate('itemId', 'name brand category unit size isOrganic');
+    );
 
+    if (trackingMode === 'exact') {
+      await appendAbsoluteCount(inv, quantity, {
+        sourceType: 'pantry-edit',
+        createdBy: req.user._id
+      });
+    }
+
+    await inv.populate('itemId', 'name brand category unit size isOrganic');
     res.status(201).json(publicInventoryItem(inv.toObject()));
   } catch (err) {
     res.status(err.status || 400).json({ error: serverErr(err) });
@@ -167,14 +311,19 @@ router.put('/:id', requireAuth, async (req, res) => {
     const trackingMode = parseTrackingMode(req.body.trackingMode, legacyExactIntent ? 'exact' : currentMode);
     const switchingToSimple = currentMode !== 'simple' && trackingMode === 'simple';
 
+    if (currentMode === 'exact') await ensureBaselineEvent(inv);
     if (req.body.unit !== undefined) inv.unit = String(req.body.unit || '').trim();
     if (req.body.notes !== undefined) inv.notes = String(req.body.notes || '').trim();
 
+    let explicitExactQuantity = null;
     if (trackingMode === 'exact') {
       if (requestedStatus !== undefined) {
         return res.status(400).json({ error: 'Exact tracking derives stock status from quantity and the low-stock threshold' });
       }
-      if (req.body.quantity !== undefined) inv.quantity = parseNonNegative(req.body.quantity, 'quantity');
+      if (req.body.quantity !== undefined) {
+        explicitExactQuantity = parseNonNegative(req.body.quantity, 'quantity');
+        inv.quantity = explicitExactQuantity;
+      }
       if (req.body.lowStockThreshold !== undefined) {
         inv.lowStockThreshold = req.body.lowStockThreshold === null || req.body.lowStockThreshold === ''
           ? null
@@ -195,6 +344,14 @@ router.put('/:id', requireAuth, async (req, res) => {
     inv.lastUpdated = new Date();
     inv.lastUpdatedBy = req.user._id;
     await inv.save();
+
+    if (trackingMode === 'exact' && explicitExactQuantity != null) {
+      await appendAbsoluteCount(inv, explicitExactQuantity, {
+        sourceType: 'pantry-edit',
+        createdBy: req.user._id
+      });
+    }
+
     await inv.populate('itemId', 'name brand category unit size isOrganic');
     res.json(publicInventoryItem(inv.toObject()));
   } catch (err) {
@@ -206,6 +363,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
   try {
     const inv = await InventoryItem.findOneAndDelete({ _id: req.params.id, householdId: req.user.householdId });
     if (!inv) return res.status(404).json({ error: 'Pantry item not found' });
+    await InventoryEvent.deleteMany({ householdId: req.user.householdId, inventoryItemId: inv._id });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: serverErr(err) });

@@ -56,6 +56,7 @@ function flattenMeals(plan) {
     for (const [mealIndex, meal] of (day?.meals || []).entries()) {
       if (!String(meal?.notes || '').trim()) continue;
       meals.push({
+        instanceId: String(meal?.instanceId || '').trim() || null,
         date,
         dateKey: date.toISOString().slice(0, 10),
         dayIndex,
@@ -82,6 +83,7 @@ function resolveMealNeeds(meal, items, usageByItemId) {
     const match = matchCatalogItem(parsed, items, { usageByItemId });
     if (match.matchStatus !== 'matched' || !match.item) {
       unresolved.push({
+        instanceId: meal.instanceId,
         date: meal.dateKey,
         dayIndex: meal.dayIndex,
         mealIndex: meal.mealIndex,
@@ -218,7 +220,8 @@ function buildMealAllocationProjection({
   items = [],
   inventoryItems = [],
   listItems = [],
-  usageByItemId = new Map()
+  usageByItemId = new Map(),
+  notBeforeDateKey = null
 }) {
   const inventoryByItemId = new Map(inventoryItems.map(entry => [itemId(entry.itemId), entry]));
   const listQuantities = aggregateListQuantities(listItems);
@@ -227,6 +230,7 @@ function buildMealAllocationProjection({
   const unresolvedNeeds = [];
 
   for (const meal of flattenMeals(plan)) {
+    if (notBeforeDateKey && meal.dateKey < notBeforeDateKey) continue;
     const resolved = resolveMealNeeds(meal, items, usageByItemId);
     unresolvedNeeds.push(...resolved.unresolved);
 
@@ -242,6 +246,7 @@ function buildMealAllocationProjection({
         ? simpleAllocation(state, need.quantity)
         : exactAllocation(state, need.quantity);
       mealAllocations.push({
+        instanceId: meal.instanceId,
         date: meal.dateKey,
         dayIndex: meal.dayIndex,
         mealIndex: meal.mealIndex,

@@ -9,6 +9,7 @@ export interface PlanPerson {
 }
 
 export interface PlanMeal {
+  instanceId?: string;
   mealType: MealType;
   personName?: string;
   personIds: string[];
@@ -94,6 +95,7 @@ export interface MealAllocationProjection {
   weekStart: string | null;
   itemSummaries: MealAllocationSummary[];
   mealAllocations: Array<{
+    instanceId?: string | null;
     date: string;
     dayIndex: number;
     mealIndex: number;
@@ -106,4 +108,18 @@ export interface MealAllocationProjection {
     coverageStatus: string;
   }>;
   unresolvedNeeds: Array<Record<string, unknown>>;
+}
+
+export interface MealReconciliationStatus {
+  mealInstanceId: string;
+  updatedPantry: boolean;
+  reversed: boolean;
+  items: Array<{
+    itemId: string;
+    name: string;
+    unit: string;
+    trackingMode: 'simple' | 'exact';
+    consumedQuantity: number | null;
+    reversed: boolean;
+  }>;
 }
