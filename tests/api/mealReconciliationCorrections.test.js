@@ -7,10 +7,8 @@ const {
   appendAbsoluteCount,
   appendDelta
 } = require('../../utils/inventoryLedger');
-const {
-  correctMealConsumption,
-  reverseMealConsumption
-} = require('../../utils/mealReconciliation');
+const { correctMealConsumption } = require('../../utils/mealReconciliation');
+const { reverseMealConsumption } = require('../../services/mealReconciliationActions');
 
 beforeAll(db.connect);
 beforeEach(db.clearDB);
@@ -76,6 +74,31 @@ describe('reconciled meal corrections', () => {
     const reversals = events.filter(event => event.type === 'reversal');
     expect(reversals).toHaveLength(1);
     expect(String(reversals[0].reversesEventId)).toBe(String(original._id));
+  });
+
+  it('reverses the corrected effective consumption instead of over-restoring Pantry', async () => {
+    const fixture = await exactInventory(4);
+    await consumeMeal(fixture);
+    await correctMealConsumption({
+      householdId: fixture.householdId,
+      mealInstanceId: 'meal-1',
+      itemId: fixture.item._id,
+      actualQuantity: 1,
+      idempotencyKey: 'actual-one'
+    });
+    expect((await InventoryItem.findById(fixture.inventory._id)).quantity).toBe(3);
+
+    await reverseMealConsumption({
+      householdId: fixture.householdId,
+      mealInstanceId: 'meal-1'
+    });
+    expect((await InventoryItem.findById(fixture.inventory._id)).quantity).toBe(4);
+
+    const reversal = await InventoryEvent.findOne({
+      householdId: fixture.householdId,
+      type: 'reversal'
+    });
+    expect(reversal.quantityDelta).toBe(1);
   });
 
   it('does not let undo of an older meal override a newer physical count', async () => {
