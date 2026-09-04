@@ -129,18 +129,7 @@ function sourceStatus<T>(query: { isPending: boolean; isError: boolean; data?: C
   return 'fresh';
 }
 
-function HomeCard({
-  question,
-  title,
-  detail,
-  items = [],
-  emptyText,
-  action,
-  onAction,
-  status,
-  tone = '',
-  onRetry
-}: HomeCardProps) {
+function HomeCard({ question, title, detail, items = [], emptyText, action, onAction, status, tone = '', onRetry }: HomeCardProps) {
   if (status === 'loading') {
     return (
       <article className={`home-react-card ${tone}`} aria-busy="true">
@@ -149,7 +138,6 @@ function HomeCard({
       </article>
     );
   }
-
   if (status === 'error') {
     return (
       <article className={`home-react-card ${tone}`}>
@@ -160,7 +148,6 @@ function HomeCard({
       </article>
     );
   }
-
   return (
     <article className={`home-react-card ${tone}`}>
       <div className="home-react-question-row">
@@ -169,11 +156,7 @@ function HomeCard({
       </div>
       <h2>{title}</h2>
       {detail && <p className="home-react-detail">{detail}</p>}
-      {items.length ? (
-        <ul>{items.slice(0, 3).map((item, index) => <li key={item._id || `${itemName(item)}-${index}`}>{itemName(item)}</li>)}</ul>
-      ) : emptyText ? (
-        <p className="home-react-empty">{emptyText}</p>
-      ) : null}
+      {items.length ? <ul>{items.slice(0, 3).map((item, index) => <li key={item._id || `${itemName(item)}-${index}`}>{itemName(item)}</li>)}</ul> : emptyText ? <p className="home-react-empty">{emptyText}</p> : null}
       {action && onAction && <button type="button" className="home-react-action" onClick={onAction}>{action} →</button>}
     </article>
   );
@@ -192,20 +175,11 @@ export function HomePage() {
   const doneButtonRef = useRef<HTMLButtonElement>(null);
 
   if (!session) return null;
-
   const householdId = session.user.householdId || session.household?._id || 'household';
   const displayName = session.user.displayName?.trim() || session.user.name?.trim().split(/\s+/)[0] || '';
 
-  const shoppingQuery = useQuery({
-    queryKey: ['home', 'shopping-list', householdId],
-    queryFn: () => fetchWithCache(householdId, 'shoppingList', () => apiFetch<ShoppingListItem[]>('/api/shopping-list'))
-  });
-
-  const lowStockQuery = useQuery({
-    queryKey: ['home', 'low-stock', householdId],
-    queryFn: () => fetchWithCache(householdId, 'lowStock', () => apiFetch<LowStockItem[]>('/api/inventory/low-stock'))
-  });
-
+  const shoppingQuery = useQuery({ queryKey: ['home', 'shopping-list', householdId], queryFn: () => fetchWithCache(householdId, 'shoppingList', () => apiFetch<ShoppingListItem[]>('/api/shopping-list')) });
+  const lowStockQuery = useQuery({ queryKey: ['home', 'low-stock', householdId], queryFn: () => fetchWithCache(householdId, 'lowStock', () => apiFetch<LowStockItem[]>('/api/inventory/low-stock')) });
   const planQuery = useQuery({
     queryKey: ['home', 'plan', householdId, isoDate()],
     queryFn: async () => {
@@ -220,16 +194,11 @@ export function HomePage() {
       return fetchWithCache(householdId, 'plan', () => apiFetch<MealPlan>(`/api/meal-plan?weekStart=${encodeURIComponent(start)}`));
     }
   });
-
-  const deferredQuery = useQuery({
-    queryKey: ['home', 'deferred-prices', householdId],
-    queryFn: () => apiFetch<DeferredPrice[]>('/api/shopping-trips/deferred-prices')
-  });
+  const deferredQuery = useQuery({ queryKey: ['home', 'deferred-prices', householdId], queryFn: () => apiFetch<DeferredPrice[]>('/api/shopping-trips/deferred-prices') });
 
   const shoppingStatus = sourceStatus(shoppingQuery, online);
   const lowStockStatus = sourceStatus(lowStockQuery, online);
   const planStatus = sourceStatus(planQuery, online);
-
   const shoppingList = shoppingQuery.data?.data || [];
   const lowStock = lowStockQuery.data?.data || [];
   const plan = planQuery.data?.data;
@@ -237,6 +206,7 @@ export function HomePage() {
   const needed = shoppingList.filter(item => !item.checked);
   const todayPlan = plan?.days?.find(day => String(day.date || '').slice(0, 10) === isoDate());
   const dinners = (todayPlan?.meals || []).filter(meal => meal.mealType === 'dinner' && meal.name?.trim());
+  const dinnerActionLabel = dinners.length ? 'View tonight' : 'Plan dinner';
 
   const openLegacy = (tab: string, focus?: string) => {
     void requestNavigation(() => {
@@ -245,16 +215,9 @@ export function HomePage() {
       window.location.assign(`/app?${params.toString()}`);
     });
   };
-
-  const openReact = (path: string) => {
-    void requestNavigation(() => navigate(path));
-  };
-
+  const openReact = (path: string) => { void requestNavigation(() => navigate(path)); };
   const openPriceReview = () => {
-    if (!deferredPrices.length) {
-      showToast('No prices need review');
-      return;
-    }
+    if (!deferredPrices.length) { showToast('No prices need review'); return; }
     setPrices({});
     setReviewOpen(true);
   };
@@ -262,208 +225,61 @@ export function HomePage() {
   useEffect(() => {
     if (!reviewOpen) return;
     doneButtonRef.current?.focus({ preventScroll: true });
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setReviewOpen(false);
-    };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') setReviewOpen(false); };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [reviewOpen]);
 
   const saveDeferredPrices = async () => {
-    const updates = deferredPrices
-      .map(item => ({ item, raw: prices[item.shoppingListItemId]?.trim() || '' }))
-      .filter(entry => entry.raw !== '');
-
-    if (!updates.length) {
-      showToast('Enter at least one price, or choose Done for now');
-      return;
-    }
-
+    const updates = deferredPrices.map(item => ({ item, raw: prices[item.shoppingListItemId]?.trim() || '' })).filter(entry => entry.raw !== '');
+    if (!updates.length) { showToast('Enter at least one price, or choose Done for now'); return; }
     for (const update of updates) {
       const value = Number(update.raw);
-      if (!Number.isFinite(value) || value < 0) {
-        showToast(`Enter a valid price for ${update.item.itemName}`, { tone: 'error' });
-        return;
-      }
+      if (!Number.isFinite(value) || value < 0) { showToast(`Enter a valid price for ${update.item.itemName}`, { tone: 'error' }); return; }
     }
-
     setSavingPrices(true);
-    const results = await Promise.allSettled(updates.map(({ item, raw }) => apiFetch(
-      `/api/shopping-trips/${item.tripId}/items/${item.shoppingListItemId}/price`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ price: Number(raw), storeId: item.storeId })
-      }
-    )));
+    const results = await Promise.allSettled(updates.map(({ item, raw }) => apiFetch(`/api/shopping-trips/${item.tripId}/items/${item.shoppingListItemId}/price`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ price: Number(raw), storeId: item.storeId }) })));
     const saved = results.filter(result => result.status === 'fulfilled').length;
     const failed = results.length - saved;
     setSavingPrices(false);
     setReviewOpen(false);
     await queryClient.invalidateQueries({ queryKey: ['home', 'deferred-prices', householdId] });
-    showToast(
-      failed
-        ? `${saved} price${saved === 1 ? '' : 's'} saved · ${failed} could not be updated`
-        : `${saved} price${saved === 1 ? '' : 's'} saved · Spending updated`,
-      { tone: failed ? 'error' : 'success', durationMs: 5000 }
-    );
+    showToast(failed ? `${saved} price${saved === 1 ? '' : 's'} saved · ${failed} could not be updated` : `${saved} price${saved === 1 ? '' : 's'} saved · Spending updated`, { tone: failed ? 'error' : 'success', durationMs: 5000 });
   };
 
   const next = useMemo(() => {
-    if (deferredPrices.length) {
-      return {
-        title: `Finish ${deferredPrices.length} shopping price${deferredPrices.length === 1 ? '' : 's'}`,
-        detail: 'You chose to review these later.',
-        action: 'Review prices',
-        onAction: openPriceReview
-      };
-    }
-    if (planStatus !== 'error' && plan && !dinners.length) {
-      return {
-        title: 'Plan tonight’s dinner',
-        detail: 'One choice can shape the rest of the week.',
-        action: 'Plan dinner',
-        onAction: () => openReact('/app/plan?focus=today-dinner')
-      };
-    }
-    if (lowStock.length) {
-      return {
-        title: 'Review low and out staples',
-        detail: `${lowStock.length} item${lowStock.length === 1 ? '' : 's'} need attention.`,
-        action: 'Open Pantry',
-        onAction: () => openReact('/app/pantry')
-      };
-    }
-    if (needed.length) {
-      return {
-        title: 'Review the shopping list',
-        detail: `${needed.length} item${needed.length === 1 ? '' : 's'} left to get.`,
-        action: 'Open list',
-        onAction: () => openReact('/app/list')
-      };
-    }
-    return {
-      title: 'You’re caught up',
-      detail: 'Nothing urgent needs your attention.',
-      action: 'Open your plan',
-      onAction: () => openReact('/app/plan')
-    };
+    if (deferredPrices.length) return { title: `Finish ${deferredPrices.length} shopping price${deferredPrices.length === 1 ? '' : 's'}`, detail: 'You chose to review these later.', action: 'Review prices', onAction: openPriceReview };
+    if (planStatus !== 'error' && plan && !dinners.length) return { title: 'Plan tonight’s dinner', detail: 'One choice can shape the rest of the week.', action: 'Plan dinner', onAction: () => openReact('/app/plan?focus=today-dinner') };
+    if (lowStock.length) return { title: 'Review low and out staples', detail: `${lowStock.length} item${lowStock.length === 1 ? '' : 's'} need attention.`, action: 'Open Pantry', onAction: () => openReact('/app/pantry') };
+    if (needed.length) return { title: 'Review the shopping list', detail: `${needed.length} item${needed.length === 1 ? '' : 's'} left to get.`, action: 'Open list', onAction: () => openReact('/app/list') };
+    return { title: 'You’re caught up', detail: 'Nothing urgent needs your attention.', action: 'Open your plan', onAction: () => openReact('/app/plan') };
   }, [deferredPrices.length, dinners.length, lowStock.length, needed.length, plan, planStatus]);
 
   const baseStatuses = [shoppingStatus, lowStockStatus, planStatus];
-  const nextStatus: SourceStatus = baseStatuses.every(status => status === 'loading')
-    ? 'loading'
-    : baseStatuses.every(status => status === 'error')
-      ? 'error'
-      : baseStatuses.some(status => status === 'stale') || !online
-        ? 'stale'
-        : 'fresh';
+  const nextStatus: SourceStatus = baseStatuses.every(status => status === 'loading') ? 'loading' : baseStatuses.every(status => status === 'error') ? 'error' : baseStatuses.some(status => status === 'stale') || !online ? 'stale' : 'fresh';
 
   return (
     <>
       <section className="home-react-heading" aria-labelledby="home-react-title">
-        <div>
-          <p className="home-react-date">{new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())}</p>
-          <h1 id="home-react-title">{displayName ? `Hi, ${displayName}` : 'Today'}</h1>
-        </div>
+        <div><p className="home-react-date">{new Intl.DateTimeFormat(undefined, { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())}</p><h1 id="home-react-title">{displayName ? `Hi, ${displayName}` : 'Today'}</h1></div>
         <div className="home-react-quick-actions" aria-label="Quick actions">
           <button type="button" className="shell-button shell-button-secondary" onClick={() => openReact('/app/list')}>Quick add</button>
-          <button type="button" className="shell-button shell-button-primary" onClick={() => openReact('/app/plan?focus=today-dinner')}>Plan dinner</button>
+          <button type="button" className="shell-button shell-button-primary" onClick={() => openReact('/app/plan?focus=today-dinner')}>{dinnerActionLabel}</button>
         </div>
       </section>
-
       <section className="home-react-grid" aria-label="Today at a glance">
-        <HomeCard
-          question="What’s for dinner?"
-          title={dinners.length ? dinners.map(meal => meal.name).join(' · ') : 'Dinner isn’t planned yet'}
-          emptyText={dinners.length ? 'Tonight’s plan is ready.' : 'Choose a meal in a few taps.'}
-          action={dinners.length ? 'View tonight' : 'Plan dinner'}
-          onAction={() => openReact('/app/plan?focus=today-dinner')}
-          status={planStatus}
-          tone="home-react-featured"
-          onRetry={() => void planQuery.refetch()}
-        />
-        <HomeCard
-          question="What do we need?"
-          title={needed.length ? `${needed.length} item${needed.length === 1 ? '' : 's'} on the list` : 'The list is clear'}
-          items={needed}
-          emptyText="Add an item whenever it comes to mind."
-          action={needed.length ? 'Open list' : 'Quick add'}
-          onAction={() => openReact('/app/list')}
-          status={shoppingStatus}
-          onRetry={() => void shoppingQuery.refetch()}
-        />
-        <HomeCard
-          question="Is anything running low?"
-          title={lowStock.length ? `${lowStock.length} low or out item${lowStock.length === 1 ? '' : 's'}` : 'Pantry looks good'}
-          items={lowStock}
-          emptyText="No tracked staples are marked low or out."
-          action="Open Pantry"
-          onAction={() => openReact('/app/pantry')}
-          status={lowStockStatus}
-          onRetry={() => void lowStockQuery.refetch()}
-        />
-        {deferredPrices.length > 0 && (
-          <article className="home-react-card home-react-price-card">
-            <p className="home-question">Anything to finish?</p>
-            <h2>{deferredPrices.length} price{deferredPrices.length === 1 ? '' : 's'} to review</h2>
-            <p className="home-react-detail">These are prices you chose to update later. Saving them updates Spending automatically.</p>
-            <button type="button" className="home-react-action" onClick={openPriceReview}>Review prices →</button>
-          </article>
-        )}
-        <HomeCard
-          question="What should I do next?"
-          title={next.title}
-          detail={next.detail}
-          emptyText=""
-          action={next.action}
-          onAction={next.onAction}
-          status={nextStatus}
-          tone="home-react-next"
-          onRetry={() => {
-            void shoppingQuery.refetch();
-            void lowStockQuery.refetch();
-            void planQuery.refetch();
-          }}
-        />
+        <HomeCard question="What’s for dinner?" title={dinners.length ? dinners.map(meal => meal.name).join(' · ') : 'Dinner isn’t planned yet'} emptyText={dinners.length ? 'Tonight’s plan is ready.' : 'Choose a meal in a few taps.'} action={dinnerActionLabel} onAction={() => openReact('/app/plan?focus=today-dinner')} status={planStatus} tone="home-react-featured" onRetry={() => void planQuery.refetch()} />
+        <HomeCard question="What do we need?" title={needed.length ? `${needed.length} item${needed.length === 1 ? '' : 's'} on the list` : 'The list is clear'} items={needed} emptyText="Add an item whenever it comes to mind." action={needed.length ? 'Open list' : 'Quick add'} onAction={() => openReact('/app/list')} status={shoppingStatus} onRetry={() => void shoppingQuery.refetch()} />
+        <HomeCard question="Is anything running low?" title={lowStock.length ? `${lowStock.length} low or out item${lowStock.length === 1 ? '' : 's'}` : 'Pantry looks good'} items={lowStock} emptyText="No tracked staples are marked low or out." action="Open Pantry" onAction={() => openReact('/app/pantry')} status={lowStockStatus} onRetry={() => void lowStockQuery.refetch()} />
+        {deferredPrices.length > 0 && <article className="home-react-card home-react-price-card"><p className="home-question">Anything to finish?</p><h2>{deferredPrices.length} price{deferredPrices.length === 1 ? '' : 's'} to review</h2><p className="home-react-detail">These are prices you chose to update later. Saving them updates Spending automatically.</p><button type="button" className="home-react-action" onClick={openPriceReview}>Review prices →</button></article>}
+        <HomeCard question="What should I do next?" title={next.title} detail={next.detail} emptyText="" action={next.action} onAction={next.onAction} status={nextStatus} tone="home-react-next" onRetry={() => { void shoppingQuery.refetch(); void lowStockQuery.refetch(); void planQuery.refetch(); }} />
       </section>
-
       {reviewOpen && (
-        <div className="shell-dialog-overlay" role="presentation" onMouseDown={event => {
-          if (event.target === event.currentTarget) setReviewOpen(false);
-        }}>
+        <div className="shell-dialog-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setReviewOpen(false); }}>
           <section className="shell-dialog home-react-price-dialog" role="dialog" aria-modal="true" aria-labelledby="home-price-review-title">
-            <h2 id="home-price-review-title">Review prices</h2>
-            <p>Add only the prices you know now. Anything left blank stays here for later.</p>
-            <div className="home-react-price-list">
-              {deferredPrices.map(item => (
-                <label className="home-react-price-row" key={`${item.tripId}-${item.shoppingListItemId}`}>
-                  <span>
-                    <strong>{item.itemName}</strong>
-                    <small>{item.storeName || 'Store'} · {new Date(item.completedAt).toLocaleDateString()}</small>
-                  </span>
-                  <span className="home-react-price-input-wrap">
-                    <span aria-hidden="true">$</span>
-                    <input
-                      aria-label={`Price for ${item.itemName}`}
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      value={prices[item.shoppingListItemId] || ''}
-                      onChange={event => setPrices(current => ({ ...current, [item.shoppingListItemId]: event.target.value }))}
-                    />
-                  </span>
-                </label>
-              ))}
-            </div>
-            <div className="shell-dialog-actions">
-              <button ref={doneButtonRef} type="button" className="shell-button shell-button-secondary" onClick={() => setReviewOpen(false)}>Done for now</button>
-              <button type="button" className="shell-button shell-button-primary" disabled={savingPrices} onClick={() => void saveDeferredPrices()}>
-                {savingPrices ? 'Saving…' : 'Save entered prices'}
-              </button>
-            </div>
+            <h2 id="home-price-review-title">Review prices</h2><p>Add only the prices you know now. Anything left blank stays here for later.</p>
+            <div className="home-react-price-list">{deferredPrices.map(item => <label className="home-react-price-row" key={`${item.tripId}-${item.shoppingListItemId}`}><span><strong>{item.itemName}</strong><small>{item.storeName || 'Store'} · {new Date(item.completedAt).toLocaleDateString()}</small></span><span className="home-react-price-input-wrap"><span aria-hidden="true">$</span><input aria-label={`Price for ${item.itemName}`} type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={prices[item.shoppingListItemId] || ''} onChange={event => setPrices(current => ({ ...current, [item.shoppingListItemId]: event.target.value }))} /></span></label>)}</div>
+            <div className="shell-dialog-actions"><button ref={doneButtonRef} type="button" className="shell-button shell-button-secondary" onClick={() => setReviewOpen(false)}>Done for now</button><button type="button" className="shell-button shell-button-primary" disabled={savingPrices} onClick={() => void saveDeferredPrices()}>{savingPrices ? 'Saving…' : 'Save entered prices'}</button></div>
           </section>
         </div>
       )}
