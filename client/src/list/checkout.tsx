@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '../shell/ToastProvider';
-import { completeShoppingTrip, loadStores, type ShoppingTripResult } from './api';
+import { completeShoppingTrip, type ShoppingTripResult } from './api';
+import { storesQueryOptions } from './storesQuery';
 import {
   actualPurchasedQuantity,
   currentShoppingStoreId,
@@ -123,11 +124,9 @@ export function useShoppingCheckout({
 }: UseShoppingCheckoutOptions) {
   const { showToast } = useToast();
   const checkedItems = items.filter(item => item.checked);
-  const storesQuery = useQuery({
-    queryKey: ['stores'],
-    queryFn: loadStores,
-    enabled: checkedItems.length > 0
-  });
+  // Mounting List starts this query immediately, so store data is normally warm
+  // before Store Preference or Finish Shopping is opened.
+  const storesQuery = useQuery(storesQueryOptions);
   const stores = storesQuery.data || [];
   const [cartEntries, setCartEntries] = useState<Record<string, CartEntry>>({});
   const [priceEditorItemId, setPriceEditorItemId] = useState<string | null>(null);
@@ -269,10 +268,16 @@ export function useShoppingCheckout({
     setAddToPantry(true);
     tripKey.current ||= crypto.randomUUID();
     setCheckoutOpen(true);
-    window.setTimeout(() => storeSelectRef.current?.focus(), 0);
+    if (!storesQuery.isPending && !storesQuery.isError) {
+      window.setTimeout(() => storeSelectRef.current?.focus(), 0);
+    }
   };
 
   const finishCheckout = async () => {
+    if (storesQuery.isPending || storesQuery.isError) {
+      showToast('Stores need to load before this shopping stop can be finished.', { tone: 'error' });
+      return;
+    }
     if (!checkoutStoreId) {
       showToast('Choose where you are shopping', { tone: 'error' });
       storeSelectRef.current?.focus();
@@ -422,7 +427,7 @@ export function useShoppingCheckout({
                 id="parent-trip-store"
                 ref={storeSelectRef}
                 value={checkoutStoreId}
-                disabled={completing}
+                disabled={completing || storesQuery.isPending || storesQuery.isError}
                 onChange={event => {
                   const value = event.target.value;
                   setCheckoutStoreId(value);
@@ -433,6 +438,13 @@ export function useShoppingCheckout({
                 {stores.map(store => <option key={store._id} value={store._id}>{store.name}</option>)}
               </select>
             </label>
+            {storesQuery.isPending && <div className="react-list-inline-status" role="status">Loading stores…</div>}
+            {storesQuery.isError && (
+              <div className="react-list-inline-error" role="alert">
+                <span>Couldn’t load stores.</span>
+                <button type="button" className="shell-button shell-button-secondary" onClick={() => void storesQuery.refetch()}>Retry</button>
+              </div>
+            )}
 
             <div id="parent-trip-price-summary">
               <div className="finish-shopping-total">
@@ -462,7 +474,7 @@ export function useShoppingCheckout({
 
             <div className="react-list-modal-actions">
               <button type="button" className="shell-button shell-button-secondary" disabled={completing} onClick={closeCheckout}>Keep shopping</button>
-              <button id="parent-finish-shopping" type="button" className="shell-button shell-button-primary" disabled={completing} onClick={() => void finishCheckout()}>
+              <button id="parent-finish-shopping" type="button" className="shell-button shell-button-primary" disabled={completing || storesQuery.isPending || storesQuery.isError} onClick={() => void finishCheckout()}>
                 {completing ? 'Finishing…' : 'Finish shopping'}
               </button>
             </div>

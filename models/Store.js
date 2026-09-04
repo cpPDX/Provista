@@ -26,4 +26,7 @@ const storeSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Supports the household-scoped alphabetical lookup used by GET /api/stores.
+storeSchema.index({ householdId: 1, name: 1 });
+
 module.exports = mongoose.model('Store', storeSchema);
