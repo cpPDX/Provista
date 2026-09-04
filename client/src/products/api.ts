@@ -7,6 +7,29 @@ import type {
   ProductRef
 } from './types';
 
+export interface CatalogMatchCandidate extends ProductRef {
+  score?: number;
+  matchSource?: string;
+}
+
+export interface CatalogMatchSuggestion {
+  sourceText: string;
+  normalizedText?: string;
+  quantity?: number;
+  unit?: string;
+  matchStatus: 'matched' | 'ambiguous' | 'unmatched';
+  item: ProductRef | null;
+  candidates: CatalogMatchCandidate[];
+}
+
+export interface CatalogMatchResult {
+  parsedCount: number;
+  matchedCount: number;
+  ambiguousCount: number;
+  unmatchedCount: number;
+  suggestions: CatalogMatchSuggestion[];
+}
+
 export async function loadCatalog(): Promise<ProductRef[]> {
   return apiFetch<ProductRef[]>('/api/items');
 }
@@ -14,6 +37,14 @@ export async function loadCatalog(): Promise<ProductRef[]> {
 export async function searchCatalog(search: string): Promise<ProductRef[]> {
   const query = new URLSearchParams({ search });
   return apiFetch<ProductRef[]>(`/api/items?${query.toString()}`);
+}
+
+export async function matchCatalogText(text: string): Promise<CatalogMatchResult> {
+  return apiFetch<CatalogMatchResult>('/api/items/match', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
 }
 
 export async function createCatalogProduct(input: CatalogProductInput): Promise<ProductRef> {
