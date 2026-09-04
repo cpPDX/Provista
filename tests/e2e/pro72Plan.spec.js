@@ -125,7 +125,7 @@ test.describe('PRO-72 focused Plan workflow', () => {
     await expect(details.locator('input[type="number"]')).toHaveValue('2');
 
     await details.getByRole('button', { name: 'Cancel' }).click();
-    await page.getByRole('button', { name: 'Plan' }).click();
+    await page.getByRole('button', { name: 'Back to Plan' }).click();
     await expect(page.locator(`.plan-focused-day[data-plan-day="${dayIndex}"]`)).toBeVisible();
     await expect(page.locator(`.plan-focused-day[data-plan-day="${dayIndex}"] input[data-meal-name="dinner-0"]`)).toHaveValue('Context Dinner');
   });
