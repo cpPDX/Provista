@@ -235,7 +235,7 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     const historyCard = page.locator('.more-price-card').filter({ hasText: 'PRO-56 Recorded Item' });
     await expect(historyCard).toBeVisible();
     await expect(historyCard).toContainText('PRO-56 Recorded Store');
-    await expect(historyCard.locator('.more-price-card-value').getByText('$3.49', { exact: true })).toBeVisible();
+    await expect(historyCard.locator('summary .more-price-card-value strong')).toHaveText('$3.49');
     await expect(page.locator('#tab-prices')).toHaveCount(0);
   });
 
@@ -273,6 +273,7 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await page.reload();
     await expect(page).toHaveURL(/\/app\/more\/import$/);
     await expect(page.locator('#import-prices-title')).toBeVisible();
+    await expect(page.getByLabel('CSV file')).toBeEnabled();
 
     const csv = [
       'item_name,brand,category,unit,size,store_name,final_price,is_sale,quantity,date,notes,is_organic',
@@ -300,6 +301,7 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(resultCard).toContainText('2 rows saved.');
     await expect(resultCard).toContainText('PRO-56 CSV New Item');
     await expect(resultCard).toContainText('PRO-56 CSV New Store');
+    await expect(page.getByRole('heading', { name: '3. Review rows' })).toHaveCount(0);
 
     const pricesResponse = await page.request.get('/api/prices');
     expect(pricesResponse.ok()).toBeTruthy();
