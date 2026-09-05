@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { BarcodeResolverDialog } from '../products/BarcodeResolverDialog';
+import type { ProductRef } from '../products/types';
 import { useConfirm } from '../shell/DialogProvider';
 import { useToast } from '../shell/ToastProvider';
 import {
@@ -8,6 +10,7 @@ import {
   loadInsightItems,
   loadInsightStores,
   loadPendingPrices,
+  loadPriceComparison,
   loadPrices,
   recordPrice,
   rejectPrice,
@@ -35,11 +38,11 @@ function monthRange(month: string): Record<string, string> {
 }
 
 function itemFrom(entry: PriceEntryRecord) {
-  return typeof entry.itemId === 'string' ? null : entry.itemId;
+  return typeof entry.itemId === 'string' ? entry.item ?? null : entry.itemId;
 }
 
 function storeFrom(entry: PriceEntryRecord) {
-  return typeof entry.storeId === 'string' ? null : entry.storeId;
+  return typeof entry.storeId === 'string' ? entry.store ?? null : entry.storeId;
 }
 
 function entityId(value: InsightItem | InsightStore | string) {
@@ -58,12 +61,96 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-type SortMode = 'date' | 'name' | 'price';
+function bestValue(entries: PriceEntryRecord[]) {
+  const approved = entries
+    .filter(entry => entry.status !== 'pending' && Number.isFinite(Number(entry.pricePerUnit)))
+    .sort((left, right) => Number(left.pricePerUnit) - Number(right.pricePerUnit));
+  if (approved.length < 2) return null;
+  return { best: approved[0], next: approved[1] };
+}
+
+type SortMode = 'date' | 'name' | 'price' | 'ppu';
+
+interface PendingEditDraft {
+  entry: PriceEntryRecord;
+  storeId: string;
+  regularPrice: string;
+  salePrice: string;
+  couponAmount: string;
+  couponCode: string;
+  quantity: string;
+  date: string;
+  notes: string;
+}
+
+interface PendingEditFormProps {
+  draft: PendingEditDraft;
+  stores: InsightStore[];
+  saving: boolean;
+  onChange: (patch: Partial<PendingEditDraft>) => void;
+  onCancel: () => void;
+  onSubmit: (event: FormEvent) => void;
+}
+
+function PendingEditForm({ draft, stores, saving, onChange, onCancel, onSubmit }: PendingEditFormProps) {
+  const titleId = `pending-price-edit-${draft.entry._id}`;
+  return (
+    <form className="more-record-card" aria-labelledby={titleId} onSubmit={onSubmit}>
+      <div>
+        <h3 id={titleId}>Edit and approve {itemFrom(draft.entry)?.name || 'pending price'}</h3>
+        <p className="more-muted">Correct only what needs attention, then approve the household entry.</p>
+      </div>
+      <div className="more-field-grid">
+        <label className="more-field">
+          <span>Store</span>
+          <select value={draft.storeId} onChange={event => onChange({ storeId: event.target.value })} required disabled={saving}>
+            <option value="">Choose store</option>
+            {stores.map(store => <option key={store._id} value={store._id}>{store.name}{store.location ? ` - ${store.location}` : ''}</option>)}
+          </select>
+        </label>
+        <label className="more-field">
+          <span>Regular price</span>
+          <input type="number" inputMode="decimal" min="0" step="0.01" value={draft.regularPrice} onChange={event => onChange({ regularPrice: event.target.value })} required disabled={saving} />
+        </label>
+        <label className="more-field">
+          <span>Quantity</span>
+          <input type="number" inputMode="decimal" min="0.01" step="0.01" value={draft.quantity} onChange={event => onChange({ quantity: event.target.value })} required disabled={saving} />
+        </label>
+        <label className="more-field">
+          <span>Date</span>
+          <input type="date" value={draft.date} onChange={event => onChange({ date: event.target.value })} required disabled={saving} />
+        </label>
+        <label className="more-field">
+          <span>Sale price <small>(optional)</small></span>
+          <input type="number" inputMode="decimal" min="0" step="0.01" value={draft.salePrice} onChange={event => onChange({ salePrice: event.target.value })} disabled={saving} />
+        </label>
+        <label className="more-field">
+          <span>Coupon amount <small>(optional)</small></span>
+          <input type="number" inputMode="decimal" min="0" step="0.01" value={draft.couponAmount} onChange={event => onChange({ couponAmount: event.target.value })} disabled={saving} />
+        </label>
+        <label className="more-field">
+          <span>Coupon code <small>(optional)</small></span>
+          <input value={draft.couponCode} onChange={event => onChange({ couponCode: event.target.value })} disabled={saving} />
+        </label>
+        <label className="more-field">
+          <span>Notes <small>(optional)</small></span>
+          <input value={draft.notes} onChange={event => onChange({ notes: event.target.value })} disabled={saving} />
+        </label>
+      </div>
+      <div className="more-inline-actions">
+        <button type="button" className="shell-button shell-button-secondary" onClick={onCancel} disabled={saving}>Cancel</button>
+        <button type="submit" className="shell-button shell-button-primary" disabled={saving || !draft.storeId || !draft.regularPrice || !draft.quantity || !draft.date}>
+          {saving ? 'Approving…' : 'Save and approve'}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 export function PriceHistoryPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isAdmin } = useAuth();
+  const { isAdmin, session } = useAuth();
   const { showToast } = useToast();
   const confirm = useConfirm();
   const month = searchParams.get('month') || '';
@@ -84,11 +171,14 @@ export function PriceHistoryPage() {
   const [sortMode, setSortMode] = useState<SortMode>('date');
   const [showRecord, setShowRecord] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [recordItemId, setRecordItemId] = useState('');
   const [newProductName, setNewProductName] = useState('');
   const [newProductBrand, setNewProductBrand] = useState('');
   const [newProductCategory, setNewProductCategory] = useState('Other');
   const [newProductUnit, setNewProductUnit] = useState('each');
+  const [newProductSize, setNewProductSize] = useState('');
+  const [newProductOrganic, setNewProductOrganic] = useState(false);
   const [recordStoreId, setRecordStoreId] = useState('');
   const [newStoreName, setNewStoreName] = useState('');
   const [newStoreLocation, setNewStoreLocation] = useState('');
@@ -98,6 +188,11 @@ export function PriceHistoryPage() {
   const [salePrice, setSalePrice] = useState('');
   const [couponAmount, setCouponAmount] = useState('');
   const [couponCode, setCouponCode] = useState('');
+  const [notes, setNotes] = useState('');
+  const [pendingEdit, setPendingEdit] = useState<PendingEditDraft | null>(null);
+  const [pendingSaving, setPendingSaving] = useState(false);
+  const [comparisons, setComparisons] = useState<Record<string, PriceEntryRecord[]>>({});
+  const [comparisonLoading, setComparisonLoading] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -165,6 +260,7 @@ export function PriceHistoryPage() {
     const result = [...byItem.values()];
     if (sortMode === 'name') result.sort((a, b) => (a.item?.name || '').localeCompare(b.item?.name || ''));
     if (sortMode === 'price') result.sort((a, b) => (a.entries[0]?.finalPrice || 0) - (b.entries[0]?.finalPrice || 0));
+    if (sortMode === 'ppu') result.sort((a, b) => (a.entries[0]?.pricePerUnit || 0) - (b.entries[0]?.pricePerUnit || 0));
     return result;
   }, [visibleEntries, sortMode]);
 
@@ -210,6 +306,8 @@ export function PriceHistoryPage() {
     setNewProductBrand('');
     setNewProductCategory('Other');
     setNewProductUnit('each');
+    setNewProductSize('');
+    setNewProductOrganic(false);
     setRecordStoreId('');
     setNewStoreName('');
     setNewStoreLocation('');
@@ -217,6 +315,7 @@ export function PriceHistoryPage() {
     setSalePrice('');
     setCouponAmount('');
     setCouponCode('');
+    setNotes('');
     setQuantity('1');
     setDate(localDateValue());
   };
@@ -226,9 +325,19 @@ export function PriceHistoryPage() {
     if (saving || !productReady || !storeReady || !regularPrice) return;
     setSaving(true);
     try {
+      const numericSize = newProductSize.trim() ? Number(newProductSize) : null;
       const result = await recordPrice({
         ...(creatingProduct
-          ? { item: { name: newProductName.trim(), brand: newProductBrand.trim(), category: newProductCategory.trim(), unit: newProductUnit.trim() } }
+          ? {
+              item: {
+                name: newProductName.trim(),
+                brand: newProductBrand.trim(),
+                category: newProductCategory.trim(),
+                unit: newProductUnit.trim(),
+                ...(numericSize != null && Number.isFinite(numericSize) ? { size: numericSize } : {}),
+                isOrganic: newProductOrganic
+              }
+            }
           : { itemId: recordItemId }),
         ...(creatingStore
           ? { store: { name: newStoreName.trim(), location: newStoreLocation.trim() } }
@@ -239,6 +348,7 @@ export function PriceHistoryPage() {
         couponCode: couponCode.trim() || null,
         quantity: Number(quantity) || 1,
         date,
+        notes: notes.trim() || null,
         source: 'manual'
       });
       const created = result.entry;
@@ -249,6 +359,12 @@ export function PriceHistoryPage() {
       if (result.createdStore) {
         setStores(current => [...current.filter(store => store._id !== result.createdStore?._id), result.createdStore as InsightStore].sort((a, b) => a.name.localeCompare(b.name)));
       }
+      setComparisons(current => {
+        const next = { ...current };
+        const itemId = itemFrom(created)?._id || (typeof created.itemId === 'string' ? created.itemId : created.itemId._id);
+        delete next[itemId];
+        return next;
+      });
       showToast(created.status === 'pending' ? 'Price submitted for household review' : 'Price recorded', { tone: 'success' });
       setShowRecord(false);
       resetRecordForm();
@@ -259,6 +375,22 @@ export function PriceHistoryPage() {
     }
   };
 
+  const handleScannedProduct = async (product: ProductRef) => {
+    const item: InsightItem = {
+      _id: product._id,
+      name: product.name,
+      brand: product.brand,
+      category: product.category,
+      unit: product.unit,
+      size: product.size,
+      isOrganic: product.isOrganic
+    };
+    setItems(current => [...current.filter(entry => entry._id !== item._id), item].sort((a, b) => a.name.localeCompare(b.name)));
+    setRecordItemId(item._id);
+    setShowRecord(true);
+    showToast(`${item.name} selected from barcode`, { tone: 'success' });
+  };
+
   const approvePending = async (entry: PriceEntryRecord) => {
     try {
       const approved = await approvePrice(entry._id);
@@ -267,6 +399,46 @@ export function PriceHistoryPage() {
       showToast('Price approved', { tone: 'success' });
     } catch (error) {
       showToast(errorMessage(error, 'Failed to approve price'), { tone: 'error' });
+    }
+  };
+
+  const startEditPending = (entry: PriceEntryRecord) => {
+    setPendingEdit({
+      entry,
+      storeId: entityId(entry.storeId),
+      regularPrice: String(entry.regularPrice),
+      salePrice: entry.salePrice == null ? '' : String(entry.salePrice),
+      couponAmount: entry.couponAmount == null ? '' : String(entry.couponAmount),
+      couponCode: entry.couponCode || '',
+      quantity: String(entry.quantity || 1),
+      date: entry.date.slice(0, 10),
+      notes: entry.notes || ''
+    });
+  };
+
+  const submitPendingEdit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!pendingEdit || pendingSaving) return;
+    setPendingSaving(true);
+    try {
+      const approved = await approvePrice(pendingEdit.entry._id, {
+        storeId: pendingEdit.storeId,
+        regularPrice: Number(pendingEdit.regularPrice),
+        salePrice: pendingEdit.salePrice ? Number(pendingEdit.salePrice) : null,
+        couponAmount: pendingEdit.couponAmount ? Number(pendingEdit.couponAmount) : null,
+        couponCode: pendingEdit.couponCode.trim() || null,
+        quantity: Number(pendingEdit.quantity),
+        date: pendingEdit.date,
+        notes: pendingEdit.notes.trim() || null
+      });
+      setPending(current => current.filter(row => row._id !== approved._id));
+      if (entryMatchesLoadedScope(approved)) setEntries(current => [approved, ...current.filter(row => row._id !== approved._id)]);
+      setPendingEdit(null);
+      showToast('Price corrected and approved', { tone: 'success' });
+    } catch (error) {
+      showToast(errorMessage(error, 'Failed to edit and approve price'), { tone: 'error' });
+    } finally {
+      setPendingSaving(false);
     }
   };
 
@@ -283,9 +455,23 @@ export function PriceHistoryPage() {
     try {
       await rejectPrice(entry._id);
       setPending(current => current.filter(row => row._id !== entry._id));
+      if (pendingEdit?.entry._id === entry._id) setPendingEdit(null);
       showToast('Price rejected', { tone: 'success' });
     } catch (error) {
       showToast(errorMessage(error, 'Failed to reject price'), { tone: 'error' });
+    }
+  };
+
+  const ensureComparison = async (itemId: string) => {
+    if (comparisons[itemId] || comparisonLoading[itemId]) return;
+    setComparisonLoading(current => ({ ...current, [itemId]: true }));
+    try {
+      const rows = await loadPriceComparison(itemId);
+      setComparisons(current => ({ ...current, [itemId]: rows }));
+    } catch (error) {
+      showToast(errorMessage(error, 'Failed to compare recent prices'), { tone: 'error' });
+    } finally {
+      setComparisonLoading(current => ({ ...current, [itemId]: false }));
     }
   };
 
@@ -314,7 +500,7 @@ export function PriceHistoryPage() {
         <form className="more-settings-card" onSubmit={submitPrice} aria-labelledby="record-price-title">
           <div>
             <h2 id="record-price-title">Record household price</h2>
-            <p>Choose what you bought, or add the missing product or store without leaving this price entry.</p>
+            <p>Choose what you bought, scan the package, or add the missing product or store without leaving this price entry.</p>
           </div>
           <div className="more-field-grid">
             <label className="more-field">
@@ -335,6 +521,14 @@ export function PriceHistoryPage() {
             </label>
           </div>
 
+          {session?.features.barcodeScanning && (
+            <div className="more-inline-actions">
+              <button type="button" className="shell-button shell-button-secondary" onClick={() => setScanOpen(true)}>
+                Scan product barcode
+              </button>
+            </div>
+          )}
+
           {creatingProduct && (
             <fieldset className="more-inline-create-group">
               <legend>New product</legend>
@@ -343,6 +537,8 @@ export function PriceHistoryPage() {
                 <label className="more-field"><span>Brand <small>(optional)</small></span><input value={newProductBrand} onChange={event => setNewProductBrand(event.target.value)} /></label>
                 <label className="more-field"><span>Category</span><input value={newProductCategory} onChange={event => setNewProductCategory(event.target.value)} required /></label>
                 <label className="more-field"><span>Unit</span><input value={newProductUnit} onChange={event => setNewProductUnit(event.target.value)} required /></label>
+                <label className="more-field"><span>Package size <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="any" value={newProductSize} onChange={event => setNewProductSize(event.target.value)} /></label>
+                <label className="more-check-row"><input type="checkbox" checked={newProductOrganic} onChange={event => setNewProductOrganic(event.target.checked)} /><span>Organic</span></label>
               </div>
             </fieldset>
           )}
@@ -363,11 +559,12 @@ export function PriceHistoryPage() {
             <label className="more-field"><span>Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} required /></label>
           </div>
           <details className="more-advanced-settings">
-            <summary>Sale or coupon details</summary>
+            <summary>Sale, coupon, or notes</summary>
             <div className="more-field-grid">
               <label className="more-field"><span>Sale price <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={salePrice} onChange={event => setSalePrice(event.target.value)} /></label>
               <label className="more-field"><span>Coupon amount <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={couponAmount} onChange={event => setCouponAmount(event.target.value)} /></label>
               <label className="more-field"><span>Coupon code <small>(optional)</small></span><input value={couponCode} onChange={event => setCouponCode(event.target.value)} /></label>
+              <label className="more-field"><span>Notes <small>(optional)</small></span><input value={notes} onChange={event => setNotes(event.target.value)} /></label>
             </div>
           </details>
           {finalPreview && <div className="more-price-preview" role="status"><strong>{currency(finalPreview.final)}</strong><span>{currency(finalPreview.perUnit)} per unit</span></div>}
@@ -382,7 +579,7 @@ export function PriceHistoryPage() {
         <div className="more-field-grid">
           <label className="more-field"><span>Category</span><select value={category} onChange={event => setCategory(event.target.value)}><option value="">All categories</option>{categories.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
           <label className="more-field"><span>Store</span><select value={storeId} onChange={event => setStoreId(event.target.value)}><option value="">All stores</option>{stores.map(store => <option key={store._id} value={store._id}>{store.name}</option>)}</select></label>
-          <label className="more-field"><span>Sort by</span><select value={sortMode} onChange={event => setSortMode(event.target.value as SortMode)}><option value="date">Newest</option><option value="name">Name A-Z</option><option value="price">Lowest price</option></select></label>
+          <label className="more-field"><span>Sort by</span><select value={sortMode} onChange={event => setSortMode(event.target.value as SortMode)}><option value="date">Newest</option><option value="name">Name A-Z</option><option value="price">Lowest price</option><option value="ppu">Lowest price per unit</option></select></label>
         </div>
         <div className="more-inline-actions">
           <label className="more-check-row"><input type="checkbox" checked={organicOnly} onChange={event => setOrganicOnly(event.target.checked)} /><span>Organic only</span></label>
@@ -393,12 +590,38 @@ export function PriceHistoryPage() {
 
       {isAdmin && pending.length > 0 && (
         <section className="more-settings-card" aria-labelledby="pending-prices-title">
-          <div><h2 id="pending-prices-title">Prices awaiting review</h2><p>Approve household-submitted prices before they become shared spending history.</p></div>
+          <div><h2 id="pending-prices-title">Prices awaiting review</h2><p>Approve household-submitted prices, or correct an exception without asking the shopper to re-enter it.</p></div>
           <div className="more-record-list">
             {pending.map(entry => {
               const item = itemFrom(entry);
               const store = storeFrom(entry);
-              return <div className="more-record-card more-record-row" key={entry._id}><div><strong>{item?.name || 'Unknown product'} - {currency(entry.finalPrice)}</strong><small>{store?.name || 'Unknown store'} · {formatDate(entry.date)}</small></div><div className="more-inline-actions"><button type="button" className="shell-button shell-button-primary" onClick={() => void approvePending(entry)}>Approve</button><button type="button" className="shell-button shell-button-secondary" onClick={() => void rejectPending(entry)}>Reject</button></div></div>;
+              if (pendingEdit?.entry._id === entry._id) {
+                return (
+                  <PendingEditForm
+                    key={entry._id}
+                    draft={pendingEdit}
+                    stores={stores}
+                    saving={pendingSaving}
+                    onChange={patch => setPendingEdit(current => current ? { ...current, ...patch } : current)}
+                    onCancel={() => setPendingEdit(null)}
+                    onSubmit={submitPendingEdit}
+                  />
+                );
+              }
+              return (
+                <div className="more-record-card more-record-row" key={entry._id}>
+                  <div>
+                    <strong>{item?.name || 'Unknown product'} - {currency(entry.finalPrice)}</strong>
+                    <small>{store?.name || 'Unknown store'} · {formatDate(entry.date)} · Qty {entry.quantity}</small>
+                    {entry.notes && <small>{entry.notes}</small>}
+                  </div>
+                  <div className="more-inline-actions">
+                    <button type="button" className="shell-button shell-button-secondary" onClick={() => startEditPending(entry)}>Edit &amp; Approve</button>
+                    <button type="button" className="shell-button shell-button-primary" onClick={() => void approvePending(entry)}>Approve</button>
+                    <button type="button" className="shell-button shell-button-secondary" onClick={() => void rejectPending(entry)}>Reject</button>
+                  </div>
+                </div>
+              );
             })}
           </div>
         </section>
@@ -417,14 +640,35 @@ export function PriceHistoryPage() {
             {groups.map(group => {
               const latest = group.entries[0];
               const store = storeFrom(latest);
+              const itemId = group.item?._id || String(latest.itemId);
+              const value = bestValue(comparisons[itemId] || []);
+              const savings = value ? Math.max(0, Number(value.next.pricePerUnit) - Number(value.best.pricePerUnit)) : 0;
               return (
-                <details className="more-price-card" key={group.item?._id || String(latest.itemId)}>
+                <details
+                  className="more-price-card"
+                  key={itemId}
+                  onToggle={event => {
+                    if (event.currentTarget.open) void ensureComparison(itemId);
+                  }}
+                >
                   <summary>
                     <span><strong>{group.item?.name || 'Unknown product'}</strong><small>{store?.name || 'Unknown store'} · {formatDate(latest.date)}</small></span>
                     <span className="more-price-card-value"><strong>{currency(latest.finalPrice)}</strong><small>{currency(latest.pricePerUnit)} / {group.item?.unit || 'unit'}</small></span>
                   </summary>
                   <div className="more-price-history-rows">
-                    {group.entries.map(entry => <div key={entry._id}><span>{storeFrom(entry)?.name || 'Unknown store'} · {formatDate(entry.date)}</span><strong>{currency(entry.finalPrice)}</strong></div>)}
+                    {comparisonLoading[itemId] && <p className="more-muted" role="status">Comparing recent store prices…</p>}
+                    {value && (
+                      <div className="more-status-card">
+                        <strong>Best recent value: {currency(value.best.pricePerUnit)} / {group.item?.unit || 'unit'} at {storeFrom(value.best)?.name || 'Unknown store'}</strong>
+                        {savings > 0 && <span>Saves {currency(savings)} per {group.item?.unit || 'unit'} versus the next recent store price.</span>}
+                      </div>
+                    )}
+                    {group.entries.map(entry => (
+                      <div key={entry._id}>
+                        <span>{storeFrom(entry)?.name || 'Unknown store'} · {formatDate(entry.date)}{entry.notes ? ` · ${entry.notes}` : ''}</span>
+                        <strong>{currency(entry.finalPrice)}</strong>
+                      </div>
+                    ))}
                   </div>
                 </details>
               );
@@ -432,6 +676,14 @@ export function PriceHistoryPage() {
           </div>
         )}
       </section>
+
+      {scanOpen && (
+        <BarcodeResolverDialog
+          purpose="prices"
+          onClose={() => setScanOpen(false)}
+          onResolved={handleScannedProduct}
+        />
+      )}
     </section>
   );
 }
