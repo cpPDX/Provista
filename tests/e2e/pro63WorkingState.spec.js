@@ -61,19 +61,27 @@ test.describe('PRO-63 working state persistence', () => {
     await expect(page.locator('.react-list-item', { hasText: produce.name })).toBeVisible();
     await expect(page.locator('.react-list-item', { hasText: pantry.name })).toHaveCount(0);
 
-    const moreTools = page.locator('details.react-list-more-tools');
-    await moreTools.locator('summary').click();
-    await expect(moreTools).toHaveAttribute('open', '');
-
+    // Verify modal/edit state is ephemeral before expanding the mobile tools
+    // panel, which intentionally sits above the list while open.
     const produceCard = page.locator(`.react-list-item[data-id="${produceList._id}"]`);
     await produceCard.getByRole('button', { name: `Open item details for ${produce.name}` }).click();
     await expect(page.getByRole('dialog', { name: produce.name, exact: true })).toBeVisible();
 
     await page.goto('/app/pantry');
     await page.goto('/app/list');
-    await expect(category).toHaveValue('Produce');
-    await expect(moreTools).toHaveAttribute('open', '');
+    await expect(page.getByLabel('Category')).toHaveValue('Produce');
     await expect(page.getByRole('dialog', { name: produce.name, exact: true })).toHaveCount(0);
+
+    // Expanded tools are intentional workspace state and should survive a
+    // separate navigation round trip without requiring clicks through the panel.
+    const moreTools = page.locator('details.react-list-more-tools');
+    await moreTools.locator('summary').click();
+    await expect(moreTools).toHaveAttribute('open', '');
+
+    await page.goto('/app/pantry');
+    await page.goto('/app/list');
+    await expect(page.getByLabel('Category')).toHaveValue('Produce');
+    await expect(page.locator('details.react-list-more-tools')).toHaveAttribute('open', '');
 
     await page.reload();
     await expect(page.getByLabel('Category')).toHaveValue('Produce');
