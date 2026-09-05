@@ -1,57 +1,57 @@
 /* PRO-89: keep high-frequency mobile surfaces compact without shrinking touch targets. */
 
-.react-list-item-detail {
+.shell-app .react-list-item-detail {
   padding: 0.85rem;
 }
 
-.react-list-item-detail .react-list-modal-heading {
+.shell-app .react-list-item-detail .react-list-modal-heading {
   gap: 0.6rem;
 }
 
-.react-list-item-detail-content {
+.shell-app .react-list-item-detail .react-list-item-detail-content {
   gap: 0.6rem;
   margin-top: 0.5rem;
 }
 
-.react-list-item-detail .react-list-context-controls {
+.shell-app .react-list-item-detail .react-list-context-controls {
   gap: 0.15rem;
   margin-top: 0;
 }
 
-.react-list-item-detail .react-list-quantity-line,
-.react-list-item-detail .react-list-pantry-context {
+.shell-app .react-list-item-detail .react-list-quantity-line,
+.shell-app .react-list-item-detail .react-list-pantry-context {
   gap: 0.35rem;
 }
 
-.react-list-item-detail .react-list-detail-section {
+.shell-app .react-list-item-detail .react-list-detail-section {
   gap: 0.35rem;
   padding-top: 0.6rem;
 }
 
-.react-list-item-detail .react-list-price-line {
+.shell-app .react-list-item-detail .react-list-price-line {
   margin-top: 0;
 }
 
-.react-list-item-detail .react-list-detail-remove {
+.shell-app .react-list-item-detail .react-list-detail-remove {
   margin-top: 0.1rem;
 }
 
-.pantry-modal form {
+.shell-app .pantry-modal form {
   gap: 0.72rem;
   padding: 0.85rem;
 }
 
-.pantry-modal .pantry-scanned-product {
+.shell-app .pantry-modal .pantry-scanned-product {
   gap: 0.15rem;
   padding: 0.65rem 0.7rem;
 }
 
-.pantry-modal .pantry-tracking-choice {
+.shell-app .pantry-modal .pantry-tracking-choice {
   gap: 0.25rem;
   padding: 0.55rem 0.65rem;
 }
 
-.pantry-modal .pantry-tracking-choice label {
+.shell-app .pantry-modal .pantry-tracking-choice label {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
@@ -60,7 +60,7 @@
   padding: 0.3rem 0.2rem;
 }
 
-.pantry-modal .pantry-tracking-choice input[type='radio'] {
+.shell-app .pantry-modal .pantry-tracking-choice input[type='radio'] {
   width: 22px;
   height: 22px;
   margin: 0;
@@ -68,16 +68,16 @@
   accent-color: var(--accent);
 }
 
-.pantry-modal .pantry-tracking-choice span {
+.shell-app .pantry-modal .pantry-tracking-choice span {
   gap: 0.05rem;
   line-height: 1.25;
 }
 
-.pantry-modal .pantry-field {
+.shell-app .pantry-modal .pantry-field {
   gap: 0.25rem;
 }
 
-.pantry-modal .pantry-modal-actions {
+.shell-app .pantry-modal .pantry-modal-actions {
   padding-top: 0.1rem;
 }
 
@@ -123,18 +123,25 @@
 }
 
 @media (max-width: 620px) {
-  .react-list-item-detail-content {
+  .shell-app .react-list-item-detail .react-list-item-detail-content {
     gap: 0.5rem;
+  }
+
+  .shell-app .react-list-item-detail .react-list-quantity-line,
+  .shell-app .react-list-item-detail .react-list-pantry-context {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 }
 
 @media (max-width: 560px) {
-  .pantry-modal form {
+  .shell-app .pantry-modal form {
     gap: 0.68rem;
     padding: 0.8rem 0.9rem calc(0.85rem + env(safe-area-inset-bottom));
   }
 
-  .pantry-modal .pantry-modal-actions .shell-button {
+  .shell-app .pantry-modal .pantry-modal-actions .shell-button {
     min-height: 44px;
   }
 }
