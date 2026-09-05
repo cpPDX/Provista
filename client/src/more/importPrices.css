@@ -7,7 +7,7 @@
   display: grid;
   gap: 0.55rem;
   padding: 0.9rem;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border);
   border-radius: 0.85rem;
   background: var(--surface-raised);
 }
@@ -44,7 +44,7 @@
 
 .csv-review-row[data-status="choose-match"] .csv-status-chip,
 .csv-review-row[data-status="ready-with-warning"] .csv-status-chip {
-  color: var(--warning, var(--text-primary));
+  color: var(--warning, var(--text));
 }
 
 .csv-row-summary,
