@@ -13,6 +13,11 @@ interface MoreDestination {
   action?: string;
   adminOnly?: boolean;
   reactHref?: string;
+  reactAction?: 'tour';
+}
+
+interface MorePageProps {
+  onStartTour: () => void;
 }
 
 const destinations: MoreDestination[] = [
@@ -22,8 +27,8 @@ const destinations: MoreDestination[] = [
   { id: 'products', label: 'Manage products', detail: 'Household grocery catalog and product details', icon: 'products', reactHref: '/app/more/products', adminOnly: true },
   { id: 'stores', label: 'Stores', detail: 'Shopping locations and store sections', icon: 'stores', section: 'stores', adminOnly: true },
   { id: 'import', label: 'Import prices', detail: 'Bring in household price history from CSV', icon: 'import', action: 'csv-import', adminOnly: true },
-  { id: 'about', label: 'Help & About', detail: 'How Provista works and where to get started', icon: 'about', section: 'about' },
-  { id: 'tour', label: 'App Tour', detail: 'Walk through the household grocery workflow', icon: 'tour', action: 'app-tour' }
+  { id: 'about', label: 'Help & About', detail: 'How Provista works and where to get started', icon: 'about', reactHref: '/app/more/help' },
+  { id: 'tour', label: 'App Tour', detail: 'Walk through the household grocery workflow', icon: 'tour', reactAction: 'tour' }
 ];
 
 function destinationHref(destination: MoreDestination) {
@@ -62,7 +67,20 @@ function MoreIcon({ name }: { name: MoreIconName }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></svg>;
 }
 
-export function MorePage() {
+function DestinationContent({ destination }: { destination: MoreDestination }) {
+  return (
+    <>
+      <span className="more-card-icon"><MoreIcon name={destination.icon} /></span>
+      <span className="more-card-copy">
+        <strong>{destination.label}</strong>
+        <small>{destination.detail}</small>
+      </span>
+      <span className="more-card-arrow" aria-hidden="true">→</span>
+    </>
+  );
+}
+
+export function MorePage({ onStartTour }: MorePageProps) {
   const { isAdmin, logout } = useAuth();
   const confirm = useConfirm();
   const visibleDestinations = destinations.filter(destination => !destination.adminOnly || isAdmin);
@@ -86,14 +104,13 @@ export function MorePage() {
       </header>
 
       <div className="more-grid">
-        {visibleDestinations.map(destination => (
+        {visibleDestinations.map(destination => destination.reactAction === 'tour' ? (
+          <button type="button" className="more-card more-card-button" onClick={onStartTour} key={destination.id}>
+            <DestinationContent destination={destination} />
+          </button>
+        ) : (
           <a className="more-card" href={destinationHref(destination)} key={destination.id}>
-            <span className="more-card-icon"><MoreIcon name={destination.icon} /></span>
-            <span className="more-card-copy">
-              <strong>{destination.label}</strong>
-              <small>{destination.detail}</small>
-            </span>
-            <span className="more-card-arrow" aria-hidden="true">→</span>
+            <DestinationContent destination={destination} />
           </a>
         ))}
         <button type="button" className="more-card more-card-button" onClick={() => void handleLogout()}>
