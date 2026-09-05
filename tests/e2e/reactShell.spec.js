@@ -216,7 +216,7 @@ test.describe('React migration shell', () => {
     expect(darkColors.dialogText).not.toBe(lightColors.dialogText);
   });
 
-  test('keeps More in the React shell and preserves theme for legacy tools', async ({ page }) => {
+  test('keeps React-owned More tools in the shell and preserves theme', async ({ page }) => {
     await createHouseholdSession(page, 'More');
 
     await page.goto('/app');
@@ -229,8 +229,16 @@ test.describe('React migration shell', () => {
 
     await page.getByRole('button', { name: 'Switch to dark theme' }).click();
     await page.getByRole('link', { name: /My Account/ }).click();
-    await expect(page).toHaveURL(/\/app\?tab=more&section=account$/);
-    await expect(page.locator('#section-account')).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/more\/account$/);
+    await expect(page.locator('#account-title')).toHaveText('My Account');
+    await expect(page.locator('#section-account')).toHaveCount(0);
+    await expect(page.locator('.shell-brand')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/more\/account$/);
+    await expect(page.locator('#account-title')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 
