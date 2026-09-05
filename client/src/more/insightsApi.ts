@@ -56,6 +56,8 @@ export interface RecordPriceInput {
     category: string;
     unit: string;
     brand?: string;
+    size?: number;
+    isOrganic?: boolean;
   };
   storeId?: string;
   store?: {
@@ -68,7 +70,9 @@ export interface RecordPriceInput {
   couponCode?: string | null;
   quantity: number;
   date: string;
-  source: 'manual';
+  notes?: string | null;
+  source: 'manual' | 'csv';
+  replaceSameDay?: boolean;
 }
 
 export interface RecordPriceResult {
