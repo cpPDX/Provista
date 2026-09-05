@@ -32,6 +32,10 @@
   margin-top: 0;
 }
 
+.shell-app .react-list-item-detail .shell-button {
+  min-height: 44px;
+}
+
 .shell-app .react-list-item-detail .react-list-detail-remove {
   margin-top: 0.1rem;
 }
