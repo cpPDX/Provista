@@ -16,7 +16,10 @@ boundary follows daylight-saving changes:
 
 - Blackout: 8:00 AM through 7:59 PM Pacific.
 - Allowed: 8:00 PM through 7:59 AM Pacific.
-- Reconciliation: 7 and 37 minutes past each half hour in the allowed window.
+- Immediate reconciliation: a successful `staging` push CI run reconciles the
+  current exact SHA as soon as CI finishes when the allowed window is open.
+- Recovery reconciliation: scheduled runs at 7 and 37 minutes past each half
+  hour in the allowed window recover queued, missed, or retryable work.
 
 ### One-time setup
 
@@ -36,26 +39,34 @@ environment, service, and health endpoint. Update those non-secret values in the
 workflow if the Railway service is recreated or its domain changes.
 
 The single-deployer model is intentional. A merge to `staging` may start `App CI`,
-but it must not start a Railway deployment directly. Only a successful `App CI`
-push run makes the current staging SHA eligible for the GitHub-managed queue.
-This avoids duplicate deployment paths and prevents Railway's native status from
-appearing successful before end-to-end validation has finished.
+but it must not start a native Railway deployment before CI succeeds. Only a
+successful `App CI` push run makes the current staging SHA eligible for the
+GitHub-managed deployment workflow. This avoids duplicate deployment paths and
+prevents Railway's native status from appearing successful before end-to-end
+validation has finished.
 
 ### Normal staging path
 
 1. Merge a reviewed change into `staging`.
 2. `App CI` validates the resulting staging merge commit.
-3. A successful push run records that exact SHA as queued in GitHub.
-4. During the blackout, no Railway command runs.
-5. During the allowed window, a scheduled or manually dispatched run resolves
-   the current `staging` head and confirms that exact SHA has successful push CI.
+3. A successful push run verifies that the triggering SHA is still the current
+   `staging` head and records that exact SHA as the deployment target.
+4. If the allowed window is open, the same `workflow_run` reconciles Railway
+   immediately. If the blackout is active, GitHub records the SHA as queued and
+   no Railway command runs.
+5. Scheduled or manually dispatched runs remain a recovery path: they resolve
+   the current `staging` head, require successful push CI for that exact SHA, and
+   reconcile queued or missed work when allowed.
 6. GitHub checks Railway deployment history for the exact SHA. If that SHA is
    already active, GitHub leaves it pending. If it already succeeded, GitHub
    verifies readiness and adopts it. Otherwise GitHub checks out and uploads the
    exact SHA with the pinned Railway CLI. Deployment-control scripts always come
    from trusted `main`; staging source is checked out separately and is never
    executed with the Railway token.
-7. `/api/health/ready` must report a connected database before GitHub marks the
+7. Immediately before Railway access, the workflow revalidates both the current
+   staging head and the deployment window so a stale SHA or newly closed window
+   cannot slip through.
+8. `/api/health/ready` must report a connected database before GitHub marks the
    deployment successful.
 
 One concurrency group allows only one reconciler to run. GitHub keeps the newest
