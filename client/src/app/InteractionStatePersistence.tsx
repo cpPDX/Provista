@@ -116,27 +116,14 @@ function restoreScroll(userId: string, route: PrimaryRoute) {
   window.setTimeout(() => window.scrollTo({ top: saved }), 250);
 }
 
-function persistPlanContext(userId: string) {
-  const context = sessionStorage.getItem('provista-plan-context');
-  if (context) sessionStorage.setItem(storageKey(userId, 'plan', 'context'), context);
-}
-
-function restorePlanContext(userId: string) {
-  const context = sessionStorage.getItem(storageKey(userId, 'plan', 'context'));
-  if (context) sessionStorage.setItem('provista-plan-context', context);
-  else sessionStorage.removeItem('provista-plan-context');
-}
-
 function persistRoute(userId: string, route: PrimaryRoute) {
   persistDetails(userId, route);
   persistScroll(userId, route);
-  if (route === 'plan') persistPlanContext(userId);
   if (route === 'list') persistListFilters(userId);
   if (route === 'pantry') persistPantrySearch(userId);
 }
 
 function restoreRoute(userId: string, route: PrimaryRoute) {
-  if (route === 'plan') restorePlanContext(userId);
   restoreControls(userId, route);
   restoreScroll(userId, route);
   window.setTimeout(() => restoreControls(userId, route), 0);
