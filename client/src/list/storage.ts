@@ -200,7 +200,7 @@ export async function retryFailedShoppingWrite(id: string): Promise<{ synced: nu
   item.status = 'pending';
   item.attempts = 2;
   await updateQueueItem(item);
-  return processShoppingQueue();
+  return processShoppingQueue(id);
 }
 
 export async function discardFailedShoppingWrite(id: string): Promise<ShoppingListItem[]> {
@@ -233,10 +233,10 @@ export async function discardFailedShoppingWrite(id: string): Promise<ShoppingLi
   return reconciled;
 }
 
-export async function processShoppingQueue(): Promise<{ synced: number; failed: number }> {
+export async function processShoppingQueue(onlyId?: string): Promise<{ synced: number; failed: number }> {
   if (!navigator.onLine) return { synced: 0, failed: 0 };
   const pending = (await queueItems())
-    .filter(item => item.collection === SHOPPING_STORE && item.status === 'pending')
+    .filter(item => item.collection === SHOPPING_STORE && item.status === 'pending' && (!onlyId || item.id === onlyId))
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
   let synced = 0;
