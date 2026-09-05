@@ -6,9 +6,12 @@ import '../home/home.css';
 import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
 import { PlanRoute } from '../plan/PlanRoute';
+import { AccountPage } from '../more/AccountPage';
 import { AppTour } from '../more/AppTour';
 import { HelpAboutPage } from '../more/HelpAboutPage';
+import { HouseholdPage } from '../more/HouseholdPage';
 import { MorePage } from '../more/MorePage';
+import { StoresPage } from '../more/StoresPage';
 import { ProductCatalogPage } from '../products/ProductCatalogPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
@@ -82,6 +85,18 @@ export function AppShell() {
 
   const startTour = () => setTourOpen(true);
 
+  const moreContent = location.pathname === '/app/more/products'
+    ? <ProductCatalogPage />
+    : location.pathname === '/app/more/help'
+      ? <HelpAboutPage onStartTour={startTour} />
+      : location.pathname === '/app/more/account'
+        ? <AccountPage />
+        : location.pathname === '/app/more/household'
+          ? <HouseholdPage />
+          : location.pathname === '/app/more/stores'
+            ? <StoresPage />
+            : <MorePage onStartTour={startTour} />;
+
   return (
     <div className="shell-app">
       {session.offlineSession && (
@@ -114,11 +129,7 @@ export function AppShell() {
             : currentTab === 'meal-plan'
               ? <PlanRoute />
               : currentTab === 'more'
-                ? location.pathname === '/app/more/products'
-                  ? <ProductCatalogPage />
-                  : location.pathname === '/app/more/help'
-                    ? <HelpAboutPage onStartTour={startTour} />
-                    : <MorePage onStartTour={startTour} />
+                ? moreContent
                 : <HomePage />}
       </main>
 
