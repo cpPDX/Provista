@@ -36,6 +36,7 @@ const tourSteps = [
 export function AppTour({ onClose }: AppTourProps) {
   const navigate = useNavigate();
   const [stepIndex, setStepIndex] = useState(0);
+  const dialogRef = useRef<HTMLElement>(null);
   const nextButtonRef = useRef<HTMLButtonElement>(null);
   const step = tourSteps[stepIndex];
   const isLastStep = stepIndex === tourSteps.length - 1;
@@ -50,10 +51,28 @@ export function AppTour({ onClose }: AppTourProps) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      onClose();
-      navigate('/app');
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        navigate('/app');
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? []
+      );
+      if (!focusable.length) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -79,7 +98,14 @@ export function AppTour({ onClose }: AppTourProps) {
         if (event.target === event.currentTarget) closeTour();
       }}
     >
-      <section className="shell-dialog more-tour-dialog" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-text">
+      <section
+        ref={dialogRef}
+        className="shell-dialog more-tour-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tour-title"
+        aria-describedby="tour-text"
+      >
         <p className="more-eyebrow">App Tour</p>
         <h2 id="tour-title">{step.title}</h2>
         <p id="tour-text">{step.text}</p>
