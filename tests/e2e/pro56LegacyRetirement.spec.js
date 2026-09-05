@@ -209,24 +209,31 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(page.getByText(item.name, { exact: true })).toBeVisible();
   });
 
-  test('records a household price entirely in React Insights', async ({ page }) => {
+  test('records a household price with inline product and store creation entirely in React Insights', async ({ page }) => {
     await createHouseholdSession(page, 'RecordPrice');
-    const itemResponse = await page.request.post('/api/items', { data: { name: 'PRO-56 Recorded Item', category: 'Pantry', unit: 'each' } });
-    const storeResponse = await page.request.post('/api/stores', { data: { name: 'PRO-56 Recorded Store' } });
-    expect(itemResponse.ok()).toBeTruthy();
-    expect(storeResponse.ok()).toBeTruthy();
 
     await page.goto('/app/more/insights/prices');
     await page.getByRole('button', { name: 'Record price', exact: true }).first().click();
-    await page.getByLabel('Product').selectOption({ label: 'PRO-56 Recorded Item' });
-    await page.getByLabel('Store').selectOption({ label: 'PRO-56 Recorded Store' });
+    await page.getByLabel('Product').selectOption({ label: 'Add a new product…' });
+    await page.getByLabel('Product name').fill('PRO-56 Recorded Item');
+    await expect(page.getByLabel('Category')).toHaveValue('Other');
+    await expect(page.getByLabel('Unit')).toHaveValue('each');
+    await page.getByLabel('Store').selectOption({ label: 'Add a new store…' });
+    await page.getByLabel('Store name').fill('PRO-56 Recorded Store');
+    await page.getByLabel('Location').fill('North');
     await page.getByLabel('Regular price').fill('4.29');
     await expect(page.getByLabel('Date')).toHaveValue(/\d{4}-\d{2}-\d{2}/);
+    await page.getByText('Sale or coupon details', { exact: true }).click();
+    await page.getByLabel('Sale price').fill('3.99');
+    await page.getByLabel('Coupon amount').fill('0.50');
+    await page.getByLabel('Coupon code').fill('SAVE50');
+    await expect(page.getByText('$3.49', { exact: true }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Record price', exact: true }).last().click();
 
     await expect(page.getByText('Price recorded')).toBeVisible();
     await expect(page.getByText('PRO-56 Recorded Item', { exact: true })).toBeVisible();
-    await expect(page.getByText('$4.29', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('PRO-56 Recorded Store', { exact: true })).toBeVisible();
+    await expect(page.getByText('$3.49', { exact: true }).first()).toBeVisible();
     await expect(page.locator('#tab-prices')).toHaveCount(0);
   });
 });
