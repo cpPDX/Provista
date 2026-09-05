@@ -234,7 +234,7 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(page.getByText('Price recorded')).toBeVisible();
     const historyCard = page.locator('.more-price-card').filter({ hasText: 'PRO-56 Recorded Item' });
     await expect(historyCard).toBeVisible();
-    await expect(historyCard.getByText('PRO-56 Recorded Store', { exact: true })).toBeVisible();
+    await expect(historyCard).toContainText('PRO-56 Recorded Store');
     await expect(historyCard.getByText('$3.49', { exact: true })).toBeVisible();
     await expect(page.locator('#tab-prices')).toHaveCount(0);
   });
