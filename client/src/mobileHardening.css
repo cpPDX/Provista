@@ -1,0 +1,140 @@
+/* PRO-89: keep high-frequency mobile surfaces compact without shrinking touch targets. */
+
+.react-list-item-detail {
+  padding: 0.85rem;
+}
+
+.react-list-item-detail .react-list-modal-heading {
+  gap: 0.6rem;
+}
+
+.react-list-item-detail-content {
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.react-list-item-detail .react-list-context-controls {
+  gap: 0.15rem;
+  margin-top: 0;
+}
+
+.react-list-item-detail .react-list-quantity-line,
+.react-list-item-detail .react-list-pantry-context {
+  gap: 0.35rem;
+}
+
+.react-list-item-detail .react-list-detail-section {
+  gap: 0.35rem;
+  padding-top: 0.6rem;
+}
+
+.react-list-item-detail .react-list-price-line {
+  margin-top: 0;
+}
+
+.react-list-item-detail .react-list-detail-remove {
+  margin-top: 0.1rem;
+}
+
+.pantry-modal form {
+  gap: 0.72rem;
+  padding: 0.85rem;
+}
+
+.pantry-modal .pantry-scanned-product {
+  gap: 0.15rem;
+  padding: 0.65rem 0.7rem;
+}
+
+.pantry-modal .pantry-tracking-choice {
+  gap: 0.25rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.pantry-modal .pantry-tracking-choice label {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 48px;
+  padding: 0.3rem 0.2rem;
+}
+
+.pantry-modal .pantry-tracking-choice input[type='radio'] {
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  justify-self: center;
+  accent-color: var(--accent);
+}
+
+.pantry-modal .pantry-tracking-choice span {
+  gap: 0.05rem;
+  line-height: 1.25;
+}
+
+.pantry-modal .pantry-field {
+  gap: 0.25rem;
+}
+
+.pantry-modal .pantry-modal-actions {
+  padding-top: 0.1rem;
+}
+
+/* The Pantry-backed Produce view was introduced with legacy token names.
+   Bind it explicitly to the current React shell theme so dark mode never
+   falls through to literal white/light fallback colors. */
+.shell-app .plan-produce-planning {
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+  padding: 0.85rem;
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.shell-app .plan-produce-planning header p,
+.shell-app .plan-produce-state span,
+.shell-app .plan-produce-items span,
+.shell-app .plan-produce-items small,
+.shell-app .plan-produce-candidates small {
+  color: var(--text-muted);
+}
+
+.shell-app .plan-produce-items article {
+  border-color: var(--border);
+  background: var(--surface-subtle);
+}
+
+.shell-app .plan-produce-add input,
+.shell-app .plan-produce-candidates > button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.shell-app .plan-produce-add input {
+  border-radius: 0.7rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.shell-app .plan-produce-candidates > button {
+  border-radius: 0.7rem;
+}
+
+@media (max-width: 620px) {
+  .react-list-item-detail-content {
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .pantry-modal form {
+    gap: 0.68rem;
+    padding: 0.8rem 0.9rem calc(0.85rem + env(safe-area-inset-bottom));
+  }
+
+  .pantry-modal .pantry-modal-actions .shell-button {
+    min-height: 44px;
+  }
+}
