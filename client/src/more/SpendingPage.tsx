@@ -39,6 +39,7 @@ export function SpendingPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setData(null);
     Promise.all([loadSpendMonth(month), loadSpendSummary()])
       .then(([monthData, summaryData]) => {
         if (cancelled) return;
