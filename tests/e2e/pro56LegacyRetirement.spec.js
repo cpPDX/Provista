@@ -106,7 +106,7 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await createHouseholdSession(page, 'Household');
 
     await page.goto('/app/more');
-    await page.getByRole('link', { name: /Household/ }).click();
+    await page.getByRole('link', { name: /^Household\b/ }).click();
 
     await expect(page).toHaveURL(/\/app\/more\/household$/);
     await expect(page.locator('#household-title')).toHaveText('Household');
@@ -132,7 +132,7 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await createHouseholdSession(page, 'Stores');
 
     await page.goto('/app/more');
-    await page.getByRole('link', { name: /Stores/ }).click();
+    await page.getByRole('link', { name: /^Stores\b/ }).click();
 
     await expect(page).toHaveURL(/\/app\/more\/stores$/);
     await expect(page.locator('#stores-title')).toHaveText('Stores');
@@ -145,8 +145,10 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(storeCard).toContainText('North');
 
     await storeCard.getByRole('button', { name: 'Edit' }).click();
-    await storeCard.getByLabel('Store name').fill('PRO-56 Market Updated');
-    await storeCard.getByRole('button', { name: 'Save', exact: true }).click();
+    const editForm = page.locator('form.more-record-card');
+    await expect(editForm.getByLabel('Store name')).toHaveValue('PRO-56 Market');
+    await editForm.getByLabel('Store name').fill('PRO-56 Market Updated');
+    await editForm.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('PRO-56 Market Updated', { exact: true })).toBeVisible();
 
     await page.reload();
