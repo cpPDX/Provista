@@ -7,6 +7,7 @@ import { useConfirm } from '../shell/DialogProvider';
 import { useToast } from '../shell/ToastProvider';
 import {
   approvePrice,
+  deletePrice,
   loadInsightItems,
   loadInsightStores,
   loadPendingPrices,
@@ -47,6 +48,10 @@ function storeFrom(entry: PriceEntryRecord) {
 
 function entityId(value: InsightItem | InsightStore | string) {
   return typeof value === 'string' ? value : value._id;
+}
+
+function itemIdFor(entry: PriceEntryRecord) {
+  return itemFrom(entry)?._id || (typeof entry.itemId === 'string' ? entry.itemId : entry.itemId._id);
 }
 
 function currency(value: number) {
@@ -300,6 +305,16 @@ export function PriceHistoryPage() {
     return true;
   };
 
+  const invalidateComparison = (entry: PriceEntryRecord) => {
+    const itemId = itemIdFor(entry);
+    setComparisons(current => {
+      if (!current[itemId]) return current;
+      const next = { ...current };
+      delete next[itemId];
+      return next;
+    });
+  };
+
   const resetRecordForm = () => {
     setRecordItemId('');
     setNewProductName('');
@@ -359,12 +374,7 @@ export function PriceHistoryPage() {
       if (result.createdStore) {
         setStores(current => [...current.filter(store => store._id !== result.createdStore?._id), result.createdStore as InsightStore].sort((a, b) => a.name.localeCompare(b.name)));
       }
-      setComparisons(current => {
-        const next = { ...current };
-        const itemId = itemFrom(created)?._id || (typeof created.itemId === 'string' ? created.itemId : created.itemId._id);
-        delete next[itemId];
-        return next;
-      });
+      invalidateComparison(created);
       showToast(created.status === 'pending' ? 'Price submitted for household review' : 'Price recorded', { tone: 'success' });
       setShowRecord(false);
       resetRecordForm();
@@ -396,6 +406,7 @@ export function PriceHistoryPage() {
       const approved = await approvePrice(entry._id);
       setPending(current => current.filter(row => row._id !== entry._id));
       if (entryMatchesLoadedScope(approved)) setEntries(current => [approved, ...current.filter(row => row._id !== entry._id)]);
+      invalidateComparison(approved);
       showToast('Price approved', { tone: 'success' });
     } catch (error) {
       showToast(errorMessage(error, 'Failed to approve price'), { tone: 'error' });
@@ -433,6 +444,7 @@ export function PriceHistoryPage() {
       });
       setPending(current => current.filter(row => row._id !== approved._id));
       if (entryMatchesLoadedScope(approved)) setEntries(current => [approved, ...current.filter(row => row._id !== approved._id)]);
+      invalidateComparison(approved);
       setPendingEdit(null);
       showToast('Price corrected and approved', { tone: 'success' });
     } catch (error) {
@@ -459,6 +471,27 @@ export function PriceHistoryPage() {
       showToast('Price rejected', { tone: 'success' });
     } catch (error) {
       showToast(errorMessage(error, 'Failed to reject price'), { tone: 'error' });
+    }
+  };
+
+  const removeApprovedPrice = async (entry: PriceEntryRecord) => {
+    const item = itemFrom(entry);
+    const store = storeFrom(entry);
+    const approved = await confirm({
+      title: 'Delete this price entry?',
+      message: `Remove ${item?.name || 'this price'}${store?.name ? ` at ${store.name}` : ''} from household price history? Standalone logged purchases can also change Spending. Completed shopping-trip totals remain unchanged.`,
+      confirmLabel: 'Delete price',
+      cancelLabel: 'Keep price',
+      danger: true
+    });
+    if (!approved) return;
+    try {
+      await deletePrice(entry._id);
+      setEntries(current => current.filter(row => row._id !== entry._id));
+      invalidateComparison(entry);
+      showToast('Price entry deleted', { tone: 'success' });
+    } catch (error) {
+      showToast(errorMessage(error, 'Failed to delete price entry'), { tone: 'error' });
     }
   };
 
@@ -666,7 +699,19 @@ export function PriceHistoryPage() {
                     {group.entries.map(entry => (
                       <div key={entry._id}>
                         <span>{storeFrom(entry)?.name || 'Unknown store'} · {formatDate(entry.date)}{entry.notes ? ` · ${entry.notes}` : ''}</span>
-                        <strong>{currency(entry.finalPrice)}</strong>
+                        <span className="more-inline-actions">
+                          <strong>{currency(entry.finalPrice)}</strong>
+                          {isAdmin && entry.status !== 'pending' && (
+                            <button
+                              type="button"
+                              className="shell-button shell-button-danger"
+                              aria-label={`Delete price entry for ${group.item?.name || 'product'} from ${storeFrom(entry)?.name || 'store'}`}
+                              onClick={() => void removeApprovedPrice(entry)}
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </span>
                       </div>
                     ))}
                   </div>
