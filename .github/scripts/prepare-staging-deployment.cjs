@@ -10,6 +10,11 @@ const DEPLOYMENT_ENVIRONMENT = 'railway-staging';
 const STAGING_BRANCH = 'staging';
 const MANAGED_DEPLOYMENT_STATES = new Set(['in_progress', 'pending', 'queued']);
 
+function isExplicitManualReconcile(context) {
+  const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || '1');
+  return context.eventName === 'schedule' && Number.isFinite(runAttempt) && runAttempt > 1;
+}
+
 function actionsRunUrl(context) {
   const server = process.env.GITHUB_SERVER_URL || 'https://github.com';
   const repository = process.env.GITHUB_REPOSITORY || `${context.repo.owner}/${context.repo.repo}`;
@@ -214,10 +219,13 @@ async function prepare({ github, context, core, now = new Date() }) {
 
   const deploymentId = managedDeployment.deployment.id;
   const windowOpen = isDeploymentWindowOpen(now);
-  const shouldReconcile = eventName !== 'workflow_run' && windowOpen;
+  const manualOverride = isExplicitManualReconcile(context);
+  const shouldReconcile = eventName !== 'workflow_run' && (windowOpen || manualOverride);
 
   if (shouldReconcile) {
-    reason = 'The current green staging head is ready for Railway reconciliation.';
+    reason = manualOverride && !windowOpen
+      ? 'An explicit manual rerun is overriding the staging blackout for the current green head.'
+      : 'The current green staging head is ready for Railway reconciliation.';
     setPreparationOutputs(core, {
       action: 'reconcile',
       targetSha,
@@ -262,7 +270,9 @@ async function revalidate({ github, context, core, targetSha, deploymentId, now 
     return;
   }
 
-  if (!isDeploymentWindowOpen(now)) {
+  const windowOpen = isDeploymentWindowOpen(now);
+  const manualOverride = isExplicitManualReconcile(context);
+  if (!windowOpen && !manualOverride) {
     await setManagedDeploymentStatus({
       github,
       context,
@@ -276,7 +286,12 @@ async function revalidate({ github, context, core, targetSha, deploymentId, now 
   }
 
   core.setOutput('proceed', 'true');
-  core.setOutput('reason', 'The SHA and Pacific deployment window are still valid.');
+  core.setOutput(
+    'reason',
+    manualOverride && !windowOpen
+      ? 'The SHA is current and the explicit manual rerun is overriding the staging blackout.'
+      : 'The SHA and Pacific deployment window are still valid.'
+  );
 }
 
 module.exports = {
