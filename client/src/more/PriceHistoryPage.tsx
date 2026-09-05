@@ -24,7 +24,7 @@ function localDateValue(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function monthRange(month: string) {
+function monthRange(month: string): Record<string, string> {
   const [year, monthNumber] = month.split('-').map(Number);
   const start = new Date(year, monthNumber - 1, 1, 0, 0, 0, 0);
   const end = new Date(year, monthNumber, 1, 0, 0, 0, 0);
@@ -86,36 +86,39 @@ export function PriceHistoryPage() {
   const [couponAmount, setCouponAmount] = useState('');
   const [couponCode, setCouponCode] = useState('');
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      const params = month ? monthRange(month) : {};
-      if (drillStoreId) params.storeId = drillStoreId;
-      const [priceRows, itemRows, storeRows, pendingRows] = await Promise.all([
-        loadPrices(params),
-        loadInsightItems(),
-        loadInsightStores(),
-        isAdmin ? loadPendingPrices() : Promise.resolve([])
-      ]);
-      setEntries(priceRows);
-      setItems(itemRows.sort((a, b) => a.name.localeCompare(b.name)));
-      setStores(storeRows.sort((a, b) => a.name.localeCompare(b.name)));
-      setPending(pendingRows);
-    } catch (error) {
-      showToast(errorMessage(error, 'Failed to load price history'), { tone: 'error' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    void refresh();
-  }, [month, drillStoreId, isAdmin]);
+    let cancelled = false;
+    setLoading(true);
+    const params: Record<string, string> = month ? monthRange(month) : {};
+    if (drillStoreId) params.storeId = drillStoreId;
+
+    Promise.all([
+      loadPrices(params),
+      loadInsightItems(),
+      loadInsightStores(),
+      isAdmin ? loadPendingPrices() : Promise.resolve([] as PriceEntryRecord[])
+    ])
+      .then(([priceRows, itemRows, storeRows, pendingRows]) => {
+        if (cancelled) return;
+        setEntries(priceRows);
+        setItems([...itemRows].sort((a, b) => a.name.localeCompare(b.name)));
+        setStores([...storeRows].sort((a, b) => a.name.localeCompare(b.name)));
+        setPending(pendingRows);
+      })
+      .catch(error => {
+        if (!cancelled) showToast(errorMessage(error, 'Failed to load price history'), { tone: 'error' });
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [month, drillStoreId, isAdmin, showToast]);
 
   useEffect(() => {
     setCategory(drillCategory);
     setStoreId(drillStoreId);
-    if (drillStoreName && !drillStoreId) setSearch(drillStoreName);
+    setSearch(drillStoreName && !drillStoreId ? drillStoreName : '');
   }, [drillCategory, drillStoreId, drillStoreName]);
 
   const categories = useMemo(() => [...new Set(entries.map(entry => itemFrom(entry)?.category).filter(Boolean) as string[])].sort(), [entries]);
@@ -142,7 +145,7 @@ export function PriceHistoryPage() {
     for (const entry of visibleEntries) {
       const item = itemFrom(entry);
       const id = item?._id || String(entry.itemId);
-      const current = byItem.get(id) || { item, entries: [] };
+      const current = byItem.get(id) ?? { item, entries: [] as PriceEntryRecord[] };
       current.entries.push(entry);
       byItem.set(id, current);
     }
@@ -192,11 +195,7 @@ export function PriceHistoryPage() {
         source: 'manual'
       });
       setEntries(current => [created, ...current]);
-      if (created.status === 'pending') {
-        showToast('Price submitted for household review', { tone: 'success' });
-      } else {
-        showToast('Price recorded', { tone: 'success' });
-      }
+      showToast(created.status === 'pending' ? 'Price submitted for household review' : 'Price recorded', { tone: 'success' });
       setShowRecord(false);
       setRegularPrice('');
       setSalePrice('');
@@ -268,7 +267,7 @@ export function PriceHistoryPage() {
             <h2 id="record-price-title">Record household price</h2>
             <p>Use this for a price the household actually paid or confirmed.</p>
           </div>
-          {items.length && stores.length ? (
+          {items.length > 0 && stores.length > 0 ? (
             <>
               <div className="more-field-grid">
                 <label className="more-field"><span>Product</span><select value={recordItemId} onChange={event => setRecordItemId(event.target.value)} required><option value="">Choose product</option>{items.map(item => <option key={item._id} value={item._id}>{item.name}</option>)}</select></label>
