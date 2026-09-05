@@ -131,6 +131,21 @@ test.describe('PRO-75 contextual List setup', () => {
     const dialog = page.getByRole('dialog', { name: `Track ${product.name}`, exact: true });
     await expect(dialog).toHaveCount(1);
     await expect(dialog).toContainText('Product identified. Choose only how Pantry should track it.');
+
+    const layout = await dialog.evaluate(element => {
+      const form = element.querySelector('form');
+      const radio = element.querySelector('.pantry-tracking-choice input[type="radio"]');
+      const labels = [...element.querySelectorAll('.pantry-tracking-choice label')];
+      return {
+        formGap: form ? Number.parseFloat(getComputedStyle(form).rowGap) : Infinity,
+        radioWidth: radio ? radio.getBoundingClientRect().width : Infinity,
+        shortestChoice: labels.length ? Math.min(...labels.map(label => label.getBoundingClientRect().height)) : 0
+      };
+    });
+    expect(layout.formGap).toBeLessThanOrEqual(12);
+    expect(layout.radioWidth).toBeLessThanOrEqual(24);
+    expect(layout.shortestChoice).toBeGreaterThanOrEqual(44);
+
     await dialog.getByLabel('Exact quantity').check();
     await dialog.getByLabel('How many are left?').fill('2');
     await dialog.getByRole('button', { name: 'Track item' }).click();
