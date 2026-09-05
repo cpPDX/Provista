@@ -10,7 +10,10 @@ import { AccountPage } from '../more/AccountPage';
 import { AppTour } from '../more/AppTour';
 import { HelpAboutPage } from '../more/HelpAboutPage';
 import { HouseholdPage } from '../more/HouseholdPage';
+import { InsightsPage } from '../more/InsightsPage';
 import { MorePage } from '../more/MorePage';
+import { PriceHistoryPage } from '../more/PriceHistoryPage';
+import { SpendingPage } from '../more/SpendingPage';
 import { StoresPage } from '../more/StoresPage';
 import { ProductCatalogPage } from '../products/ProductCatalogPage';
 import { useConfirm } from './DialogProvider';
@@ -95,7 +98,13 @@ export function AppShell() {
           ? <HouseholdPage />
           : location.pathname === '/app/more/stores'
             ? <StoresPage />
-            : <MorePage onStartTour={startTour} />;
+            : location.pathname === '/app/more/insights/prices'
+              ? <PriceHistoryPage />
+              : location.pathname === '/app/more/insights/spending'
+                ? <SpendingPage />
+                : location.pathname === '/app/more/insights'
+                  ? <InsightsPage />
+                  : <MorePage onStartTour={startTour} />;
 
   return (
     <div className="shell-app">
