@@ -90,16 +90,16 @@ test.describe('PRO-63 working state persistence', () => {
     await page.goto('/app/pantry');
     const search = page.getByLabel('Search Pantry');
     await search.fill(apples.name);
-    await expect(page.locator('.pantry-item', { hasText: apples.name })).toBeVisible();
-    await expect(page.locator('.pantry-item', { hasText: rice.name })).toHaveCount(0);
+    await expect(page.locator('.pantry-card', { hasText: apples.name })).toBeVisible();
+    await expect(page.locator('.pantry-card', { hasText: rice.name })).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Plan', exact: true }).click();
     await page.getByRole('button', { name: 'Pantry', exact: true }).click();
     await expect(page.getByLabel('Search Pantry')).toHaveValue(apples.name);
-    await expect(page.locator('.pantry-item', { hasText: rice.name })).toHaveCount(0);
+    await expect(page.locator('.pantry-card', { hasText: rice.name })).toHaveCount(0);
 
     await page.reload();
     await expect(page.getByLabel('Search Pantry')).toHaveValue(apples.name);
-    await expect(page.locator('.pantry-item', { hasText: apples.name })).toBeVisible();
+    await expect(page.locator('.pantry-card', { hasText: apples.name })).toBeVisible();
   });
 });
