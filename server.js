@@ -213,6 +213,7 @@ app.get('/app/pantry', appShellLimiter, serveReactApp);
 app.get('/app/plan', appShellLimiter, serveReactApp);
 app.get('/app/more', appShellLimiter, serveReactApp);
 app.get('/app/more/products', appShellLimiter, serveReactApp);
+app.get('/app/more/help', appShellLimiter, serveReactApp);
 
 // Compatibility surface remains available while secondary More tools,
 // Insights, scanner, and legacy authenticated JavaScript are retired under PRO-56.

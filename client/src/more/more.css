@@ -100,6 +100,109 @@
   font-weight: 800;
 }
 
+.more-subpage-heading {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.more-back-button {
+  width: fit-content;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: -0.4rem 0 0.35rem;
+  padding: 0.35rem 0.6rem 0.35rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.more-back-button span {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.more-help-stack {
+  display: grid;
+  gap: 0.75rem;
+  max-width: 48rem;
+}
+
+.more-help-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.95rem;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(16 24 40 / 5%);
+}
+
+.more-help-card h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.more-help-card p,
+.more-help-card li {
+  color: var(--text-muted);
+  line-height: 1.65;
+}
+
+.more-help-card p {
+  margin: 0.5rem 0 0;
+}
+
+.more-help-card ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.more-help-card strong {
+  color: var(--text);
+}
+
+.more-help-brand {
+  float: right;
+  margin: 0 0 0.75rem 0.75rem;
+}
+
+.more-help-brand img {
+  display: block;
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+}
+
+.more-help-action {
+  margin-top: 0.85rem;
+}
+
+.more-help-credit {
+  color: var(--text) !important;
+  font-weight: 700;
+}
+
+.more-maintenance-result {
+  font-size: 0.9rem;
+}
+
+.more-tour-dialog {
+  width: min(500px, 100%);
+}
+
+.more-tour-dialog #tour-text {
+  min-height: 5rem;
+}
+
+.more-tour-progress {
+  margin-top: 1rem;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 @media (max-width: 620px) {
   .more-grid {
     grid-template-columns: 1fr;

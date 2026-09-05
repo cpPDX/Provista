@@ -102,7 +102,6 @@ function AuthenticatedShell() {
             <button type="button" className="shell-button shell-button-primary" onClick={() => void reload()}>
               Try again
             </button>
-            <a className="shell-button shell-button-secondary shell-link-button" href="/legacy-app">Open current app</a>
           </div>
         </section>
       </main>
