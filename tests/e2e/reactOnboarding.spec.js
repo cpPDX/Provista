@@ -16,10 +16,20 @@ async function registerHousehold(page, label) {
   await page.click('#btn-choose-create-household');
   await expect(page.locator('#step-create')).toBeVisible();
   await page.fill('#household-name', `${label} Household`);
+
+  // Registration redirects to `/` before React onboarding is ready. The
+  // deterministic readiness boundary is the bootstrap request that persists
+  // the new household's onboarding state. Wait for that instead of treating
+  // the URL change as proof the onboarding screen has hydrated.
+  const onboardingStarted = page.waitForResponse(response =>
+    response.url().endsWith('/api/onboarding/start') && response.request().method() === 'POST'
+  );
   await page.click('#btn-create-household');
+  const startResponse = await onboardingStarted;
+  expect(startResponse.ok()).toBeTruthy();
 
   await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('heading', { name: 'Who are we planning for?' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Who are we planning for?' })).toBeVisible();
   return { email, password };
 }
 

@@ -8,6 +8,12 @@ import {
   loadOnboarding,
   onboardingQueryKey
 } from '../onboarding/api';
+import {
+  loadMealAllocations,
+  loadMealPlanSettings,
+  mealAllocationQueryKey,
+  mealPlanSettingsQueryKey
+} from '../plan/api';
 import { useConfirm } from '../shell/DialogProvider';
 import { useDirtyState } from '../shell/DirtyStateProvider';
 import { useToast } from '../shell/ToastProvider';
@@ -45,8 +51,35 @@ interface CheckSync {
   promise?: Promise<boolean>;
 }
 
+interface ListPlanContext {
+  neededBy: string;
+  mealName: string;
+  mealCount: number;
+}
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value);
+}
+
+function isoDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeWeekStart(date: Date, weekStartDay: number) {
+  const copy = new Date(date);
+  let offset = copy.getDay() - weekStartDay;
+  if (offset < 0) offset += 7;
+  copy.setDate(copy.getDate() - offset);
+  return isoDate(copy);
+}
+
+function formatNeededBy(value: string) {
+  const [year, month, day] = value.slice(0, 10).split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(date);
 }
 
 function inferActiveStore(items: ShoppingListItem[]): string | null {
@@ -97,6 +130,15 @@ export function ShoppingListPage() {
   const online = useOnlineStatus();
   const listQuery = useQuery({ queryKey, queryFn: loadShoppingList });
   const onboardingQuery = useQuery({ queryKey: onboardingQueryKey, queryFn: loadOnboarding });
+  const planSettingsQuery = useQuery({ queryKey: mealPlanSettingsQueryKey, queryFn: loadMealPlanSettings });
+  const currentWeekStart = planSettingsQuery.data
+    ? normalizeWeekStart(new Date(), planSettingsQuery.data.weekStartDay)
+    : '';
+  const allocationQuery = useQuery({
+    queryKey: mealAllocationQueryKey(currentWeekStart),
+    queryFn: () => loadMealAllocations(currentWeekStart),
+    enabled: Boolean(currentWeekStart)
+  });
   const [storeFilter, setStoreFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
@@ -108,6 +150,34 @@ export function ShoppingListPage() {
 
   const items = listQuery.data || EMPTY_ITEMS;
   const checkedItems = items.filter(item => item.checked);
+  const planContextByItem = useMemo(() => {
+    const map = new Map<string, ListPlanContext>();
+    const allocations = [...(allocationQuery.data?.mealAllocations || [])]
+      .filter(allocation => allocation.date >= isoDate())
+      .sort((left, right) => left.date.localeCompare(right.date) || left.mealName.localeCompare(right.mealName));
+    const mealsByItem = new Map<string, Set<string>>();
+
+    allocations.forEach(allocation => {
+      const itemId = String(allocation.itemId || '');
+      if (!itemId) return;
+      const mealIdentity = String(allocation.instanceId || `${allocation.date}:${allocation.mealType}:${allocation.mealName}`);
+      const mealSet = mealsByItem.get(itemId) || new Set<string>();
+      mealSet.add(mealIdentity);
+      mealsByItem.set(itemId, mealSet);
+      if (!map.has(itemId)) {
+        map.set(itemId, {
+          neededBy: allocation.date,
+          mealName: allocation.mealName,
+          mealCount: 1
+        });
+      }
+    });
+
+    map.forEach((context, itemId) => {
+      context.mealCount = mealsByItem.get(itemId)?.size || 1;
+    });
+    return map;
+  }, [allocationQuery.data]);
   const resolvedDetailItem = detailItem
     ? items.find(item => item._id === detailItem._id) || detailItem
     : null;
@@ -483,6 +553,8 @@ export function ShoppingListPage() {
                   </div>
                   {sectionItems.map(item => {
                     const price = householdPrice(item);
+                    const itemId = entityId(item.itemId);
+                    const planContext = itemId ? planContextByItem.get(itemId) : null;
                     return (
                       <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
                         <button
@@ -502,7 +574,10 @@ export function ShoppingListPage() {
                         >
                           <strong>{productName(item)}</strong>
                           <span>Buy {intendedPurchaseQuantity(item)}</span>
-                          {price !== 'No recent household price' && <small>{price}</small>}
+                          {planContext && (
+                            <small>Needed {formatNeededBy(planContext.neededBy)} · {planContext.mealName}{planContext.mealCount > 1 ? ` · ${planContext.mealCount} meals` : ''}</small>
+                          )}
+                          {!planContext && price !== 'No recent household price' && <small>{price}</small>}
                         </button>
                         <button
                           type="button"
