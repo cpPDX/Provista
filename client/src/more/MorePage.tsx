@@ -22,7 +22,7 @@ interface MorePageProps {
 }
 
 const destinations: MoreDestination[] = [
-  { id: 'insights', label: 'Insights', detail: 'Price history and household spending', icon: 'insights', section: 'insights' },
+  { id: 'insights', label: 'Insights', detail: 'Price history and household spending', icon: 'insights', reactHref: '/app/more/insights' },
   { id: 'account', label: 'My Account', detail: 'Profile, password, and personal preferences', icon: 'account', reactHref: '/app/more/account' },
   { id: 'household', label: 'Household', detail: 'People, roles, invitations, and defaults', icon: 'household', reactHref: '/app/more/household' },
   { id: 'products', label: 'Manage products', detail: 'Household grocery catalog and product details', icon: 'products', reactHref: '/app/more/products', adminOnly: true },
