@@ -10,6 +10,7 @@ import { AccountPage } from '../more/AccountPage';
 import { AppTour } from '../more/AppTour';
 import { HelpAboutPage } from '../more/HelpAboutPage';
 import { HouseholdPage } from '../more/HouseholdPage';
+import { ImportPricesPage } from '../more/ImportPricesPage';
 import { InsightsPage } from '../more/InsightsPage';
 import { MorePage } from '../more/MorePage';
 import { PriceHistoryPage } from '../more/PriceHistoryPage';
@@ -98,13 +99,15 @@ export function AppShell() {
           ? <HouseholdPage />
           : location.pathname === '/app/more/stores'
             ? <StoresPage />
-            : location.pathname === '/app/more/insights/prices'
-              ? <PriceHistoryPage />
-              : location.pathname === '/app/more/insights/spending'
-                ? <SpendingPage />
-                : location.pathname === '/app/more/insights'
-                  ? <InsightsPage />
-                  : <MorePage onStartTour={startTour} />;
+            : location.pathname === '/app/more/import'
+              ? <ImportPricesPage />
+              : location.pathname === '/app/more/insights/prices'
+                ? <PriceHistoryPage />
+                : location.pathname === '/app/more/insights/spending'
+                  ? <SpendingPage />
+                  : location.pathname === '/app/more/insights'
+                    ? <InsightsPage />
+                    : <MorePage onStartTour={startTour} />;
 
   return (
     <div className="shell-app">

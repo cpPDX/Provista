@@ -25,11 +25,11 @@ PRO-56 retires the authenticated vanilla-JS renderer only after the correspondin
 | `public/js/spend.js` | 3 | Spending is React-owned under More → Insights; legacy compatibility renderer still loads this file | Delete after React Insights parity is green and legacy Spending entry is unreachable |
 | `public/js/shoppingList.js` | 3 | List/Shop is React-owned; legacy compatibility renderer still loads this file | Delete only after no authenticated route can enter legacy List and overlapping legacy tests are replaced |
 | `public/js/rapidShoppingCapture.js` | 3 | Dynamically loaded by legacy `app.js`; React List owns rapid capture | Delete with legacy List/app orchestration after parity proof |
-| `public/js/csvImport.js` | 2 | More → Import prices legacy entry | PRO-56: migrate/import ownership before deletion |
-| `public/js/csvImportUnified.js` | 2 | Dynamically loaded by `householdPeople.js` for legacy unified import writes | Delete after Import/Household legacy callers retire |
-| `public/js/more.js` | 2 | Legacy compatibility renderer still contains old Account, Household, Stores, Insights and other overlapping renderers | React owns those user-facing surfaces; retain until Import and remaining compatibility callers are separated |
-| `public/js/moreInit.js` | 2 | Legacy More routing; dynamically loads catalog and old More behavior | Help/App Tour, Account/Household/Stores, and Insights are React-owned; delete only after Import and remaining More compatibility routes retire |
-| `public/js/householdPeople.js` | 2 | Legacy compatibility Household enhancement plus dynamic grocery/import overrides | Household is React-owned in the second reopened slice; retain until remaining grocery/import compatibility callers are removed |
+| `public/js/csvImport.js` | 3 | Import prices is React-owned; legacy compatibility renderer still contains the old parser/review UI | Delete after React Import parity is green and legacy Import entry is unreachable |
+| `public/js/csvImportUnified.js` | 3 | React Import writes directly through `/api/grocery/log`; this legacy override is still dynamically loaded by `householdPeople.js` | Delete after legacy Import/Household compatibility callers are unreachable |
+| `public/js/more.js` | 2 | Legacy compatibility renderer still contains old Account, Household, Stores, Insights, Import and other overlapping renderers | All user-facing More cards are React-owned; retain only until compatibility callers are removed |
+| `public/js/moreInit.js` | 2 | Legacy More routing; dynamically loads catalog and old More behavior | All user-facing More destinations are React-owned; delete after legacy More compatibility entry is unreachable |
+| `public/js/householdPeople.js` | 2 | Legacy compatibility Household enhancement plus dynamic grocery/import overrides | Household and Import are React-owned; retain until remaining compatibility callers are removed |
 | `public/js/groceryEntry.js` | 2 | Dynamically injected by `householdPeople.js` | Delete/extract after remaining legacy grocery-entry callers are gone |
 | `public/js/pantry.js` | 3 | Pantry is React-owned; legacy compatibility renderer still loads this file | Delete after no authenticated route can enter legacy Pantry and parity tests cover the replacement |
 | `public/js/mealPlan.js` | 3 | Plan is React-owned; legacy compatibility renderer still loads this file | Delete after no authenticated route can enter legacy Plan and parity tests cover the replacement |
@@ -41,7 +41,7 @@ PRO-56 retires the authenticated vanilla-JS renderer only after the correspondin
 | `public/js/scan.js` | 3 | Not loaded by `index.html`; currently retained in service-worker cache and architecture docs | Verify no runtime caller, then remove from cache/docs and delete in a dedicated cleanup slice |
 | `public/js/reactHomeBridge.js` | 2 | Injected only by `serveLegacyApp()` in `server.js` | Delete with the compatibility renderer |
 | `public/js/install-prompt.js` | 4 | PWA install prompt behavior, loaded by legacy shell and cached by service worker | Preserve or port independently of legacy renderer |
-| `public/js/app.js` | 2 | Legacy authenticated bootstrap/navigation; dynamically loads rapid capture and store sections | Last legacy renderer file to retire after Import/scanner paths are React-owned |
+| `public/js/app.js` | 2 | Legacy authenticated bootstrap/navigation; dynamically loads rapid capture and store sections | Last legacy renderer file to retire after scanner paths are React-owned |
 
 ## Current authenticated legacy entry points
 
@@ -52,7 +52,7 @@ PRO-56 retires the authenticated vanilla-JS renderer only after the correspondin
 - `/legacy-app`
 - `serveReactApp()` fallback when the built React index is absent outside production/CI
 
-The React shell must not create new links to those entry points. Import prices is now the only More card that intentionally enters the compatibility renderer; scanner ownership remains separately tied to PRO-21.
+The React shell must not create new links to those entry points. All More cards are now React-owned. Barcode/scanner ownership remains separately tied to PRO-21.
 
 ## First reopened retirement slice
 
@@ -80,7 +80,7 @@ This does **not** retire the barcode scanner itself. Scanner migration remains o
 
 ## Third reopened retirement slice
 
-This slice moves the complete More → Insights flow into React while retaining the existing server-side contracts:
+This slice moved the complete More → Insights flow into React while retaining the existing server-side contracts:
 
 - More → Insights
 - Insights → Price History, including household search/filter recovery states, price recording, and admin pending-price review
@@ -89,11 +89,25 @@ This slice moves the complete More → Insights flow into React while retaining 
 
 `public/js/prices.js` and `public/js/spend.js` remain temporarily available only through the legacy compatibility renderer until the new PRO-56 parity coverage is green and the compatibility entry points are removed.
 
+## Fourth reopened retirement slice
+
+This slice moves the final user-visible More destination into React:
+
+- More → Import prices
+- CSV template download and parsing remain client-side
+- review flags required-field/price errors and quantity/category/unit warnings before writes
+- exact catalog matches are automatic; fuzzy product matches require an explicit choice before import
+- missing products and stores are created through the same transactional `/api/grocery/log` write used by current grocery/price entry
+- admin imports use server-side same-item/store/day replacement rather than legacy client-side delete/recreate behavior
+- `/app/more/import` is a direct React shell route so hard reload cannot fall through to legacy HTML
+
+`public/js/csvImport.js` and `public/js/csvImportUnified.js` remain temporarily available only through the compatibility renderer until this slice's PRO-56 Playwright coverage is green and compatibility entry points are removed.
+
 ## Planned deletion order
 
-1. Finish remaining React-to-legacy feature ownership: Import, plus barcode/scanner paths owned by PRO-21.
-2. Remove `/app?tab=...` creation from React and add a regression guard against authenticated legacy URLs.
-3. Delete legacy feature renderers whose React parity tests are green: Home, Plan, List, Pantry, catalog, Help/Tour, Account, Household, Stores, Price History, and Spending.
+1. Finish the remaining React-to-legacy feature ownership: barcode/scanner paths owned by PRO-21.
+2. Remove `/app?tab=...` creation from authenticated React flows and add a regression guard against authenticated legacy URLs.
+3. Delete legacy feature renderers whose React parity tests are green: Home, Plan, List, Pantry, catalog, Help/Tour, Account, Household, Stores, Price History, Spending, and Import.
 4. Retire compatibility-only shared helpers and `app.js` after no feature callers remain.
 5. Remove `/legacy-app`, `serveLegacyApp()`, `public/index.html`, legacy CSS/script cache entries, and `reactHomeBridge.js`.
 6. Bump/trim service-worker caches and re-run offline/PWA navigation coverage before closing PRO-56.
