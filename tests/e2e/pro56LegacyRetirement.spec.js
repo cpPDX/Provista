@@ -33,8 +33,6 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(page.getByText(/Open Prices observations are community-reported shopping context only/)).toBeVisible();
     await expect(page.locator('#section-about')).toHaveCount(0);
 
-    // Deep links must remain React-owned after a full document reload, not just
-    // while React Router is already mounted.
     await page.reload();
     await expect(page).toHaveURL(/\/app\/more\/help$/);
     await expect(page.locator('#help-about-title')).toBeVisible();
@@ -80,5 +78,82 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(page.locator('#tour-title')).toHaveText('Home / Today');
     await expect(page.locator('.shell-brand')).toBeVisible();
     await expect(page.locator('#tab-home')).toHaveCount(0);
+  });
+
+  test('keeps My Account React-owned and preserves profile updates across reload', async ({ page }) => {
+    await createHouseholdSession(page, 'Account');
+
+    await page.goto('/app/more');
+    await page.getByRole('link', { name: /My Account/ }).click();
+
+    await expect(page).toHaveURL(/\/app\/more\/account$/);
+    await expect(page.locator('#account-title')).toHaveText('My Account');
+    await expect(page.locator('.shell-brand')).toBeVisible();
+    await expect(page.locator('#section-account')).toHaveCount(0);
+
+    await page.getByLabel('Preferred name').fill('Account Owner');
+    await page.getByRole('button', { name: 'Save profile' }).click();
+    await expect(page.getByText('Profile updated')).toBeVisible();
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/more\/account$/);
+    await expect(page.locator('#account-title')).toBeVisible();
+    await expect(page.getByLabel('Preferred name')).toHaveValue('Account Owner');
+    await expect(page.locator('#section-account')).toHaveCount(0);
+  });
+
+  test('keeps Household React-owned with planning people and invites', async ({ page }) => {
+    await createHouseholdSession(page, 'Household');
+
+    await page.goto('/app/more');
+    await page.getByRole('link', { name: /^Household\b/ }).click();
+
+    await expect(page).toHaveURL(/\/app\/more\/household$/);
+    await expect(page.locator('#household-title')).toHaveText('Household');
+    await expect(page.getByRole('heading', { name: 'Our household' })).toBeVisible();
+    await expect(page.locator('#section-household')).toHaveCount(0);
+
+    await page.getByLabel('Add a planning-only person').fill('Wiz');
+    await page.getByRole('button', { name: 'Add person' }).click();
+    await expect(page.getByText('Wiz', { exact: true })).toBeVisible();
+    await expect(page.getByText('Planning only', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Show invite' }).click();
+    await expect(page.getByText('Invite code', { exact: true })).toBeVisible();
+    await expect(page.locator('img[alt^="QR code for household invite"]')).toBeVisible();
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/more\/household$/);
+    await expect(page.getByText('Wiz', { exact: true })).toBeVisible();
+    await expect(page.locator('#section-household')).toHaveCount(0);
+  });
+
+  test('keeps Stores React-owned and supports add/edit without legacy navigation', async ({ page }) => {
+    await createHouseholdSession(page, 'Stores');
+
+    await page.goto('/app/more');
+    await page.getByRole('link', { name: /^Stores\b/ }).click();
+
+    await expect(page).toHaveURL(/\/app\/more\/stores$/);
+    await expect(page.locator('#stores-title')).toHaveText('Stores');
+    await expect(page.locator('#section-stores')).toHaveCount(0);
+
+    await page.getByLabel('Store name').first().fill('PRO-56 Market');
+    await page.getByLabel(/Location/).first().fill('North');
+    await page.getByRole('button', { name: 'Add store' }).click();
+    const storeCard = page.locator('.more-record-card').filter({ hasText: 'PRO-56 Market' });
+    await expect(storeCard).toContainText('North');
+
+    await storeCard.getByRole('button', { name: 'Edit' }).click();
+    const editForm = page.locator('form.more-record-card');
+    await expect(editForm.getByLabel('Store name')).toHaveValue('PRO-56 Market');
+    await editForm.getByLabel('Store name').fill('PRO-56 Market Updated');
+    await editForm.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByText('PRO-56 Market Updated', { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/more\/stores$/);
+    await expect(page.getByText('PRO-56 Market Updated', { exact: true })).toBeVisible();
+    await expect(page.locator('#section-stores')).toHaveCount(0);
   });
 });
