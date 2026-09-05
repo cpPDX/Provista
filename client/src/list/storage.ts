@@ -151,13 +151,17 @@ export async function listFailedShoppingWrites(): Promise<ShoppingQueueItem[]> {
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
-async function remapLocalReferences(localId: string, serverId: string, queue: ShoppingQueueItem[]) {
+async function remapLocalReferences(localId: string, serverId: string, activeQueue: ShoppingQueueItem[]) {
   const oldPath = `/shopping-list/${localId}`;
   const newPath = `/shopping-list/${serverId}`;
-  for (const queued of queue) {
+  const allQueued = await queueItems();
+  for (const queued of allQueued) {
     if (queued.path !== oldPath) continue;
     queued.path = newPath;
     await updateQueueItem(queued);
+  }
+  for (const queued of activeQueue) {
+    if (queued.path === oldPath) queued.path = newPath;
   }
 }
 
