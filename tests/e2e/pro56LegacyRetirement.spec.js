@@ -200,7 +200,9 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(page.getByText('$3.25', { exact: true }).first()).toBeVisible();
     await expect(page.locator('#tab-spend')).toHaveCount(0);
 
-    const categoryCard = page.getByRole('heading', { name: 'By category' }).locator('..');
+    const categoryCard = page.locator('.more-settings-card').filter({
+      has: page.getByRole('heading', { name: 'By category' })
+    });
     await categoryCard.getByRole('button', { name: /Pantry/ }).click();
     await expect(page).toHaveURL(/\/app\/more\/insights\/prices\?month=.*category=Pantry/);
     await expect(page.locator('#price-history-title')).toBeVisible();
