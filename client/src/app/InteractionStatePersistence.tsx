@@ -99,6 +99,12 @@ function restorePantrySearch(userId: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
+function restoreControls(userId: string, route: PrimaryRoute) {
+  restoreDetails(userId, route);
+  if (route === 'list') restoreListFilters(userId);
+  if (route === 'pantry') restorePantrySearch(userId);
+}
+
 function persistScroll(userId: string, route: PrimaryRoute) {
   sessionStorage.setItem(storageKey(userId, route, 'scroll'), String(Math.max(0, Math.round(window.scrollY))));
 }
@@ -131,20 +137,10 @@ function persistRoute(userId: string, route: PrimaryRoute) {
 
 function restoreRoute(userId: string, route: PrimaryRoute) {
   if (route === 'plan') restorePlanContext(userId);
-
-  const restoreControls = () => {
-    restoreDetails(userId, route);
-    if (route === 'list') restoreListFilters(userId);
-    if (route === 'pantry') restorePantrySearch(userId);
-  };
-
-  restoreControls();
+  restoreControls(userId, route);
   restoreScroll(userId, route);
-  window.setTimeout(restoreControls, 0);
-  window.setTimeout(() => {
-    restoreControls();
-    restoreScroll(userId, route);
-  }, 250);
+  window.setTimeout(() => restoreControls(userId, route), 0);
+  window.setTimeout(() => restoreControls(userId, route), 250);
 }
 
 export function InteractionStatePersistence() {
@@ -183,7 +179,7 @@ export function InteractionStatePersistence() {
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('scroll', onScroll, { passive: true });
 
-    const observer = new MutationObserver(() => restoreRoute(userId, route));
+    const observer = new MutationObserver(() => restoreControls(userId, route));
     observer.observe(document.getElementById('root') || document.body, { childList: true, subtree: true });
     const stopObserver = window.setTimeout(() => observer.disconnect(), 1200);
 
