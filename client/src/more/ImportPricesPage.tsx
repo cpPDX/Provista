@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { useToast } from '../shell/ToastProvider';
@@ -145,10 +145,23 @@ function canImportRow(row: ReviewedCsvRow) {
   return !row.skip && row.errors.length === 0 && !needsMatchDecision(row);
 }
 
+function mergeItems(current: InsightItem[], additions: InsightItem[]) {
+  const byId = new Map(current.map(item => [item._id, item]));
+  additions.forEach(item => byId.set(item._id, item));
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function mergeStores(current: InsightStore[], additions: InsightStore[]) {
+  const byId = new Map(current.map(store => [store._id, store]));
+  additions.forEach(store => byId.set(store._id, store));
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function ImportPricesPage() {
   const navigate = useNavigate();
   const { isAdmin, session } = useAuth();
   const { showToast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<InsightItem[]>([]);
   const [stores, setStores] = useState<InsightStore[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
@@ -157,10 +170,28 @@ export function ImportPricesPage() {
   const [fileError, setFileError] = useState('');
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const offline = Boolean(session?.offlineSession);
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+  const offline = Boolean(session?.offlineSession) || !online;
 
   useEffect(() => {
+    const handleOnline = () => setOnline(true);
+    const handleOffline = () => setOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin || offline) {
+      setLoadingCatalog(false);
+      return;
+    }
+
     let cancelled = false;
+    setLoadingCatalog(true);
     Promise.all([loadInsightItems(), loadInsightStores()])
       .then(([itemRows, storeRows]) => {
         if (cancelled) return;
@@ -174,7 +205,7 @@ export function ImportPricesPage() {
         if (!cancelled) setLoadingCatalog(false);
       });
     return () => { cancelled = true; };
-  }, [showToast]);
+  }, [isAdmin, offline, showToast]);
 
   const readyCount = useMemo(() => rows.filter(canImportRow).length, [rows]);
   const attentionCount = useMemo(() => rows.filter(row => !row.skip && !canImportRow(row)).length, [rows]);
@@ -227,8 +258,8 @@ export function ImportPricesPage() {
     const storeMap = new Map(stores.map(store => [store.name.trim().toLowerCase(), store]));
     const storeById = new Map(stores.map(store => [store._id, store]));
     const failed: ImportFailure[] = [];
-    const newItems: string[] = [];
-    const newStores: string[] = [];
+    const newItemRecords: InsightItem[] = [];
+    const newStoreRecords: InsightStore[] = [];
     let saved = 0;
     let pending = 0;
 
@@ -238,7 +269,7 @@ export function ImportPricesPage() {
         const storeKey = row.store_name.trim().toLowerCase();
         let item = row.exactItemId ? itemById.get(row.exactItemId) || null : itemMap.get(itemKey) || null;
         if (!item && row.fuzzyDecision && row.fuzzyDecision !== 'new') item = itemById.get(row.fuzzyDecision) || null;
-        let store = row.storeId ? storeById.get(row.storeId) || null : storeMap.get(storeKey) || null;
+        const store = row.storeId ? storeById.get(row.storeId) || null : storeMap.get(storeKey) || null;
 
         const size = Number(row.size);
         const input: RecordPriceInput = {
@@ -271,14 +302,13 @@ export function ImportPricesPage() {
           itemMap.set(savedItem.name.trim().toLowerCase(), savedItem);
           itemMap.set(itemKey, savedItem);
           itemById.set(savedItem._id, savedItem);
-          if (savedResult.createdItem) newItems.push(savedItem.name);
+          if (savedResult.createdItem) newItemRecords.push(savedResult.createdItem);
         }
         if (savedStore?._id) {
           storeMap.set(savedStore.name.trim().toLowerCase(), savedStore);
           storeMap.set(storeKey, savedStore);
           storeById.set(savedStore._id, savedStore);
-          store = savedStore;
-          if (savedResult.createdStore) newStores.push(savedStore.name);
+          if (savedResult.createdStore) newStoreRecords.push(savedResult.createdStore);
         }
         saved += 1;
         if (savedResult.entry.status === 'pending') pending += 1;
@@ -287,13 +317,18 @@ export function ImportPricesPage() {
       }
     }
 
+    if (newItemRecords.length) setItems(current => mergeItems(current, newItemRecords));
+    if (newStoreRecords.length) setStores(current => mergeStores(current, newStoreRecords));
     setImporting(false);
+    setRows([]);
+    setFileName('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setResult({
       saved,
       pending,
       failed,
-      newItems: [...new Set(newItems)],
-      newStores: [...new Set(newStores)]
+      newItems: [...new Set(newItemRecords.map(item => item.name))],
+      newStores: [...new Set(newStoreRecords.map(store => store.name))]
     });
     if (saved > 0) showToast(`${saved} price row${saved === 1 ? '' : 's'} saved`, { tone: 'success' });
   };
@@ -331,7 +366,7 @@ export function ImportPricesPage() {
         <div><h2 id="csv-upload-title">2. Choose a CSV</h2><p>Nothing is saved when you choose the file.</p></div>
         <label className="more-field">
           <span>CSV file</span>
-          <input type="file" accept=".csv,text/csv" onChange={event => void handleFile(event)} disabled={loadingCatalog || offline} />
+          <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={event => void handleFile(event)} disabled={loadingCatalog || offline} />
         </label>
         {loadingCatalog && <p className="text-muted" role="status">Loading household products and stores…</p>}
         {fileName && <p className="text-muted">Reviewing <strong>{fileName}</strong></p>}
