@@ -99,11 +99,11 @@ test.describe('PRO-64 cross-workflow state integrity', () => {
     const days = blankWeek(weekStart);
     Object.assign(dinnerFor(days, todayIndex), {
       name: 'First dinner',
-      notes: `0.25 ${onion.name}, 2 ${beans.name}`
+      notes: `${onion.name} x0.25, ${beans.name} x2`
     });
     Object.assign(dinnerFor(days, todayIndex + 1), {
       name: 'Later dinner',
-      notes: `3 ${beans.name}`
+      notes: `${beans.name} x3`
     });
     await savePlan(page, weekStart, days);
 
@@ -154,7 +154,7 @@ test.describe('PRO-64 cross-workflow state integrity', () => {
     const days = blankWeek(weekStart);
     Object.assign(dinnerFor(days, todayIndex + 1), {
       name: 'Future dinner',
-      notes: `2 ${item.name}`
+      notes: `${item.name} x2`
     });
     await savePlan(page, weekStart, days);
 
