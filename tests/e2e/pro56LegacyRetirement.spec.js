@@ -13,6 +13,24 @@ async function createHouseholdSession(page, suffix) {
   expect(response.ok()).toBeTruthy();
 }
 
+async function createInsightFixture(page, suffix, price = 3.25) {
+  const itemResponse = await page.request.post('/api/items', {
+    data: { name: `PRO-56 Insight Item ${suffix}`, category: 'Pantry', unit: 'each' }
+  });
+  const storeResponse = await page.request.post('/api/stores', {
+    data: { name: `PRO-56 Insight Store ${suffix}`, location: 'North' }
+  });
+  expect(itemResponse.ok()).toBeTruthy();
+  expect(storeResponse.ok()).toBeTruthy();
+  const item = await itemResponse.json();
+  const store = await storeResponse.json();
+  const priceResponse = await page.request.post('/api/prices', {
+    data: { itemId: item._id, storeId: store._id, regularPrice: price, quantity: 1, source: 'manual' }
+  });
+  expect(priceResponse.ok()).toBeTruthy();
+  return { item, store };
+}
+
 test.describe('PRO-56 legacy authenticated UI retirement', () => {
   test('keeps Help & About and the App Tour inside the React shell', async ({ page }) => {
     await createHouseholdSession(page, 'HelpTour');
@@ -155,5 +173,58 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await expect(page).toHaveURL(/\/app\/more\/stores$/);
     await expect(page.getByText('PRO-56 Market Updated', { exact: true })).toBeVisible();
     await expect(page.locator('#section-stores')).toHaveCount(0);
+  });
+
+  test('keeps Insights, Price History, Spending, and drill-down inside React', async ({ page }) => {
+    await createHouseholdSession(page, 'Insights');
+    const { item } = await createInsightFixture(page, 'Flow', 3.25);
+
+    await page.goto('/app/more');
+    await page.getByRole('link', { name: /^Insights\b/ }).click();
+    await expect(page).toHaveURL(/\/app\/more\/insights$/);
+    await expect(page.locator('#insights-title')).toHaveText('Insights');
+    await expect(page.locator('#section-insights')).toHaveCount(0);
+
+    await page.getByRole('link', { name: /^Price history\b/ }).click();
+    await expect(page).toHaveURL(/\/app\/more\/insights\/prices$/);
+    await expect(page.locator('#price-history-title')).toHaveText('Price history');
+    await expect(page.getByText(item.name, { exact: true })).toBeVisible();
+    await expect(page.locator('#tab-prices')).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.locator('#price-history-title')).toBeVisible();
+    await page.getByRole('button', { name: 'Insights', exact: true }).click();
+    await page.getByRole('link', { name: /^Spending\b/ }).click();
+    await expect(page).toHaveURL(/\/app\/more\/insights\/spending$/);
+    await expect(page.locator('#spending-title')).toHaveText('Spending');
+    await expect(page.getByText('$3.25', { exact: true }).first()).toBeVisible();
+    await expect(page.locator('#tab-spend')).toHaveCount(0);
+
+    const categoryCard = page.getByRole('heading', { name: 'By category' }).locator('..');
+    await categoryCard.getByRole('button', { name: /Pantry/ }).click();
+    await expect(page).toHaveURL(/\/app\/more\/insights\/prices\?month=.*category=Pantry/);
+    await expect(page.locator('#price-history-title')).toBeVisible();
+    await expect(page.getByText(item.name, { exact: true })).toBeVisible();
+  });
+
+  test('records a household price entirely in React Insights', async ({ page }) => {
+    await createHouseholdSession(page, 'RecordPrice');
+    const itemResponse = await page.request.post('/api/items', { data: { name: 'PRO-56 Recorded Item', category: 'Pantry', unit: 'each' } });
+    const storeResponse = await page.request.post('/api/stores', { data: { name: 'PRO-56 Recorded Store' } });
+    expect(itemResponse.ok()).toBeTruthy();
+    expect(storeResponse.ok()).toBeTruthy();
+
+    await page.goto('/app/more/insights/prices');
+    await page.getByRole('button', { name: 'Record price', exact: true }).first().click();
+    await page.getByLabel('Product').selectOption({ label: 'PRO-56 Recorded Item' });
+    await page.getByLabel('Store').selectOption({ label: 'PRO-56 Recorded Store' });
+    await page.getByLabel('Regular price').fill('4.29');
+    await expect(page.getByLabel('Date')).toHaveValue(/\d{4}-\d{2}-\d{2}/);
+    await page.getByRole('button', { name: 'Record price', exact: true }).last().click();
+
+    await expect(page.getByText('Price recorded')).toBeVisible();
+    await expect(page.getByText('PRO-56 Recorded Item', { exact: true })).toBeVisible();
+    await expect(page.getByText('$4.29', { exact: true }).first()).toBeVisible();
+    await expect(page.locator('#tab-prices')).toHaveCount(0);
   });
 });
