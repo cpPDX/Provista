@@ -10,8 +10,6 @@ interface MoreDestination {
   label: string;
   detail: string;
   icon: MoreIconName;
-  section?: string;
-  action?: string;
   adminOnly?: boolean;
   reactHref?: string;
   reactAction?: 'tour';
@@ -27,17 +25,10 @@ const destinations: MoreDestination[] = [
   { id: 'household', label: 'Household', detail: 'People, roles, invitations, and defaults', icon: 'household', reactHref: '/app/more/household' },
   { id: 'products', label: 'Manage products', detail: 'Household grocery catalog and product details', icon: 'products', reactHref: '/app/more/products', adminOnly: true },
   { id: 'stores', label: 'Stores', detail: 'Shopping locations used by your household', icon: 'stores', reactHref: '/app/more/stores', adminOnly: true },
-  { id: 'import', label: 'Import prices', detail: 'Bring in household price history from CSV', icon: 'import', action: 'csv-import', adminOnly: true },
+  { id: 'import', label: 'Import prices', detail: 'Bring in household price history from CSV', icon: 'import', reactHref: '/app/more/import', adminOnly: true },
   { id: 'about', label: 'Help & About', detail: 'How Provista works and where to get started', icon: 'about', reactHref: '/app/more/help' },
   { id: 'tour', label: 'App Tour', detail: 'Walk through the household grocery workflow', icon: 'tour', reactAction: 'tour' }
 ];
-
-function legacyDestinationHref(destination: MoreDestination) {
-  const params = new URLSearchParams({ tab: 'more' });
-  if (destination.section) params.set('section', destination.section);
-  if (destination.action) params.set('action', destination.action);
-  return `/app?${params.toString()}`;
-}
 
 function MoreIcon({ name }: { name: MoreIconName }) {
   if (name === 'insights') {
@@ -112,17 +103,10 @@ export function MorePage({ onStartTour }: MorePageProps) {
               </button>
             );
           }
-          if (destination.reactHref) {
-            return (
-              <Link className="more-card" to={destination.reactHref} key={destination.id}>
-                <DestinationContent destination={destination} />
-              </Link>
-            );
-          }
           return (
-            <a className="more-card" href={legacyDestinationHref(destination)} key={destination.id}>
+            <Link className="more-card" to={destination.reactHref as string} key={destination.id}>
               <DestinationContent destination={destination} />
-            </a>
+            </Link>
           );
         })}
         <button type="button" className="more-card more-card-button" onClick={() => void handleLogout()}>
