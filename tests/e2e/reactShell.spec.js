@@ -225,7 +225,8 @@ test.describe('React migration shell', () => {
     await expect(page.locator('#more-title')).toHaveText('More');
     await expect(page.locator('.shell-brand')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveAttribute('aria-current', 'page');
+    const moreNav = page.locator('.shell-bottom-nav').getByRole('button', { name: 'More', exact: true });
+    await expect(moreNav).toHaveAttribute('aria-current', 'page');
 
     await page.getByRole('button', { name: 'Switch to dark theme' }).click();
     await page.getByRole('link', { name: /My Account/ }).click();
@@ -233,7 +234,7 @@ test.describe('React migration shell', () => {
     await expect(page.locator('#account-title')).toHaveText('My Account');
     await expect(page.locator('#section-account')).toHaveCount(0);
     await expect(page.locator('.shell-brand')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(moreNav).toHaveAttribute('aria-current', 'page');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
     await page.reload();
