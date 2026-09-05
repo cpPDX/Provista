@@ -48,6 +48,26 @@ test.describe('PRO-61 Pantry-backed produce planning', () => {
     await expect(view).toContainText('Running low');
     await expect(page.locator('#plan-produce-notes')).toBeHidden();
 
+    await page.evaluate(() => {
+      document.documentElement.dataset.theme = 'dark';
+      document.documentElement.style.colorScheme = 'dark';
+    });
+    const themeState = await view.evaluate(element => {
+      const nav = document.querySelector('.shell-bottom-nav');
+      const heading = element.querySelector('h2');
+      const input = element.querySelector('input');
+      return {
+        surface: getComputedStyle(element).backgroundColor,
+        shellSurface: nav ? getComputedStyle(nav).backgroundColor : '',
+        heading: heading ? getComputedStyle(heading).color : '',
+        bodyText: getComputedStyle(document.body).color,
+        inputSurface: input ? getComputedStyle(input).backgroundColor : ''
+      };
+    });
+    expect(themeState.surface).toBe(themeState.shellSurface);
+    expect(themeState.inputSurface).toBe(themeState.shellSurface);
+    expect(themeState.heading).toBe(themeState.bodyText);
+
     const update = await page.request.put(`/api/inventory/${pantryItem._id}`, {
       data: { trackingMode: 'simple', stockStatus: 'out' }
     });
