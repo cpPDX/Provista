@@ -48,6 +48,14 @@ test.describe('PRO-61 Pantry-backed produce planning', () => {
     await expect(view).toContainText('Running low');
     await expect(page.locator('#plan-produce-notes')).toBeHidden();
 
+    const routeSpacing = await page.evaluate(() => {
+      const focused = document.querySelector('.plan-focused-day');
+      const produce = document.querySelector('.plan-produce-planning');
+      if (!focused || !produce) return Infinity;
+      return produce.getBoundingClientRect().top - focused.getBoundingClientRect().bottom;
+    });
+    expect(routeSpacing).toBeLessThanOrEqual(24);
+
     await page.evaluate(() => {
       document.documentElement.dataset.theme = 'dark';
       document.documentElement.style.colorScheme = 'dark';
