@@ -235,7 +235,7 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     const historyCard = page.locator('.more-price-card').filter({ hasText: 'PRO-56 Recorded Item' });
     await expect(historyCard).toBeVisible();
     await expect(historyCard).toContainText('PRO-56 Recorded Store');
-    await expect(historyCard.getByText('$3.49', { exact: true })).toBeVisible();
+    await expect(historyCard.locator('summary .more-price-card-value strong')).toHaveText('$3.49');
     await expect(page.locator('#tab-prices')).toHaveCount(0);
   });
 });
