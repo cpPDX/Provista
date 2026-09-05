@@ -1,7 +1,3 @@
-function configureProxyTrust(app, nodeEnv = process.env.NODE_ENV) {
-  if (nodeEnv === 'production') app.set('trust proxy', 1);
-}
-
 function securityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -14,4 +10,4 @@ function securityHeaders(req, res, next) {
   next();
 }
 
-module.exports = { configureProxyTrust, securityHeaders };
+module.exports = { securityHeaders };
