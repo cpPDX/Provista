@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { useConfirm } from '../shell/DialogProvider';
 import { useToast } from '../shell/ToastProvider';
 import {
   approvePrice,
-  createPrice,
   loadInsightItems,
   loadInsightStores,
   loadPendingPrices,
   loadPrices,
+  recordPrice,
   rejectPrice,
   type InsightItem,
   type InsightStore,
   type PriceEntryRecord
 } from './insightsApi';
 import './more.css';
+
+const NEW_PRODUCT_VALUE = '__new_product__';
+const NEW_STORE_VALUE = '__new_store__';
 
 function localDateValue(date = new Date()) {
   const year = date.getFullYear();
@@ -37,6 +40,10 @@ function itemFrom(entry: PriceEntryRecord) {
 
 function storeFrom(entry: PriceEntryRecord) {
   return typeof entry.storeId === 'string' ? null : entry.storeId;
+}
+
+function entityId(value: InsightItem | InsightStore | string) {
+  return typeof value === 'string' ? value : value._id;
 }
 
 function currency(value: number) {
@@ -78,7 +85,13 @@ export function PriceHistoryPage() {
   const [showRecord, setShowRecord] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recordItemId, setRecordItemId] = useState('');
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductBrand, setNewProductBrand] = useState('');
+  const [newProductCategory, setNewProductCategory] = useState('Other');
+  const [newProductUnit, setNewProductUnit] = useState('each');
   const [recordStoreId, setRecordStoreId] = useState('');
+  const [newStoreName, setNewStoreName] = useState('');
+  const [newStoreLocation, setNewStoreLocation] = useState('');
   const [regularPrice, setRegularPrice] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [date, setDate] = useState(localDateValue());
@@ -156,6 +169,12 @@ export function PriceHistoryPage() {
   }, [visibleEntries, sortMode]);
 
   const filtersActive = Boolean(search || category || storeId || organicOnly || saleOnly || month);
+  const creatingProduct = recordItemId === NEW_PRODUCT_VALUE;
+  const creatingStore = recordStoreId === NEW_STORE_VALUE;
+  const productReady = creatingProduct
+    ? Boolean(newProductName.trim() && newProductCategory.trim() && newProductUnit.trim())
+    : Boolean(recordItemId);
+  const storeReady = creatingStore ? Boolean(newStoreName.trim()) : Boolean(recordStoreId);
 
   const clearFilters = () => {
     setSearch('');
@@ -168,24 +187,52 @@ export function PriceHistoryPage() {
   };
 
   const finalPreview = useMemo(() => {
+    if (!regularPrice.trim()) return null;
     const regular = Number(regularPrice);
     const sale = salePrice ? Number(salePrice) : null;
     const coupon = couponAmount ? Number(couponAmount) : 0;
     const qty = Number(quantity) || 1;
-    if (!Number.isFinite(regular) || regular < 0) return null;
+    if (!Number.isFinite(regular) || regular < 0 || !Number.isFinite(qty) || qty <= 0) return null;
     const base = sale != null && Number.isFinite(sale) && sale < regular ? sale : regular;
     const final = Math.max(0, base - (Number.isFinite(coupon) ? coupon : 0));
     return { final, perUnit: final / qty };
   }, [regularPrice, salePrice, couponAmount, quantity]);
 
+  const entryMatchesLoadedScope = (entry: PriceEntryRecord) => {
+    if (month && entry.date.slice(0, 7) !== month) return false;
+    if (drillStoreId && entityId(entry.storeId) !== drillStoreId) return false;
+    return true;
+  };
+
+  const resetRecordForm = () => {
+    setRecordItemId('');
+    setNewProductName('');
+    setNewProductBrand('');
+    setNewProductCategory('Other');
+    setNewProductUnit('each');
+    setRecordStoreId('');
+    setNewStoreName('');
+    setNewStoreLocation('');
+    setRegularPrice('');
+    setSalePrice('');
+    setCouponAmount('');
+    setCouponCode('');
+    setQuantity('1');
+    setDate(localDateValue());
+  };
+
   const submitPrice = async (event: FormEvent) => {
     event.preventDefault();
-    if (saving || !recordItemId || !recordStoreId || !regularPrice) return;
+    if (saving || !productReady || !storeReady || !regularPrice) return;
     setSaving(true);
     try {
-      const created = await createPrice({
-        itemId: recordItemId,
-        storeId: recordStoreId,
+      const result = await recordPrice({
+        ...(creatingProduct
+          ? { item: { name: newProductName.trim(), brand: newProductBrand.trim(), category: newProductCategory.trim(), unit: newProductUnit.trim() } }
+          : { itemId: recordItemId }),
+        ...(creatingStore
+          ? { store: { name: newStoreName.trim(), location: newStoreLocation.trim() } }
+          : { storeId: recordStoreId }),
         regularPrice: Number(regularPrice),
         salePrice: salePrice ? Number(salePrice) : null,
         couponAmount: couponAmount ? Number(couponAmount) : null,
@@ -194,15 +241,17 @@ export function PriceHistoryPage() {
         date,
         source: 'manual'
       });
-      setEntries(current => [created, ...current]);
+      const created = result.entry;
+      if (entryMatchesLoadedScope(created)) setEntries(current => [created, ...current]);
+      if (result.createdItem) {
+        setItems(current => [...current.filter(item => item._id !== result.createdItem?._id), result.createdItem as InsightItem].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+      if (result.createdStore) {
+        setStores(current => [...current.filter(store => store._id !== result.createdStore?._id), result.createdStore as InsightStore].sort((a, b) => a.name.localeCompare(b.name)));
+      }
       showToast(created.status === 'pending' ? 'Price submitted for household review' : 'Price recorded', { tone: 'success' });
       setShowRecord(false);
-      setRegularPrice('');
-      setSalePrice('');
-      setCouponAmount('');
-      setCouponCode('');
-      setQuantity('1');
-      setDate(localDateValue());
+      resetRecordForm();
     } catch (error) {
       showToast(errorMessage(error, 'Failed to record price'), { tone: 'error' });
     } finally {
@@ -214,7 +263,7 @@ export function PriceHistoryPage() {
     try {
       const approved = await approvePrice(entry._id);
       setPending(current => current.filter(row => row._id !== entry._id));
-      setEntries(current => [approved, ...current.filter(row => row._id !== entry._id)]);
+      if (entryMatchesLoadedScope(approved)) setEntries(current => [approved, ...current.filter(row => row._id !== entry._id)]);
       showToast('Price approved', { tone: 'success' });
     } catch (error) {
       showToast(errorMessage(error, 'Failed to approve price'), { tone: 'error' });
@@ -265,31 +314,66 @@ export function PriceHistoryPage() {
         <form className="more-settings-card" onSubmit={submitPrice} aria-labelledby="record-price-title">
           <div>
             <h2 id="record-price-title">Record household price</h2>
-            <p>Use this for a price the household actually paid or confirmed.</p>
+            <p>Choose what you bought, or add the missing product or store without leaving this price entry.</p>
           </div>
-          {items.length > 0 && stores.length > 0 ? (
-            <>
+          <div className="more-field-grid">
+            <label className="more-field">
+              <span>Product</span>
+              <select value={recordItemId} onChange={event => setRecordItemId(event.target.value)} required>
+                <option value="">Choose product</option>
+                {items.map(item => <option key={item._id} value={item._id}>{item.name}</option>)}
+                <option value={NEW_PRODUCT_VALUE}>Add a new product…</option>
+              </select>
+            </label>
+            <label className="more-field">
+              <span>Store</span>
+              <select value={recordStoreId} onChange={event => setRecordStoreId(event.target.value)} required>
+                <option value="">Choose store</option>
+                {stores.map(store => <option key={store._id} value={store._id}>{store.name}{store.location ? ` - ${store.location}` : ''}</option>)}
+                <option value={NEW_STORE_VALUE}>Add a new store…</option>
+              </select>
+            </label>
+          </div>
+
+          {creatingProduct && (
+            <fieldset className="more-inline-create-group">
+              <legend>New product</legend>
               <div className="more-field-grid">
-                <label className="more-field"><span>Product</span><select value={recordItemId} onChange={event => setRecordItemId(event.target.value)} required><option value="">Choose product</option>{items.map(item => <option key={item._id} value={item._id}>{item.name}</option>)}</select></label>
-                <label className="more-field"><span>Store</span><select value={recordStoreId} onChange={event => setRecordStoreId(event.target.value)} required><option value="">Choose store</option>{stores.map(store => <option key={store._id} value={store._id}>{store.name}{store.location ? ` - ${store.location}` : ''}</option>)}</select></label>
-                <label className="more-field"><span>Regular price</span><input type="number" inputMode="decimal" min="0" step="0.01" value={regularPrice} onChange={event => setRegularPrice(event.target.value)} required /></label>
-                <label className="more-field"><span>Quantity</span><input type="number" inputMode="decimal" min="0.01" step="0.01" value={quantity} onChange={event => setQuantity(event.target.value)} required /></label>
-                <label className="more-field"><span>Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} required /></label>
+                <label className="more-field"><span>Product name</span><input value={newProductName} onChange={event => setNewProductName(event.target.value)} required /></label>
+                <label className="more-field"><span>Brand <small>(optional)</small></span><input value={newProductBrand} onChange={event => setNewProductBrand(event.target.value)} /></label>
+                <label className="more-field"><span>Category</span><input value={newProductCategory} onChange={event => setNewProductCategory(event.target.value)} required /></label>
+                <label className="more-field"><span>Unit</span><input value={newProductUnit} onChange={event => setNewProductUnit(event.target.value)} required /></label>
               </div>
-              <details className="more-advanced-settings">
-                <summary>Sale or coupon details</summary>
-                <div className="more-field-grid">
-                  <label className="more-field"><span>Sale price <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={salePrice} onChange={event => setSalePrice(event.target.value)} /></label>
-                  <label className="more-field"><span>Coupon amount <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={couponAmount} onChange={event => setCouponAmount(event.target.value)} /></label>
-                  <label className="more-field"><span>Coupon code <small>(optional)</small></span><input value={couponCode} onChange={event => setCouponCode(event.target.value)} /></label>
-                </div>
-              </details>
-              {finalPreview && <div className="more-price-preview" role="status"><strong>{currency(finalPreview.final)}</strong><span>{currency(finalPreview.perUnit)} per unit</span></div>}
-              <button type="submit" className="shell-button shell-button-primary" disabled={saving || !recordItemId || !recordStoreId || !regularPrice}>{saving ? 'Recording…' : 'Record price'}</button>
-            </>
-          ) : (
-            <div className="more-status-card">Create at least one <Link to="/app/more/products">product</Link> and <Link to="/app/more/stores">store</Link> before recording a price.</div>
+            </fieldset>
           )}
+
+          {creatingStore && (
+            <fieldset className="more-inline-create-group">
+              <legend>New store</legend>
+              <div className="more-field-grid">
+                <label className="more-field"><span>Store name</span><input value={newStoreName} onChange={event => setNewStoreName(event.target.value)} required /></label>
+                <label className="more-field"><span>Location <small>(optional)</small></span><input value={newStoreLocation} onChange={event => setNewStoreLocation(event.target.value)} /></label>
+              </div>
+            </fieldset>
+          )}
+
+          <div className="more-field-grid">
+            <label className="more-field"><span>Regular price</span><input type="number" inputMode="decimal" min="0" step="0.01" value={regularPrice} onChange={event => setRegularPrice(event.target.value)} required /></label>
+            <label className="more-field"><span>Quantity</span><input type="number" inputMode="decimal" min="0.01" step="0.01" value={quantity} onChange={event => setQuantity(event.target.value)} required /></label>
+            <label className="more-field"><span>Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} required /></label>
+          </div>
+          <details className="more-advanced-settings">
+            <summary>Sale or coupon details</summary>
+            <div className="more-field-grid">
+              <label className="more-field"><span>Sale price <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={salePrice} onChange={event => setSalePrice(event.target.value)} /></label>
+              <label className="more-field"><span>Coupon amount <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={couponAmount} onChange={event => setCouponAmount(event.target.value)} /></label>
+              <label className="more-field"><span>Coupon code <small>(optional)</small></span><input value={couponCode} onChange={event => setCouponCode(event.target.value)} /></label>
+            </div>
+          </details>
+          {finalPreview && <div className="more-price-preview" role="status"><strong>{currency(finalPreview.final)}</strong><span>{currency(finalPreview.perUnit)} per unit</span></div>}
+          <button type="submit" className="shell-button shell-button-primary" disabled={saving || !productReady || !storeReady || !regularPrice}>
+            {saving ? 'Recording…' : 'Record price'}
+          </button>
         </form>
       )}
 
