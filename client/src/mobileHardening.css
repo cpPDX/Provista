@@ -81,12 +81,25 @@
   padding-top: 0.1rem;
 }
 
+/* PlanPage reserves bottom room for the fixed nav. Produce used to render
+   after that padding as a sibling, which created a large empty band. Keep
+   one bottom reserve on the route instead, with normal section spacing. */
+.shell-app .plan-route {
+  display: grid;
+  gap: 1rem;
+  padding-bottom: 6rem;
+}
+
+.shell-app .plan-route > .plan-page {
+  padding-bottom: 0;
+}
+
 /* The Pantry-backed Produce view was introduced with legacy token names.
    Bind it explicitly to the current React shell theme so dark mode never
    falls through to literal white/light fallback colors. */
-.shell-app .plan-produce-planning {
+.shell-app .plan-route > .plan-produce-planning {
   gap: 0.65rem;
-  margin-top: 0.7rem;
+  margin-top: 0;
   padding: 0.85rem;
   border-color: var(--border);
   background: var(--surface);
