@@ -47,17 +47,20 @@ test.describe('PRO-82 compact List item details', () => {
     const rhythm = await details.evaluate(element => {
       const content = element.querySelector('.react-list-item-detail-content');
       const section = element.querySelector('.react-list-detail-section');
+      const remove = element.querySelector('.react-list-detail-remove');
       const contentStyle = content ? getComputedStyle(content) : null;
       const sectionStyle = section ? getComputedStyle(section) : null;
       return {
         contentGap: contentStyle ? Number.parseFloat(contentStyle.rowGap) : Infinity,
         sectionPaddingTop: sectionStyle ? Number.parseFloat(sectionStyle.paddingTop) : Infinity,
+        removeHeight: remove ? remove.getBoundingClientRect().height : 0,
         scrollHeight: element.scrollHeight,
         clientHeight: element.clientHeight
       };
     });
     expect(rhythm.contentGap).toBeLessThanOrEqual(9);
     expect(rhythm.sectionPaddingTop).toBeLessThanOrEqual(10);
+    expect(rhythm.removeHeight).toBeGreaterThanOrEqual(44);
     expect(rhythm.scrollHeight).toBeLessThanOrEqual(rhythm.clientHeight + 1);
 
     await details.getByRole('button', { name: 'Close item details' }).click();
