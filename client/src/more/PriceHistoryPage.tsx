@@ -559,7 +559,7 @@ export function PriceHistoryPage() {
             <label className="more-field"><span>Date</span><input type="date" value={date} onChange={event => setDate(event.target.value)} required /></label>
           </div>
           <details className="more-advanced-settings">
-            <summary>Sale, coupon, or notes</summary>
+            <summary>Sale or coupon details</summary>
             <div className="more-field-grid">
               <label className="more-field"><span>Sale price <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={salePrice} onChange={event => setSalePrice(event.target.value)} /></label>
               <label className="more-field"><span>Coupon amount <small>(optional)</small></span><input type="number" inputMode="decimal" min="0" step="0.01" value={couponAmount} onChange={event => setCouponAmount(event.target.value)} /></label>
