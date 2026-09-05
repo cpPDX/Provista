@@ -107,6 +107,106 @@ describe('GitHub staging deployment preparation', () => {
     );
   });
 
+  test('reconciles a successful current-head staging push immediately when the window is open', async () => {
+    const github = createGithub();
+    const core = createCore();
+    const context = createContext('workflow_run', {
+      event: 'push',
+      head_branch: 'staging',
+      head_sha: targetSha,
+      conclusion: 'success'
+    });
+
+    await prepare({
+      github,
+      context,
+      core,
+      now: new Date('2026-09-03T03:07:00Z')
+    });
+
+    expect(core.outputs).toMatchObject({
+      action: 'reconcile',
+      target_sha: targetSha,
+      deployment_id: '9001'
+    });
+    expect(core.outputs.reason).toContain('immediate Railway reconciliation');
+    expect(github.rest.repos.createDeployment).toHaveBeenCalledWith(
+      expect.objectContaining({ ref: targetSha, environment: 'railway-staging' })
+    );
+    expect(github.rest.repos.createDeploymentStatus).not.toHaveBeenCalledWith(
+      expect.objectContaining({ deployment_id: 9001, state: 'queued' })
+    );
+  });
+
+  test('skips a failed staging push workflow run', async () => {
+    const github = createGithub();
+    const core = createCore();
+    const context = createContext('workflow_run', {
+      event: 'push',
+      head_branch: 'staging',
+      head_sha: targetSha,
+      conclusion: 'failure'
+    });
+
+    await prepare({
+      github,
+      context,
+      core,
+      now: new Date('2026-09-03T03:07:00Z')
+    });
+
+    expect(core.outputs.action).toBe('skipped');
+    expect(github.rest.repos.listDeployments).not.toHaveBeenCalled();
+    expect(github.rest.repos.createDeployment).not.toHaveBeenCalled();
+  });
+
+  test('skips a successful workflow run that is not for staging', async () => {
+    const github = createGithub();
+    const core = createCore();
+    const context = createContext('workflow_run', {
+      event: 'push',
+      head_branch: 'main',
+      head_sha: targetSha,
+      conclusion: 'success'
+    });
+
+    await prepare({
+      github,
+      context,
+      core,
+      now: new Date('2026-09-03T03:07:00Z')
+    });
+
+    expect(core.outputs.action).toBe('skipped');
+    expect(github.rest.repos.listDeployments).not.toHaveBeenCalled();
+    expect(github.rest.repos.createDeployment).not.toHaveBeenCalled();
+  });
+
+  test('does not reconcile a successful staging CI run after staging has advanced', async () => {
+    const github = createGithub({ branchSha: newerSha });
+    const core = createCore();
+    const context = createContext('workflow_run', {
+      event: 'push',
+      head_branch: 'staging',
+      head_sha: targetSha,
+      conclusion: 'success'
+    });
+
+    await prepare({
+      github,
+      context,
+      core,
+      now: new Date('2026-09-03T03:07:00Z')
+    });
+
+    expect(core.outputs).toMatchObject({
+      action: 'superseded',
+      target_sha: targetSha
+    });
+    expect(github.rest.repos.listDeployments).not.toHaveBeenCalled();
+    expect(github.rest.repos.createDeployment).not.toHaveBeenCalled();
+  });
+
   test('keeps an automatic schedule deferred during the blackout', async () => {
     const deployments = [{ id: 42, sha: targetSha, created_at: '2026-09-02T18:00:00Z' }];
     const github = createGithub({
@@ -264,6 +364,29 @@ describe('GitHub staging deployment revalidation', () => {
     expect(github.rest.repos.createDeploymentStatus).toHaveBeenCalledWith(
       expect.objectContaining({ deployment_id: 42, state: 'inactive' })
     );
+  });
+
+  test('allows an immediate workflow-run reconciliation while the window stays open', async () => {
+    const github = createGithub();
+    const core = createCore();
+    const context = createContext('workflow_run', {
+      event: 'push',
+      head_branch: 'staging',
+      head_sha: targetSha,
+      conclusion: 'success'
+    });
+
+    await revalidate({
+      github,
+      context,
+      core,
+      targetSha,
+      deploymentId: 42,
+      now: new Date('2026-09-03T03:07:00Z')
+    });
+
+    expect(core.outputs.proceed).toBe('true');
+    expect(github.rest.repos.createDeploymentStatus).not.toHaveBeenCalled();
   });
 
   test('rechecks the blackout immediately before Railway access', async () => {
