@@ -20,6 +20,8 @@ export interface PriceEntryRecord {
   _id: string;
   itemId: InsightItem | string;
   storeId: InsightStore | string;
+  item?: InsightItem | null;
+  store?: InsightStore | null;
   regularPrice: number;
   salePrice?: number | null;
   couponAmount?: number | null;
