@@ -217,9 +217,12 @@ app.get('/app/more/help', appShellLimiter, serveReactApp);
 app.get('/app/more/account', appShellLimiter, serveReactApp);
 app.get('/app/more/household', appShellLimiter, serveReactApp);
 app.get('/app/more/stores', appShellLimiter, serveReactApp);
+app.get('/app/more/insights', appShellLimiter, serveReactApp);
+app.get('/app/more/insights/prices', appShellLimiter, serveReactApp);
+app.get('/app/more/insights/spending', appShellLimiter, serveReactApp);
 
-// Compatibility surface remains available while secondary More tools,
-// Insights, scanner, and legacy authenticated JavaScript are retired under PRO-56.
+// Compatibility surface remains available while Import, scanner, and legacy
+// authenticated JavaScript are retired under PRO-56.
 app.get('/legacy-app', serveLegacyApp);
 
 // Vite's output lives under public/react-preview, but static directory indexes are
