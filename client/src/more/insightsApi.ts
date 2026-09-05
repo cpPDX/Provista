@@ -70,8 +70,8 @@ export async function loadInsightStores() {
 }
 
 export async function loadPrices(params: Record<string, string> = {}) {
-  const query = new URLSearchParams(params);
-  return apiFetch<PriceEntryRecord[]>(`/api/prices${query.size ? `?${query.toString()}` : ''}`);
+  const query = new URLSearchParams(params).toString();
+  return apiFetch<PriceEntryRecord[]>(`/api/prices${query ? `?${query}` : ''}`);
 }
 
 export async function createPrice(input: CreatePriceInput) {
