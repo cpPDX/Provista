@@ -5,7 +5,7 @@ export interface InsightItem {
   name: string;
   brand?: string;
   unit?: string;
-  size?: string;
+  size?: string | number | null;
   category?: string;
   isOrganic?: boolean;
 }
@@ -49,9 +49,19 @@ export interface SpendSummaryRecord {
   total: number;
 }
 
-export interface CreatePriceInput {
-  itemId: string;
-  storeId: string;
+export interface RecordPriceInput {
+  itemId?: string;
+  item?: {
+    name: string;
+    category: string;
+    unit: string;
+    brand?: string;
+  };
+  storeId?: string;
+  store?: {
+    name: string;
+    location?: string;
+  };
   regularPrice: number;
   salePrice?: number | null;
   couponAmount?: number | null;
@@ -59,6 +69,13 @@ export interface CreatePriceInput {
   quantity: number;
   date: string;
   source: 'manual';
+}
+
+export interface RecordPriceResult {
+  entry: PriceEntryRecord;
+  createdItem: InsightItem | null;
+  createdStore: InsightStore | null;
+  replacedPriceEntryId: string | null;
 }
 
 function normalizeCalendarDate(value: string) {
@@ -78,8 +95,8 @@ export async function loadPrices(params: Record<string, string> = {}) {
   return apiFetch<PriceEntryRecord[]>(`/api/prices${query ? `?${query}` : ''}`);
 }
 
-export async function createPrice(input: CreatePriceInput) {
-  return apiFetch<PriceEntryRecord>('/api/prices', {
+export async function recordPrice(input: RecordPriceInput) {
+  return apiFetch<RecordPriceResult>('/api/grocery/log', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...input, date: normalizeCalendarDate(input.date) })
