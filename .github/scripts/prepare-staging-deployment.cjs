@@ -220,12 +220,14 @@ async function prepare({ github, context, core, now = new Date() }) {
   const deploymentId = managedDeployment.deployment.id;
   const windowOpen = isDeploymentWindowOpen(now);
   const manualOverride = isExplicitManualReconcile(context);
-  const shouldReconcile = eventName !== 'workflow_run' && (windowOpen || manualOverride);
+  const shouldReconcile = windowOpen || manualOverride;
 
   if (shouldReconcile) {
     reason = manualOverride && !windowOpen
       ? 'An explicit manual rerun is overriding the staging blackout for the current green head.'
-      : 'The current green staging head is ready for Railway reconciliation.';
+      : eventName === 'workflow_run'
+        ? 'The successful current-head staging CI run is ready for immediate Railway reconciliation.'
+        : 'The current green staging head is ready for Railway reconciliation.';
     setPreparationOutputs(core, {
       action: 'reconcile',
       targetSha,
@@ -236,9 +238,7 @@ async function prepare({ github, context, core, now = new Date() }) {
     return;
   }
 
-  reason = windowOpen
-    ? 'Queued for the next allowed-window reconciler run.'
-    : 'Deferred during the 8:00 AM–8:00 PM Pacific blackout.';
+  reason = 'Deferred during the 8:00 AM–8:00 PM Pacific blackout.';
   await setManagedDeploymentStatus({
     github,
     context,
