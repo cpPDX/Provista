@@ -232,9 +232,10 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     await form.getByRole('button', { name: 'Record price', exact: true }).click();
 
     await expect(page.getByText('Price recorded')).toBeVisible();
-    await expect(page.getByText('PRO-56 Recorded Item', { exact: true })).toBeVisible();
-    await expect(page.getByText(/PRO-56 Recorded Store/).first()).toBeVisible();
-    await expect(page.getByText('$3.49', { exact: true }).first()).toBeVisible();
+    const historyCard = page.locator('.more-price-card').filter({ hasText: 'PRO-56 Recorded Item' });
+    await expect(historyCard).toBeVisible();
+    await expect(historyCard.getByText('PRO-56 Recorded Store', { exact: true })).toBeVisible();
+    await expect(historyCard.getByText('$3.49', { exact: true })).toBeVisible();
     await expect(page.locator('#tab-prices')).toHaveCount(0);
   });
 });
