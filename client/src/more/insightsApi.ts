@@ -20,6 +20,8 @@ export interface PriceEntryRecord {
   _id: string;
   itemId: InsightItem | string;
   storeId: InsightStore | string;
+  item?: InsightItem | null;
+  store?: InsightStore | null;
   regularPrice: number;
   salePrice?: number | null;
   couponAmount?: number | null;
@@ -28,7 +30,9 @@ export interface PriceEntryRecord {
   finalPrice: number;
   pricePerUnit: number;
   date: string;
+  notes?: string | null;
   status?: 'approved' | 'pending';
+  submittedBy?: { _id?: string; name?: string } | string | null;
 }
 
 export interface SpendBreakdownItem {
@@ -82,6 +86,17 @@ export interface RecordPriceResult {
   replacedPriceEntryId: string | null;
 }
 
+export interface ApprovePriceInput {
+  storeId?: string;
+  regularPrice?: number;
+  salePrice?: number | null;
+  couponAmount?: number | null;
+  couponCode?: string | null;
+  quantity?: number;
+  date?: string;
+  notes?: string | null;
+}
+
 function normalizeCalendarDate(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value;
 }
@@ -99,6 +114,10 @@ export async function loadPrices(params: Record<string, string> = {}) {
   return apiFetch<PriceEntryRecord[]>(`/api/prices${query ? `?${query}` : ''}`);
 }
 
+export async function loadPriceComparison(itemId: string) {
+  return apiFetch<PriceEntryRecord[]>(`/api/prices/compare/${encodeURIComponent(itemId)}`);
+}
+
 export async function recordPrice(input: RecordPriceInput) {
   return apiFetch<RecordPriceResult>('/api/grocery/log', {
     method: 'POST',
@@ -111,16 +130,23 @@ export async function loadPendingPrices() {
   return apiFetch<PriceEntryRecord[]>('/api/prices/pending');
 }
 
-export async function approvePrice(id: string) {
+export async function approvePrice(id: string, input: ApprovePriceInput = {}) {
   return apiFetch<PriceEntryRecord>(`/api/prices/${id}/approve`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({})
+    body: JSON.stringify({
+      ...input,
+      ...(input.date ? { date: normalizeCalendarDate(input.date) } : {})
+    })
   });
 }
 
 export async function rejectPrice(id: string) {
   return apiFetch<{ success: boolean }>(`/api/prices/${id}/reject`, { method: 'DELETE' });
+}
+
+export async function deletePrice(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/prices/${id}`, { method: 'DELETE' });
 }
 
 export async function loadSpendMonth(month: string) {
