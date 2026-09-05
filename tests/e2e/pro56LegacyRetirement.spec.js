@@ -235,7 +235,87 @@ test.describe('PRO-56 legacy authenticated UI retirement', () => {
     const historyCard = page.locator('.more-price-card').filter({ hasText: 'PRO-56 Recorded Item' });
     await expect(historyCard).toBeVisible();
     await expect(historyCard).toContainText('PRO-56 Recorded Store');
-    await expect(historyCard.locator('summary .more-price-card-value strong')).toHaveText('$3.49');
+    await expect(historyCard.locator('.more-price-card-value').getByText('$3.49', { exact: true })).toBeVisible();
     await expect(page.locator('#tab-prices')).toHaveCount(0);
+  });
+
+  test('imports reviewed CSV prices in React and replaces the same household price day', async ({ page }) => {
+    await createHouseholdSession(page, 'CsvImport');
+    const importDate = new Date().toISOString().slice(0, 10);
+    const itemResponse = await page.request.post('/api/items', {
+      data: { name: 'PRO-56 Imported Bananas', category: 'Produce', unit: 'each' }
+    });
+    const storeResponse = await page.request.post('/api/stores', {
+      data: { name: 'PRO-56 Import Market', location: 'North' }
+    });
+    expect(itemResponse.ok()).toBeTruthy();
+    expect(storeResponse.ok()).toBeTruthy();
+    const item = await itemResponse.json();
+    const store = await storeResponse.json();
+    const existingPrice = await page.request.post('/api/prices', {
+      data: {
+        itemId: item._id,
+        storeId: store._id,
+        regularPrice: 9.99,
+        quantity: 1,
+        date: `${importDate}T12:00:00.000Z`,
+        source: 'manual'
+      }
+    });
+    expect(existingPrice.ok()).toBeTruthy();
+
+    await page.goto('/app/more');
+    await page.getByRole('link', { name: /^Import prices\b/ }).click();
+    await expect(page).toHaveURL(/\/app\/more\/import$/);
+    await expect(page.locator('#import-prices-title')).toHaveText('Import prices');
+    await expect(page.locator('.shell-brand')).toBeVisible();
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/more\/import$/);
+    await expect(page.locator('#import-prices-title')).toBeVisible();
+
+    const csv = [
+      'item_name,brand,category,unit,size,store_name,final_price,is_sale,quantity,date,notes,is_organic',
+      `PRO-56 Imported Banana,,Produce,each,,PRO-56 Import Market,3.49,true,1,${importDate},replacement,false`,
+      `PRO-56 CSV New Item,Test Brand,Pantry,each,,PRO-56 CSV New Store,4.99,false,2,${importDate},new row,false`,
+      `PRO-56 Broken Item,,Pantry,each,,PRO-56 Import Market,,false,1,${importDate},missing price,false`
+    ].join('\n');
+    await page.getByLabel('CSV file').setInputFiles({
+      name: 'pro56-prices.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(csv)
+    });
+
+    await expect(page.getByRole('heading', { name: '3. Review rows' })).toBeVisible();
+    await expect(page.getByText('1 ready · 2 need attention')).toBeVisible();
+    const fuzzyRow = page.locator('.csv-review-row').filter({ hasText: 'PRO-56 Imported Banana' });
+    await fuzzyRow.getByLabel('Match “PRO-56 Imported Banana” to').selectOption({ label: 'PRO-56 Imported Bananas' });
+    const brokenRow = page.locator('.csv-review-row').filter({ hasText: 'PRO-56 Broken Item' });
+    await expect(brokenRow).toContainText('final_price is required');
+    await brokenRow.getByLabel('Skip this row').check();
+    await expect(page.getByRole('button', { name: 'Import 2 ready rows' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Import 2 ready rows' }).click();
+
+    const resultCard = page.locator('.more-settings-card').filter({ has: page.getByRole('heading', { name: 'Import result' }) });
+    await expect(resultCard).toContainText('2 rows saved.');
+    await expect(resultCard).toContainText('PRO-56 CSV New Item');
+    await expect(resultCard).toContainText('PRO-56 CSV New Store');
+
+    const pricesResponse = await page.request.get('/api/prices');
+    expect(pricesResponse.ok()).toBeTruthy();
+    const prices = await pricesResponse.json();
+    const matchingPrices = prices.filter(price => {
+      const itemId = price.itemId?._id || price.itemId;
+      const storeId = price.storeId?._id || price.storeId;
+      return itemId === item._id && storeId === store._id && String(price.date).slice(0, 10) === importDate;
+    });
+    expect(matchingPrices).toHaveLength(1);
+    expect(matchingPrices[0].finalPrice).toBe(3.49);
+
+    await resultCard.getByRole('button', { name: 'Open price history' }).click();
+    await expect(page).toHaveURL(/\/app\/more\/insights\/prices$/);
+    await expect(page.getByText('PRO-56 Imported Bananas', { exact: true })).toBeVisible();
+    await expect(page.getByText('PRO-56 CSV New Item', { exact: true })).toBeVisible();
+    await expect(page.locator('#csv-review-overlay')).toHaveCount(0);
   });
 });
