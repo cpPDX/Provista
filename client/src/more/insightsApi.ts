@@ -145,6 +145,10 @@ export async function rejectPrice(id: string) {
   return apiFetch<{ success: boolean }>(`/api/prices/${id}/reject`, { method: 'DELETE' });
 }
 
+export async function deletePrice(id: string) {
+  return apiFetch<{ success: boolean }>(`/api/prices/${id}`, { method: 'DELETE' });
+}
+
 export async function loadSpendMonth(month: string) {
   return apiFetch<SpendMonthRecord>(`/api/spend?month=${encodeURIComponent(month)}`);
 }
