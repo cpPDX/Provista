@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { HomePage } from '../home/HomePage';
@@ -6,6 +6,8 @@ import '../home/home.css';
 import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
 import { PlanRoute } from '../plan/PlanRoute';
+import { AppTour } from '../more/AppTour';
+import { HelpAboutPage } from '../more/HelpAboutPage';
 import { MorePage } from '../more/MorePage';
 import { ProductCatalogPage } from '../products/ProductCatalogPage';
 import { useConfirm } from './DialogProvider';
@@ -29,6 +31,7 @@ export function AppShell() {
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
+  const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
     if (!session?.offlineSession) return;
@@ -65,9 +68,6 @@ export function AppShell() {
       void requestNavigation(() => navigate(destination));
       return;
     }
-    void requestNavigation(() => {
-      window.location.assign(`/app?tab=${encodeURIComponent(tab)}`);
-    });
   };
 
   const handleLogout = async () => {
@@ -79,6 +79,8 @@ export function AppShell() {
     });
     if (confirmed) await logout();
   };
+
+  const startTour = () => setTourOpen(true);
 
   return (
     <div className="shell-app">
@@ -114,8 +116,10 @@ export function AppShell() {
               : currentTab === 'more'
                 ? location.pathname === '/app/more/products'
                   ? <ProductCatalogPage />
-                  : <MorePage />
-              : <HomePage />}
+                  : location.pathname === '/app/more/help'
+                    ? <HelpAboutPage onStartTour={startTour} />
+                    : <MorePage onStartTour={startTour} />
+                : <HomePage />}
       </main>
 
       <nav className="shell-bottom-nav" aria-label="Provista sections">
@@ -133,6 +137,8 @@ export function AppShell() {
           </button>
         ))}
       </nav>
+
+      {tourOpen && <AppTour onClose={() => setTourOpen(false)} />}
     </div>
   );
 }
