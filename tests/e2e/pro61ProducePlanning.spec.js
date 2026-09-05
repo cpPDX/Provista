@@ -54,6 +54,7 @@ test.describe('PRO-61 Pantry-backed produce planning', () => {
       if (!focused || !produce) return Infinity;
       return produce.getBoundingClientRect().top - focused.getBoundingClientRect().bottom;
     });
+    expect(routeSpacing).toBeGreaterThanOrEqual(0);
     expect(routeSpacing).toBeLessThanOrEqual(24);
 
     await page.evaluate(() => {
