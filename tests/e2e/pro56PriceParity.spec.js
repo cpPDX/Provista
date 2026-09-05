@@ -71,7 +71,7 @@ test.describe('PRO-56 React Prices parity', () => {
     expect(prices[0].notes).toBe('member-facing price note');
   });
 
-  test('shows the best recent unit value and reuses the React barcode resolver from Prices', async ({ page }) => {
+  test('shows best unit value, deletes approved history, and reuses the React barcode resolver', async ({ page }) => {
     await createHouseholdSession(page, 'ValueBarcode');
     const item = await createItem(page, {
       name: 'PRO-56 Value Item',
@@ -90,6 +90,16 @@ test.describe('PRO-56 React Prices parity', () => {
     await historyCard.locator('summary').click();
     await expect(historyCard.getByText(/Best recent value:/)).toContainText('$2.00 / each at PRO-56 Value Store');
     await expect(historyCard.getByText(/Saves/)).toContainText('$1.00 per each');
+
+    await historyCard.getByRole('button', {
+      name: `Delete price entry for ${item.name} from ${otherStore.name}`
+    }).click();
+    const deleteDialog = page.getByRole('alertdialog', { name: 'Delete this price entry?' });
+    await expect(deleteDialog).toContainText('Standalone logged purchases can also change Spending');
+    await deleteDialog.getByRole('button', { name: 'Delete price' }).click();
+    await expect(page.getByText('Price entry deleted')).toBeVisible();
+    await expect(historyCard).not.toContainText(otherStore.name);
+    await expect(page.locator('#tab-prices')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'Record price', exact: true }).first().click();
     const form = page.locator('form[aria-labelledby="record-price-title"]');
