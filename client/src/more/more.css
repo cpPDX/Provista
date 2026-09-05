@@ -418,9 +418,204 @@
   font-weight: 700;
 }
 
+.more-insights-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  max-width: 52rem;
+}
+
+.more-insights-search {
+  flex: 1 1 auto;
+}
+
+.more-insights-filters {
+  display: grid;
+  gap: 0.85rem;
+  max-width: 52rem;
+  background: var(--surface);
+}
+
+.more-price-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: var(--accent-subtle);
+  color: var(--text);
+}
+
+.more-price-preview strong {
+  font-size: 1.35rem;
+}
+
+.more-price-preview span {
+  color: var(--text-muted);
+}
+
+.more-empty-state {
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem 0;
+  text-align: left;
+}
+
+.more-empty-state p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.more-price-list,
+.more-price-history-rows,
+.more-spend-breakdown,
+.more-spend-summary {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.more-price-card {
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--background);
+  overflow: clip;
+}
+
+.more-price-card > summary {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  cursor: pointer;
+}
+
+.more-price-card > summary > span {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.more-price-card small {
+  color: var(--text-muted);
+}
+
+.more-price-card-value {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.more-price-history-rows {
+  padding: 0 0.85rem 0.85rem;
+}
+
+.more-price-history-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.more-price-history-rows strong {
+  color: var(--text);
+}
+
+.more-month-nav {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 52rem;
+}
+
+.more-month-nav > strong {
+  text-align: center;
+}
+
+.more-spend-total {
+  display: grid;
+  gap: 0.25rem;
+  max-width: 52rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.95rem;
+  background: var(--surface);
+}
+
+.more-spend-total span {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.more-spend-total strong {
+  font-size: clamp(2rem, 8vw, 3.25rem);
+  line-height: 1;
+}
+
+.more-insights-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  max-width: 52rem;
+}
+
+.more-spend-breakdown button {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.more-spend-breakdown button:last-child {
+  border-bottom: 0;
+}
+
+.more-spend-breakdown button > span:last-child {
+  color: var(--accent-strong);
+  font-size: 1.2rem;
+}
+
+.more-spend-summary > div {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, auto) minmax(4rem, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.more-spend-summary span {
+  color: var(--text-muted);
+}
+
+.more-spend-summary > div > div {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.more-spend-summary i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
 @media (max-width: 620px) {
   .more-grid,
-  .more-field-grid {
+  .more-field-grid,
+  .more-insights-columns {
     grid-template-columns: 1fr;
   }
 
@@ -446,5 +641,42 @@
 
   .more-invite-panel {
     grid-template-columns: 1fr;
+  }
+
+  .more-insights-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .more-insights-toolbar > .shell-button {
+    width: 100%;
+  }
+
+  .more-month-nav {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .more-month-nav > strong {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .more-price-card > summary,
+  .more-price-history-rows > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .more-price-card-value {
+    text-align: left;
+  }
+
+  .more-spend-summary > div {
+    grid-template-columns: 1fr auto;
+  }
+
+  .more-spend-summary > div > div {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }
