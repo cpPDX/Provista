@@ -12,6 +12,7 @@ import { ToastProvider } from './shell/ToastProvider';
 import './styles.css';
 import './themeHardening.css';
 import './plan/pro72.css';
+import './mobileHardening.css';
 
 const rootElement = document.getElementById('root');
 

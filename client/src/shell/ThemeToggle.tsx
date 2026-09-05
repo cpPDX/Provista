@@ -124,8 +124,7 @@ export function ThemeToggle() {
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path
             className="shell-theme-moon"
-            style={{ fill: 'currentColor', stroke: 'none' }}
-            d="M12.79 21c-5.52 0-10-4.48-10-10 0-4.84 3.44-8.87 8-9.8-.47 2.27.22 4.73 1.85 6.36 1.63 1.63 4.09 2.32 6.36 1.85-.93 4.56-4.96 8-9.8 8Z"
+            d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
           />
         </svg>
       ) : (
