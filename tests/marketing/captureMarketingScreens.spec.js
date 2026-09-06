@@ -14,17 +14,15 @@ const REFERENCE_DIR = path.join(OUTPUT_DIR, 'reference');
 const EMAIL = `marketing-capture-${RUN_ID.toLowerCase()}@test.com`;
 const PASSWORD = `Mc-${crypto.randomBytes(18).toString('base64url')}!`;
 const HOUSEHOLD_NAME = `Marketing Capture ${RUN_ID}`;
-
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'special'];
 
 function dateKey(date = new Date()) {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
+  return new Intl.DateTimeFormat('en-CA', {
     timeZone: TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit'
-  });
-  return formatter.format(date);
+  }).format(date);
 }
 
 function localDate(dateString) {
@@ -194,10 +192,17 @@ async function captureFullReference(page, filename) {
 
 async function capturePublicationView(page, filename, anchor) {
   await stabilize(page);
-  await anchor.evaluate((element) => {
-    const top = window.scrollY + element.getBoundingClientRect().top - 16;
+
+  const header = page.locator('.shell-header');
+  await expect(header).toBeVisible();
+  const headerBox = await header.boundingBox();
+  if (!headerBox) throw new Error('Could not measure fixed app header');
+  const headerOffset = Math.ceil(headerBox.height) + 12;
+
+  await anchor.evaluate((element, offset) => {
+    const top = window.scrollY + element.getBoundingClientRect().top - offset;
     window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
-  });
+  }, headerOffset);
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 
   const viewport = page.viewportSize();
@@ -248,7 +253,8 @@ async function capturePublicationView(page, filename, anchor) {
   return {
     width: viewport.width,
     height: cropHeight,
-    scrollY: await page.evaluate(() => window.scrollY)
+    scrollY: await page.evaluate(() => window.scrollY),
+    headerOffset
   };
 }
 
@@ -407,7 +413,7 @@ test.describe('PRO-93 real marketing screenshots', () => {
         width: viewport?.width || null,
         height: viewport?.height || null,
         device: 'iPhone 13 / Chromium',
-        publicationCapture: 'intentional viewport crop above fixed bottom navigation'
+        publicationCapture: 'intentional viewport crop below fixed header and above fixed bottom navigation'
       },
       householdTimeZone: TIME_ZONE,
       publicationScreenshots,
