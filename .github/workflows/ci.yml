@@ -63,6 +63,7 @@ jobs:
           node --check utils/mealAllocations.js
           node --check utils/mealReconciliation.js
           node --check utils/mealShopping.js
+          node --check utils/storePlacement.js
           node --check routes/barcode.js
           node --check routes/mealPlan.js
           node --check routes/onboarding.js
@@ -70,6 +71,7 @@ jobs:
           node --check routes/externalPrices.js
           node --check routes/household.js
           node --check routes/inventory.js
+          node --check routes/itemSections.js
           node --check routes/items.js
           node --check routes/shoppingList.js
           node --check routes/shoppingTrips.js
@@ -77,6 +79,7 @@ jobs:
           node --check routes/stores.js
           node --check tests/api/externalPrices.test.js
           node --check tests/api/inventoryLedger.unit.test.js
+          node --check tests/api/itemSections.test.js
           node --check tests/api/itemUnit.unit.test.js
           node --check tests/api/mealAllocations.unit.test.js
           node --check tests/api/mealReconciliationCorrections.test.js
@@ -110,6 +113,7 @@ jobs:
           node --check tests/e2e/pro81HomeState.spec.js
           node --check tests/e2e/pro82ListDetails.spec.js
           node --check tests/e2e/pro83ManageProducts.spec.js
+          node --check tests/e2e/pro94StorePlacement.spec.js
           node --check tests/e2e/reactOnboarding.spec.js
           node --check .github/scripts/staging-deployment-policy.cjs
           node --check .github/scripts/prepare-staging-deployment.cjs
@@ -168,4 +172,4 @@ jobs:
         run: npx playwright test tests/e2e/pro56LegacyRetirement.spec.js tests/e2e/pro56PriceParity.spec.js tests/e2e/pro56OfflineSyncRecovery.spec.js tests/e2e/pro56PwaInstallGuidance.spec.js
 
       - name: Run overlapping React workflow regressions
-        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js tests/e2e/reactPantry.spec.js tests/e2e/reactPlan.spec.js tests/e2e/pro60ListProvenance.spec.js tests/e2e/pro61ProducePlanning.spec.js tests/e2e/pro63WorkingState.spec.js tests/e2e/pro64CrossWorkflow.spec.js tests/e2e/pro72Plan.spec.js tests/e2e/pro72MobileReflow.spec.js tests/e2e/pro21Barcode.spec.js tests/e2e/pro65StoreLoading.spec.js tests/e2e/pro75ListContext.spec.js tests/e2e/pro76Reconciliation.spec.js tests/e2e/pro81HomeState.spec.js tests/e2e/pro82ListDetails.spec.js tests/e2e/pro83ManageProducts.spec.js tests/e2e/reactOnboarding.spec.js
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js tests/e2e/reactPantry.spec.js tests/e2e/reactPlan.spec.js tests/e2e/pro60ListProvenance.spec.js tests/e2e/pro61ProducePlanning.spec.js tests/e2e/pro63WorkingState.spec.js tests/e2e/pro64CrossWorkflow.spec.js tests/e2e/pro72Plan.spec.js tests/e2e/pro72MobileReflow.spec.js tests/e2e/pro21Barcode.spec.js tests/e2e/pro65StoreLoading.spec.js tests/e2e/pro75ListContext.spec.js tests/e2e/pro76Reconciliation.spec.js tests/e2e/pro81HomeState.spec.js tests/e2e/pro82ListDetails.spec.js tests/e2e/pro83ManageProducts.spec.js tests/e2e/pro94StorePlacement.spec.js tests/e2e/reactOnboarding.spec.js
