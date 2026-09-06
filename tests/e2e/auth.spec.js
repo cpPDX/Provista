@@ -36,7 +36,10 @@ test.describe('Authentication', () => {
       const images = screenGrid.locator('img');
       await expect(images).toHaveCount(4);
       for (let index = 0; index < expectedSources.length; index += 1) {
-        await expect(images.nth(index)).toHaveAttribute('src', expectedSources[index]);
+        const image = images.nth(index);
+        await expect(image).toHaveAttribute('src', expectedSources[index]);
+        await image.scrollIntoViewIfNeeded();
+        await expect.poll(async () => image.evaluate(element => element.naturalWidth)).toBeGreaterThan(0);
       }
 
       const layout = await screenGrid.evaluate(element => {
@@ -44,13 +47,11 @@ test.describe('Authentication', () => {
         return {
           columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
           documentWidth: document.documentElement.scrollWidth,
-          viewportWidth: window.innerWidth,
-          loaded: Array.from(element.querySelectorAll('img')).every(image => image.complete && image.naturalWidth > 0)
+          viewportWidth: window.innerWidth
         };
       });
       expect(layout.columns, `${viewport.name} screenshot columns`).toBe(viewport.expectedColumns);
       expect(layout.documentWidth, `${viewport.name} should not overflow horizontally`).toBeLessThanOrEqual(layout.viewportWidth + 1);
-      expect(layout.loaded).toBe(true);
     }
 
     await page.setViewportSize({ width: 390, height: 844 });
