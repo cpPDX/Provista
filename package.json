@@ -15,7 +15,8 @@
     "test:api": "jest tests/api --runInBand --forceExit",
     "test:ci-policy": "jest --runInBand --forceExit --testMatch '<rootDir>/tests/ci/**/*.test.js'",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "marketing:capture": "playwright test --config=playwright.marketing.config.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
