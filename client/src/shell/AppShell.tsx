@@ -20,6 +20,7 @@ import { StoresPage } from '../more/StoresPage';
 import { ProductCatalogPage } from '../products/ProductCatalogPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
+import { InstallGuidance } from './InstallGuidance';
 import { NavIcon } from './NavIcon';
 import { ThemeToggle } from './ThemeToggle';
 import { useToast } from './ToastProvider';
@@ -162,6 +163,7 @@ export function AppShell() {
         ))}
       </nav>
 
+      <InstallGuidance />
       {tourOpen && <AppTour onClose={() => setTourOpen(false)} />}
     </div>
   );
