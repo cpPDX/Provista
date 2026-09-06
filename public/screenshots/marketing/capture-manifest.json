@@ -3,9 +3,10 @@
   "capturedAt": "2026-09-06T17:16:23.166Z",
   "target": "https://provista-staging.up.railway.app",
   "captureSourceSha": "7bdc1e298a94afa517cc5e8079bc07aad57c0705",
-  "deployedAppSha": null,
+  "deployedAppSha": "3648dc24f0b96b845f0de12765cc0b383fa07341",
   "deploymentId": "b292c2fd-8e18-4da4-8f05-6ee30e0172ff",
-  "deployedVersionEvidence": "Railway deployment identity recorded; exact deployed app SHA not asserted",
+  "deploymentWorkflowRunId": 34017797710,
+  "deployedVersionEvidence": "GitHub-managed Railway Staging Queue run 34017797710 checked out exact staging source SHA 3648dc24f0b96b845f0de12765cc0b383fa07341 and Railway returned deployment b292c2fd-8e18-4da4-8f05-6ee30e0172ff before staging readiness verification passed",
   "viewport": {
     "width": 390,
     "height": 844,
