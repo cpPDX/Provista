@@ -168,6 +168,71 @@ test.describe('PRO-56 failed List sync recovery', () => {
     await expect.poll(async () => (await readQueue(page)).length).toBe(0);
   });
 
+  test('discarding a failed offline create also removes dependent writes to its local id', async ({ page }) => {
+    const item = await createCatalogItem(page, `PRO-56 Discard Local ${Date.now()}`);
+    await page.goto('/app/list');
+
+    const localId = `local-discard-${Date.now()}`;
+    const now = Date.now();
+    await seedOfflineDb(page, {
+      cachedItems: [{
+        _id: localId,
+        itemId: item,
+        storeId: null,
+        shoppingStoreId: null,
+        quantity: 1,
+        intendedPurchaseQuantity: 1,
+        requiredQuantity: null,
+        actualPurchasedQuantity: 1,
+        remainingRequiredQuantity: 0,
+        quantitySource: 'user',
+        checked: true,
+        addedAt: new Date(now).toISOString()
+      }],
+      queue: [
+        {
+          id: `failed-create-${now}`,
+          operation: 'CREATE',
+          collection: 'shoppingList',
+          payload: { itemId: item._id, quantity: 1 },
+          path: '/shopping-list',
+          method: 'POST',
+          createdAt: new Date(now).toISOString(),
+          attempts: 3,
+          status: 'failed',
+          localId
+        },
+        {
+          id: `dependent-update-${now}`,
+          operation: 'UPDATE',
+          collection: 'shoppingList',
+          payload: { checked: true, shoppingStoreId: null },
+          path: `/shopping-list/${localId}`,
+          method: 'PUT',
+          createdAt: new Date(now + 1).toISOString(),
+          attempts: 0,
+          status: 'pending'
+        }
+      ]
+    });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('provista:shopping-queue-changed')));
+
+    const recovery = page.locator('.list-sync-recovery');
+    await expect(recovery).toBeVisible();
+    await recovery.getByRole('button', { name: 'Review' }).click();
+    await recovery.getByRole('button', { name: 'Discard' }).click();
+    const dialog = page.getByRole('alertdialog', { name: 'Discard this unsynced List change?' });
+    await dialog.getByRole('button', { name: 'Discard change' }).click();
+
+    await expect(recovery).toHaveCount(0);
+    await expect.poll(async () => (await readQueue(page)).length).toBe(0);
+    await expect.poll(async () => {
+      const response = await page.request.get('/api/shopping-list');
+      return (await response.json()).length;
+    }).toBe(0);
+    await expect(page.getByText('Your list is empty')).toBeVisible();
+  });
+
   test('remaps follow-up writes from an offline-created local id to the real server id', async ({ page }) => {
     const item = await createCatalogItem(page, `PRO-56 Local Remap ${Date.now()}`);
     await page.goto('/app/list');
