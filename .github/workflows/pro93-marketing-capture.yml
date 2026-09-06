@@ -5,23 +5,15 @@ on:
     inputs:
       deployment_id:
         description: Railway staging deployment ID being captured
-        required: false
+        required: true
         type: string
       deployed_app_sha:
-        description: Exact deployed staging app SHA, when independently verified
+        description: Exact deployed staging app SHA, only when independently verified
         required: false
         type: string
-  push:
-    branches:
-      - cphelan/pro-93-marketing-refresh
-    paths:
-      - playwright.marketing.config.js
-      - tests/marketing/**
-      - package.json
-      - package-lock.json
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: pro93-marketing-capture
@@ -37,14 +29,13 @@ jobs:
       MARKETING_CAPTURE_RUN_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
       MARKETING_CAPTURE_OUTPUT_DIR: tmp/marketing-capture/gha-${{ github.run_id }}-${{ github.run_attempt }}
       MARKETING_CAPTURE_CAPTURE_SOURCE_SHA: ${{ github.sha }}
-      MARKETING_CAPTURE_DEPLOYMENT_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.deployment_id || 'b292c2fd-8e18-4da4-8f05-6ee30e0172ff' }}
-      MARKETING_CAPTURE_DEPLOYED_APP_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.deployed_app_sha || '' }}
+      MARKETING_CAPTURE_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      MARKETING_CAPTURE_DEPLOYED_APP_SHA: ${{ inputs.deployed_app_sha }}
 
     steps:
-      - name: Check out capture source
+      - name: Check out selected capture source
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Set up Node
@@ -62,7 +53,7 @@ jobs:
       - name: Capture real staging screens
         run: npm run marketing:capture
 
-      - name: Publish verified capture batch into the branch
+      - name: Verify complete capture batch
         run: |
           set -euo pipefail
           capture_dir="$MARKETING_CAPTURE_OUTPUT_DIR"
@@ -72,24 +63,6 @@ jobs:
           for file in home-full.png plan-full.png list-full.png pantry-full.png; do
             test -s "$capture_dir/reference/$file"
           done
-
-          mkdir -p public/screenshots/marketing/reference
-          cp "$capture_dir/home.png" public/screenshots/marketing/home.png
-          cp "$capture_dir/plan.png" public/screenshots/marketing/plan.png
-          cp "$capture_dir/list.png" public/screenshots/marketing/list.png
-          cp "$capture_dir/pantry.png" public/screenshots/marketing/pantry.png
-          cp "$capture_dir/capture-manifest.json" public/screenshots/marketing/capture-manifest.json
-          cp "$capture_dir/reference/"*.png public/screenshots/marketing/reference/
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/screenshots/marketing
-          if git diff --cached --quiet; then
-            echo "Capture matches the current committed assets."
-            exit 0
-          fi
-          git commit -m "PRO-93 capture publication-ready staging views"
-          git push origin "HEAD:${{ github.ref_name }}"
 
       - name: Upload verified capture artifact
         if: success()
