@@ -1,8 +1,8 @@
 {
-  "runId": "gha-34047656966-1",
-  "capturedAt": "2026-09-06T17:09:40.013Z",
+  "runId": "gha-34047856460-1",
+  "capturedAt": "2026-09-06T17:13:21.181Z",
   "target": "https://provista-staging.up.railway.app",
-  "captureSourceSha": "c894fce015b1210b14813fac8d23b4b130812f60",
+  "captureSourceSha": "93aa0613d64e4b0cb713422d4acd84126417dacf",
   "deployedAppSha": null,
   "deploymentId": "b292c2fd-8e18-4da4-8f05-6ee30e0172ff",
   "deployedVersionEvidence": "Railway deployment identity recorded; exact deployed app SHA not asserted",
@@ -10,7 +10,7 @@
     "width": 390,
     "height": 664,
     "device": "iPhone 13 / Chromium",
-    "publicationCapture": "intentional viewport crop above fixed bottom navigation"
+    "publicationCapture": "intentional viewport crop below fixed header and above fixed bottom navigation"
   },
   "householdTimeZone": "America/Los_Angeles",
   "publicationScreenshots": [
@@ -29,22 +29,26 @@
     "home": {
       "width": 390,
       "height": 584,
-      "scrollY": 200
+      "scrollY": 147,
+      "headerOffset": 69
     },
     "plan": {
       "width": 390,
       "height": 584,
-      "scrollY": 738
+      "scrollY": 685,
+      "headerOffset": 69
     },
     "list": {
       "width": 390,
       "height": 584,
-      "scrollY": 632
+      "scrollY": 579,
+      "headerOffset": 69
     },
     "pantry": {
       "width": 390,
       "height": 584,
-      "scrollY": 345
+      "scrollY": 292,
+      "headerOffset": 69
     }
   },
   "cleanup": {
