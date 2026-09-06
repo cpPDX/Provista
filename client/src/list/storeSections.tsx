@@ -308,6 +308,29 @@ export function useStoreSections(items: ShoppingListItem[] = []) {
     return query.data?.subSectionsByDepartment?.[canonical] || DEFAULT_STORE_SUBSECTIONS[canonical] || [];
   };
 
+  const listStructureSignature = useMemo(() => items
+    .map(item => {
+      const product = productFor(item);
+      const record = product?._id ? placementsByItem.get(product._id) : undefined;
+      const overrides = (record?.storeOverrides || [])
+        .map(entry => `${entry.storeId}:${entry.department || ''}:${entry.subSection || ''}:${entry.departmentProvenance || ''}:${entry.subSectionProvenance || ''}`)
+        .sort()
+        .join(',');
+      return [
+        item._id,
+        preferredStoreId(item),
+        product?.name || '',
+        product?.category || '',
+        record?.department || '',
+        record?.subSection || '',
+        record?.departmentProvenance || '',
+        record?.subSectionProvenance || '',
+        overrides
+      ].join(':');
+    })
+    .sort()
+    .join('|'), [items, placementsByItem]);
+
   const group = (groupItems: ShoppingListItem[], groupKey = ''): StoreDepartmentGroup[] => {
     const departments = new Map<string, Array<{ item: ShoppingListItem; placement: EffectiveStorePlacement }>>();
     groupItems.forEach(item => {
@@ -317,14 +340,11 @@ export function useStoreSections(items: ShoppingListItem[] = []) {
       departments.set(placement.department, current);
     });
 
-    const structuralSignature = groupItems
-      .map(item => {
-        const placement = placementFor(item);
-        return `${item._id}:${preferredStoreId(item)}:${placement.department}:${placement.subSection || ''}`;
-      })
-      .sort()
-      .join('|');
-    const snapshotKey = `provista-store-layout-v1:${stableHash(`${groupKey}|${structuralSignature}`)}`;
+    // Snapshot identity follows meaningful List/store/placement structure, not
+    // transient checked or current-shopping-store state. A check-off can move an
+    // item between suggested-stop groups without collapsing the department's
+    // established sub-section layout under the shopper's thumb.
+    const snapshotKey = `provista-store-layout-v1:${stableHash(`${groupKey}|${listStructureSignature}`)}`;
     let layout = readLayoutSnapshot(snapshotKey);
 
     if (!layout) {
