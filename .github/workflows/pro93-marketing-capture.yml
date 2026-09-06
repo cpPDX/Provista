@@ -1,0 +1,83 @@
+name: PRO-93 Marketing Screenshot Capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployment_id:
+        description: Railway staging deployment ID being captured
+        required: true
+        type: string
+      deployed_app_sha:
+        description: Exact deployed staging app SHA, only when independently verified
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pro93-marketing-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: America/Los_Angeles
+      MARKETING_CAPTURE_BASE_URL: https://provista-staging.up.railway.app
+      MARKETING_CAPTURE_RUN_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
+      MARKETING_CAPTURE_OUTPUT_DIR: tmp/marketing-capture/gha-${{ github.run_id }}-${{ github.run_attempt }}
+      MARKETING_CAPTURE_CAPTURE_SOURCE_SHA: ${{ github.sha }}
+      MARKETING_CAPTURE_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+      MARKETING_CAPTURE_DEPLOYED_APP_SHA: ${{ inputs.deployed_app_sha }}
+
+    steps:
+      - name: Check out selected capture source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Capture real staging screens
+        run: npm run marketing:capture
+
+      - name: Verify complete capture batch
+        run: |
+          set -euo pipefail
+          capture_dir="$MARKETING_CAPTURE_OUTPUT_DIR"
+          for file in home.png plan.png list.png pantry.png capture-manifest.json; do
+            test -s "$capture_dir/$file"
+          done
+          for file in home-full.png plan-full.png list-full.png pantry-full.png; do
+            test -s "$capture_dir/reference/$file"
+          done
+
+      - name: Upload verified capture artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro93-marketing-capture-verified-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tmp/marketing-capture/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload failed capture diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro93-marketing-capture-failed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tmp/marketing-capture/
+          if-no-files-found: ignore
+          retention-days: 3

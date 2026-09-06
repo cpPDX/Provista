@@ -4,7 +4,7 @@ test.describe('Authentication', () => {
   test('introduces Provista before opening account access', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: /Plan meals.*Shop together.*Stay ahead/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Know what’s for dinner.*Know what you need.*Keep the household moving/ })).toBeVisible();
     await expect(page.getByText('Grocery planning for real households')).toBeVisible();
 
     await page.getByRole('button', { name: 'Sign in' }).first().click();
@@ -13,6 +13,59 @@ test.describe('Authentication', () => {
 
     await page.keyboard.press('Escape');
     await expect(page.locator('#auth-dialog')).toBeHidden();
+  });
+
+  test('renders current product imagery without horizontal overflow across responsive and 200% text layouts', async ({ page }) => {
+    const screenshotSection = page.locator('.inside-section');
+    const screenGrid = screenshotSection.locator('.screen-grid--four');
+    const expectedSources = [
+      '/screenshots/marketing/home.png',
+      '/screenshots/marketing/plan.png',
+      '/screenshots/marketing/list.png',
+      '/screenshots/marketing/pantry.png'
+    ];
+
+    for (const viewport of [
+      { name: 'mobile', width: 390, height: 844, expectedColumns: 1 },
+      { name: 'desktop', width: 1280, height: 900, expectedColumns: 2 }
+    ]) {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/');
+      await expect(screenGrid).toBeVisible();
+
+      const images = screenGrid.locator('img');
+      await expect(images).toHaveCount(4);
+      for (let index = 0; index < expectedSources.length; index += 1) {
+        const image = images.nth(index);
+        await expect(image).toHaveAttribute('src', expectedSources[index]);
+        await image.scrollIntoViewIfNeeded();
+        await expect.poll(async () => image.evaluate(element => element.naturalWidth)).toBeGreaterThan(0);
+      }
+
+      const layout = await screenGrid.evaluate(element => {
+        const style = getComputedStyle(element);
+        return {
+          columns: style.gridTemplateColumns.split(' ').filter(Boolean).length,
+          documentWidth: document.documentElement.scrollWidth,
+          viewportWidth: window.innerWidth
+        };
+      });
+      expect(layout.columns, `${viewport.name} screenshot columns`).toBe(viewport.expectedColumns);
+      expect(layout.documentWidth, `${viewport.name} should not overflow horizontally`).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/');
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '200%';
+    });
+    await expect(screenGrid).toBeVisible();
+    const zoomedLayout = await page.evaluate(() => ({
+      documentWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth
+    }));
+    expect(zoomedLayout.documentWidth, '200% text should not create horizontal page overflow')
+      .toBeLessThanOrEqual(zoomedLayout.viewportWidth + 1);
   });
 
   test('creates a household account without leaving the public page first', async ({ page }) => {

@@ -4,16 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Provista — Plan together. Shop with clarity.</title>
-  <meta name="description" content="Plan meals, share a grocery list, track pantry needs, and understand household grocery spending with Provista." />
+  <meta name="description" content="A shared grocery list and meal planning app for households. Connect your meal plan, shopping, and Pantry so you know what to buy and what’s at home." />
   <meta name="theme-color" content="#1A1C20" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Provista — Plan meals. Shop together. Stay ahead." />
-  <meta property="og:description" content="Plan meals, share a grocery list, track pantry needs, and understand household grocery spending with Provista." />
+  <meta property="og:description" content="A shared grocery list and meal planning app for households. Connect your meal plan, shopping, and Pantry so you know what to buy and what’s at home." />
   <meta property="og:url" content="__PROVISTA_PUBLIC_URL__" />
   <meta property="og:image" content="__PROVISTA_OG_IMAGE_URL__" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Provista — Plan meals. Shop together. Stay ahead." />
-  <meta name="twitter:description" content="Plan meals, share a grocery list, track pantry needs, and understand household grocery spending with Provista." />
+  <meta name="twitter:description" content="A shared grocery list and meal planning app for households. Connect your meal plan, shopping, and Pantry so you know what to buy and what’s at home." />
   <meta name="twitter:image" content="__PROVISTA_OG_IMAGE_URL__" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="manifest" href="/manifest.json" />
@@ -21,6 +21,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/landing.css" />
+  <link rel="stylesheet" href="/css/marketing-screens.css" />
 </head>
 <body>
   <a class="skip-link" href="#main-content">Skip to content</a>
@@ -41,8 +42,8 @@
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
         <p class="eyebrow"><span aria-hidden="true"></span> Grocery planning for real households</p>
-        <h1 id="hero-title">Plan meals.<br />Shop together.<br /><em>Stay ahead.</em></h1>
-        <p class="hero-lead">Provista brings meal planning, a shared grocery list, pantry tracking, and grocery spending into one simple view—so you always know what’s for dinner, what to buy, and what’s running low.</p>
+        <h1 id="hero-title">Know what’s for dinner.<br />Know what you need.<br /><em>Keep the household moving.</em></h1>
+        <p class="hero-lead">Your meal plan, shared grocery list, and Pantry work together. See what’s already at home, buy what’s missing, and carry each shopping trip into the next plan.</p>
         <div class="hero-actions">
           <button class="button button-primary" type="button" data-open-auth="signup">Create account <span aria-hidden="true">→</span></button>
           <a class="text-link" href="#how-it-works">See how it works <span aria-hidden="true">↓</span></a>
@@ -50,40 +51,17 @@
         <p class="hero-note">Built for households, not perfect spreadsheets.</p>
       </div>
 
-      <div class="product-preview" aria-label="Preview of the Provista Today view">
-        <div class="preview-glow" aria-hidden="true"></div>
-        <article class="preview-shell">
-          <header class="preview-header">
-            <div class="preview-brand"><img src="/brand/provista-mark.svg?v=b2-6" width="28" height="28" alt="" /><span>Provista</span></div>
-            <span class="preview-date">SATURDAY, AUGUST 29</span>
-            <h2>Hi, Alex</h2>
-            <p>Your household at a glance.</p>
-          </header>
-          <div class="preview-grid">
-            <section class="preview-card preview-featured">
-              <p>WHAT’S FOR DINNER?</p>
-              <h3>Sheet-pan tacos</h3>
-              <span>View tonight →</span>
-            </section>
-            <section class="preview-card">
-              <p>WHAT DO WE NEED?</p>
-              <h3>8 items on the list</h3>
-              <div class="preview-chips"><span>Milk</span><span>Avocados</span><span>Rice</span></div>
-            </section>
-            <section class="preview-card">
-              <p>IS ANYTHING RUNNING LOW?</p>
-              <h3>3 pantry items need attention</h3>
-              <span>Open Pantry →</span>
-            </section>
-            <section class="preview-card preview-next">
-              <p>WHAT SHOULD I DO NEXT?</p>
-              <h3>Review the shopping list</h3>
-              <span>Open list →</span>
-            </section>
-          </div>
-          <nav class="preview-nav" aria-hidden="true"><span class="active">⌂<small>Home</small></span><span>□<small>Plan</small></span><span>✓<small>List</small></span><span>▤<small>Pantry</small></span><span>•••<small>More</small></span></nav>
-        </article>
-      </div>
+      <aside class="hero-routine" aria-label="One connected household routine">
+        <p class="eyebrow">Less to keep in your head</p>
+        <h2>What’s next is already connected.</h2>
+        <ol>
+          <li><strong>Home</strong><span>See dinner, groceries, and what needs attention.</span></li>
+          <li><strong>Plan</strong><span>Account for what meals will use from Pantry.</span></li>
+          <li><strong>List</strong><span>Know what to buy and which meal needs it.</span></li>
+          <li><strong>Shop</strong><span>Tap items as you go, then finish the trip.</span></li>
+          <li><strong>Pantry</strong><span>Purchases help keep the next plan grounded.</span></li>
+        </ol>
+      </aside>
     </section>
 
     <section class="value-strip" aria-label="Provista connects your grocery routine">
@@ -107,25 +85,25 @@
           <span class="benefit-number">01</span>
           <div class="benefit-icon" aria-hidden="true">□</div>
           <h3>Plan meals without starting over</h3>
-          <p>Build a weekly plan, save household favorites, repeat meals, account for leftovers, and add what each meal needs.</p>
+          <p>Your plan and Pantry stay connected. See what upcoming meals are expected to use and what’s missing. Reuse favorites, plan leftovers, and make room for different household planning groups.</p>
         </article>
         <article class="benefit-card">
           <span class="benefit-number">02</span>
           <div class="benefit-icon" aria-hidden="true">✓</div>
-          <h3>Shop from one shared list</h3>
-          <p>Everyone can add what they need. Organize each store stop into familiar sections, scan barcodes, and check things off quickly while you shop.</p>
+          <h3>Tap it and keep moving</h3>
+          <p>Everyone can add to one shared grocery list. Shop by store section, check items off immediately, and use Finish Shopping when you’re done. Buy extra for backup and leave price details for later.</p>
         </article>
         <article class="benefit-card">
           <span class="benefit-number">03</span>
           <div class="benefit-icon" aria-hidden="true">◫</div>
-          <h3>Know what you have at home</h3>
-          <p>Keep pantry tracking simple with Have, Running low, and Out. Use exact quantities only when they’re genuinely helpful.</p>
+          <h3>Know what you need before you run out</h3>
+          <p>Use Have, Running low, or Out for everyday staples, and Exact tracking when counts help. Account for planned meals before you shop, then correct what you have when real life changes the plan.</p>
         </article>
         <article class="benefit-card">
           <span class="benefit-number">04</span>
           <div class="benefit-icon" aria-hidden="true">↗</div>
-          <h3>Understand grocery spending</h3>
-          <p>Keep completed trips, household-paid prices, and spending history together so patterns are easier to see over time.</p>
+          <h3>Add a whole thought at once</h3>
+          <p>Type or paste “milk, bananas, 2 cans black beans, cereal” and review the groceries together. Provista remembers household shorthand after you confirm a match. Scan a barcode instead of typing in List or Pantry.</p>
         </article>
       </div>
     </section>
@@ -136,40 +114,51 @@
           <p class="eyebrow"><span aria-hidden="true"></span> Inside Provista</p>
           <h2 id="inside-title">See the household routine <em>come together.</em></h2>
         </div>
-        <p>Each view stays focused on one job, while meals, shopping needs, and pantry status stay connected behind the scenes.</p>
+        <p>Move from Home to Plan, List, shopping, and Pantry without rebuilding the same household context at every step.</p>
       </div>
 
-      <div class="screen-grid">
+      <div class="screen-grid screen-grid--four">
         <figure class="screen-card">
           <div class="screen-frame">
-            <img src="/screenshots/meal-plan.jpg" width="430" height="900" loading="lazy" decoding="async" alt="Provista meal plan showing a week of dinners and Friday’s fish taco shopping needs" />
+            <img src="/screenshots/marketing/home.png" width="1170" height="2292" loading="lazy" decoding="async" alt="Provista Home showing Chicken fajita bowls planned for tonight and six items on the shopping list" />
+          </div>
+          <figcaption>
+            <span>Home</span>
+            <h3>Know what needs attention</h3>
+            <p>See tonight’s dinner and the current shopping need together, with a clear next action.</p>
+          </figcaption>
+        </figure>
+
+        <figure class="screen-card">
+          <div class="screen-frame">
+            <img src="/screenshots/marketing/plan.png" width="1170" height="2292" loading="lazy" decoding="async" alt="Provista Plan focused on Sunday dinner, Chicken fajita bowls, with three meal needs covered by Pantry" />
           </div>
           <figcaption>
             <span>Plan</span>
-            <h3>Make the week visible</h3>
-            <p>See dinner at a glance, reuse familiar meals, and keep each meal’s shopping needs beside the plan.</p>
+            <h3>Plan with what’s at home</h3>
+            <p>Focus on the selected day, see the planned meal, and check how Pantry covers what it needs.</p>
           </figcaption>
         </figure>
 
         <figure class="screen-card">
           <div class="screen-frame">
-            <img src="/screenshots/shopping-list.jpg" width="430" height="900" loading="lazy" decoding="async" alt="Provista shared shopping list showing seven groceries grouped for Neighborhood Market" />
+            <img src="/screenshots/marketing/list.png" width="1170" height="2292" loading="lazy" decoding="async" alt="Provista shopping list for Neighborhood Market with groceries grouped by store section and visible buy quantities" />
           </div>
           <figcaption>
             <span>Shop</span>
-            <h3>Share one useful list</h3>
-            <p>Add groceries quickly, group each store stop into familiar sections, and give everyone the same up-to-date list.</p>
+            <h3>See the aisle, quantity, and next tap</h3>
+            <p>Shop from compact rows grouped by store section, with buy quantities and checkboxes visible as you move through the store.</p>
           </figcaption>
         </figure>
 
         <figure class="screen-card">
           <div class="screen-frame">
-            <img src="/screenshots/pantry.jpg" width="430" height="900" loading="lazy" decoding="async" alt="Provista pantry showing items marked Out, Running low, and Have" />
+            <img src="/screenshots/marketing/pantry.png" width="1170" height="2292" loading="lazy" decoding="async" alt="Provista Pantry showing Bananas Out, Milk Running low, and Tortillas tracked with an exact count" />
           </div>
           <figcaption>
-            <span>Stay ahead</span>
-            <h3>Track only what matters</h3>
-            <p>Mark staples Have, Running low, or Out so the household can act before something gets forgotten.</p>
+            <span>Pantry</span>
+            <h3>Track only what helps</h3>
+            <p>Use quick status tracking for staples and exact counts where they help, without treating every item the same.</p>
           </figcaption>
         </figure>
       </div>
@@ -183,10 +172,11 @@
           <p>Each step carries useful information into the next, so the household spends less time repeating itself.</p>
         </div>
         <ol class="workflow-list">
-          <li><span>1</span><div><h3>Plan your meals</h3><p>Decide what the household will eat and note what each meal needs.</p></div></li>
-          <li><span>2</span><div><h3>Build the list together</h3><p>Add groceries as they come to mind or move needed ingredients from the plan.</p></div></li>
-          <li><span>3</span><div><h3>Shop and finish the trip</h3><p>Check off purchases quickly. Unknown or changed prices never have to slow you down.</p></div></li>
-          <li><span>4</span><div><h3>Keep the household in sync</h3><p>Purchased items move into pantry while price and spending history update.</p></div></li>
+          <li><span>1</span><div><h3>Start at Home</h3><p>See tonight’s dinner, your list, low staples, and a useful next action.</p></div></li>
+          <li><span>2</span><div><h3>Plan your meals</h3><p>Decide what the household will eat, using Pantry to see what’s available and what meals are expected to use.</p></div></li>
+          <li><span>3</span><div><h3>Build the list together</h3><p>Add groceries as they come to mind or move needed ingredients from the plan.</p></div></li>
+          <li><span>4</span><div><h3>Shop and finish the trip</h3><p>Check off purchases quickly. Unknown or changed prices never have to slow you down.</p></div></li>
+          <li><span>5</span><div><h3>Keep the household in sync</h3><p>Finishing the trip updates Pantry for future meals, while keeping your household’s price and spending history together.</p></div></li>
         </ol>
       </div>
     </section>
@@ -199,8 +189,9 @@
         </div>
         <div class="reassurance-points">
           <p><strong>Simple pantry tracking</strong><span>Use Have, Running low, or Out when exact quantities would be more work than they’re worth.</span></p>
+          <p><strong>Pick up where you left off</strong><span>Keep useful Plan context, List filters, and Pantry search when you switch tasks and come back.</span></p>
           <p><strong>Prices never block the trip</strong><span>Use a known price, update it, or leave it for later and keep shopping.</span></p>
-          <p><strong>Ready for unreliable connections</strong><span>Supported shopping actions are designed to keep moving when the network doesn’t.</span></p>
+          <p><strong>Keep shopping when the signal gets bad</strong><span>Supported List actions can continue offline and sync when you reconnect. If a change needs attention, you can review and retry it. Other features still need a connection.</span></p>
         </div>
       </div>
     </section>
@@ -208,7 +199,7 @@
     <section class="closing-section section-shell" aria-labelledby="closing-title">
       <p class="eyebrow"><span aria-hidden="true"></span> Your household’s next grocery trip</p>
       <h2 id="closing-title">Spend less time coordinating.<br /><em>Know what comes next.</em></h2>
-      <p>Bring meals, shopping, pantry, and spending into one shared household view.</p>
+      <p>Start with what you need right now. Plan tonight’s meal or build your shopping list. Set up the rest as you go.</p>
       <div class="closing-actions">
         <button class="button button-primary" type="button" data-open-auth="signup">Create account <span aria-hidden="true">→</span></button>
         <button class="text-link text-link-button" type="button" data-open-auth="signin">Already use Provista? Sign in</button>
