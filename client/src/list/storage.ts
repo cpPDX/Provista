@@ -201,9 +201,6 @@ export async function retryFailedShoppingWrite(id: string): Promise<{ synced: nu
   if (!navigator.onLine) throw new Error('Reconnect before retrying this List change.');
   const item = (await queueItems()).find(entry => entry.id === id && entry.collection === SHOPPING_STORE);
   if (!item || item.status !== 'failed') return { synced: 0, failed: 0 };
-  item.status = 'pending';
-  item.attempts = 2;
-  await updateQueueItem(item);
   return processShoppingQueue(id);
 }
 
@@ -240,7 +237,11 @@ export async function discardFailedShoppingWrite(id: string): Promise<ShoppingLi
 export async function processShoppingQueue(onlyId?: string): Promise<{ synced: number; failed: number }> {
   if (!navigator.onLine) return { synced: 0, failed: 0 };
   const pending = (await queueItems())
-    .filter(item => item.collection === SHOPPING_STORE && item.status === 'pending' && (!onlyId || item.id === onlyId))
+    .filter(item => {
+      if (item.collection !== SHOPPING_STORE) return false;
+      if (onlyId) return item.id === onlyId && (item.status === 'pending' || item.status === 'failed');
+      return item.status === 'pending';
+    })
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 
   let synced = 0;
