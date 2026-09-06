@@ -10,6 +10,7 @@ const RUN_ID = String(process.env.MARKETING_CAPTURE_RUN_ID || `local-${Date.now(
   .slice(0, 80);
 const OUTPUT_DIR = process.env.MARKETING_CAPTURE_OUTPUT_DIR
   || path.join(process.cwd(), 'tmp', 'marketing-capture', RUN_ID);
+const REFERENCE_DIR = path.join(OUTPUT_DIR, 'reference');
 const EMAIL = `marketing-capture-${RUN_ID.toLowerCase()}@test.com`;
 const PASSWORD = `Mc-${crypto.randomBytes(18).toString('base64url')}!`;
 const HOUSEHOLD_NAME = `Marketing Capture ${RUN_ID}`;
@@ -129,38 +130,13 @@ async function seedMarketingState(page) {
     items[key] = await ensureItem(page, name, category, unit);
   }
 
-  await createPantry(page, items.milk, {
-    trackingMode: 'simple',
-    stockStatus: 'low'
-  });
-  await createPantry(page, items.bananas, {
-    trackingMode: 'simple',
-    stockStatus: 'out'
-  });
-  await createPantry(page, items.oliveOil, {
-    trackingMode: 'simple',
-    stockStatus: 'have'
-  });
-  await createPantry(page, items.eggs, {
-    trackingMode: 'exact',
-    quantity: 8,
-    lowStockThreshold: 3
-  });
-  await createPantry(page, items.peppers, {
-    trackingMode: 'exact',
-    quantity: 4,
-    lowStockThreshold: 1
-  });
-  await createPantry(page, items.beans, {
-    trackingMode: 'exact',
-    quantity: 5,
-    lowStockThreshold: 2
-  });
-  await createPantry(page, items.tortillas, {
-    trackingMode: 'exact',
-    quantity: 8,
-    lowStockThreshold: 2
-  });
+  await createPantry(page, items.milk, { trackingMode: 'simple', stockStatus: 'low' });
+  await createPantry(page, items.bananas, { trackingMode: 'simple', stockStatus: 'out' });
+  await createPantry(page, items.oliveOil, { trackingMode: 'simple', stockStatus: 'have' });
+  await createPantry(page, items.eggs, { trackingMode: 'exact', quantity: 8, lowStockThreshold: 3 });
+  await createPantry(page, items.peppers, { trackingMode: 'exact', quantity: 4, lowStockThreshold: 1 });
+  await createPantry(page, items.beans, { trackingMode: 'exact', quantity: 5, lowStockThreshold: 2 });
+  await createPantry(page, items.tortillas, { trackingMode: 'exact', quantity: 8, lowStockThreshold: 2 });
 
   await Promise.all([
     createListItem(page, items.bananas, 2, store._id),
@@ -205,11 +181,46 @@ async function stabilize(page) {
   });
 }
 
-async function capture(page, filename) {
+async function captureFullReference(page, filename) {
   await stabilize(page);
   await page.evaluate(() => window.scrollTo(0, 0));
-  const target = path.join(OUTPUT_DIR, filename);
-  await page.screenshot({ path: target, fullPage: true, animations: 'disabled' });
+  await fs.mkdir(REFERENCE_DIR, { recursive: true });
+  await page.screenshot({
+    path: path.join(REFERENCE_DIR, filename),
+    fullPage: true,
+    animations: 'disabled'
+  });
+}
+
+async function capturePublicationView(page, filename, anchor) {
+  await stabilize(page);
+  await anchor.evaluate((element) => {
+    const top = window.scrollY + element.getBoundingClientRect().top - 16;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'instant' });
+  });
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('Marketing viewport is unavailable');
+
+  const nav = page.locator('.shell-bottom-nav');
+  await expect(nav).toBeVisible();
+  const navBox = await nav.boundingBox();
+  if (!navBox) throw new Error('Could not measure fixed bottom navigation');
+
+  const scrollY = await page.evaluate(() => window.scrollY);
+  const cropHeight = Math.floor(navBox.y - 12);
+  if (cropHeight < 480) {
+    throw new Error(`Publication crop is unexpectedly short (${cropHeight}px)`);
+  }
+
+  await page.screenshot({
+    path: path.join(OUTPUT_DIR, filename),
+    clip: { x: 0, y: scrollY, width: viewport.width, height: cropHeight },
+    animations: 'disabled'
+  });
+
+  return { width: viewport.width, height: cropHeight, scrollY };
 }
 
 async function loginDisposable(page) {
@@ -248,14 +259,16 @@ async function cleanupDisposable(page) {
 }
 
 test.describe('PRO-93 real marketing screenshots', () => {
-  test('captures Home, Plan, List, and Pantry from a disposable staging household', async ({ page, baseURL }) => {
+  test('captures publication views plus full-page staging references', async ({ page, baseURL }) => {
     await fs.rm(OUTPUT_DIR, { recursive: true, force: true });
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    await fs.mkdir(REFERENCE_DIR, { recursive: true });
 
     let primaryError = null;
     let cleanupResult = null;
     let seed = null;
     let registrationCompleted = false;
+    const crops = {};
 
     try {
       const register = await page.request.post('/api/auth/register', {
@@ -275,10 +288,12 @@ test.describe('PRO-93 real marketing screenshots', () => {
       await page.goto('/app');
       await expect(page.locator('#home-react-title')).toBeVisible();
       const dinnerCard = page.locator('.home-react-card', { hasText: 'What’s for dinner?' });
+      const needCard = page.locator('.home-react-card', { hasText: 'What do we need?' });
       await expect(dinnerCard).toContainText('Chicken fajita bowls');
+      await expect(needCard).toContainText('6 items on the list');
       await expect(page.getByRole('button', { name: 'View tonight', exact: true })).toBeVisible();
-      await expect(page.getByText('Milk', { exact: true }).first()).toBeVisible();
-      await capture(page, 'home.png');
+      await captureFullReference(page, 'home-full.png');
+      crops.home = await capturePublicationView(page, 'home.png', dinnerCard);
 
       await page.evaluate(context => {
         sessionStorage.setItem('provista-plan-context', JSON.stringify(context));
@@ -287,8 +302,9 @@ test.describe('PRO-93 real marketing screenshots', () => {
       const focusedDay = page.locator(`.plan-focused-day[data-plan-day="${seed.todayIndex}"]`);
       await expect(focusedDay).toBeVisible();
       await expect(focusedDay.locator('input[data-meal-name="dinner-0"]')).toHaveValue('Chicken fajita bowls');
-      await expect(page.locator('.plan-pantry-outlook summary')).toBeVisible();
-      await capture(page, 'plan.png');
+      await expect(focusedDay).toContainText('3 covered · 0 need buying');
+      await captureFullReference(page, 'plan-full.png');
+      crops.plan = await capturePublicationView(page, 'plan.png', focusedDay);
 
       await page.goto('/app/list');
       await expect(page.locator('#react-list-title')).toHaveText('Shopping list');
@@ -298,17 +314,20 @@ test.describe('PRO-93 real marketing screenshots', () => {
       await expect(storeGroup.locator('.react-list-section-group[data-section="Dairy & Eggs"]')).toContainText('Milk');
       await expect(storeGroup.locator('.react-list-section-group[data-section="Pantry"]')).toContainText('Black beans');
       await expect(page.locator('.react-list-item', { hasText: 'Black beans' })).toContainText('Buy 4');
-      await capture(page, 'list.png');
+      await captureFullReference(page, 'list-full.png');
+      crops.list = await capturePublicationView(page, 'list.png', storeGroup);
 
       await page.goto('/app/pantry');
       await expect(page.locator('#pantry-react-title')).toHaveText('Pantry');
-      await expect(page.locator('.pantry-card', { hasText: 'Milk' })).toContainText('Running low');
-      await expect(page.locator('.pantry-card', { hasText: 'Bananas' })).toContainText('Out');
-      const eggs = page.locator('.pantry-card', { hasText: 'Eggs' });
-      await expect(eggs).toHaveAttribute('data-tracking-mode', 'exact');
-      await expect(eggs).toContainText('8');
-      await expect(page.locator('.pantry-card', { hasText: 'Olive oil' })).toContainText('Have');
-      await capture(page, 'pantry.png');
+      const bananas = page.locator('.pantry-card', { hasText: 'Bananas' });
+      const milk = page.locator('.pantry-card', { hasText: 'Milk' });
+      const tortillas = page.locator('.pantry-card', { hasText: 'Tortillas' });
+      await expect(bananas).toContainText('Out');
+      await expect(milk).toContainText('Running low');
+      await expect(tortillas).toHaveAttribute('data-tracking-mode', 'exact');
+      await expect(tortillas).toContainText('8');
+      await captureFullReference(page, 'pantry-full.png');
+      crops.pantry = await capturePublicationView(page, 'pantry.png', bananas);
     } catch (error) {
       primaryError = error;
     }
@@ -329,20 +348,42 @@ test.describe('PRO-93 real marketing screenshots', () => {
       throw primaryError;
     }
 
-    const required = ['home.png', 'plan.png', 'list.png', 'pantry.png'];
-    for (const filename of required) {
+    const publicationScreenshots = ['home.png', 'plan.png', 'list.png', 'pantry.png'];
+    const referenceScreenshots = ['home-full.png', 'plan-full.png', 'list-full.png', 'pantry-full.png'];
+    for (const filename of publicationScreenshots) {
       const stats = await fs.stat(path.join(OUTPUT_DIR, filename));
       expect(stats.size, `${filename} should contain captured image data`).toBeGreaterThan(10000);
     }
+    for (const filename of referenceScreenshots) {
+      const stats = await fs.stat(path.join(REFERENCE_DIR, filename));
+      expect(stats.size, `${filename} should contain reference image data`).toBeGreaterThan(10000);
+    }
 
+    const viewport = page.viewportSize();
+    const deployedAppSha = process.env.MARKETING_CAPTURE_DEPLOYED_APP_SHA || null;
+    const deploymentId = process.env.MARKETING_CAPTURE_DEPLOYMENT_ID || null;
     const manifest = {
       runId: RUN_ID,
       capturedAt: new Date().toISOString(),
       target: baseURL,
-      sourceSha: process.env.MARKETING_CAPTURE_SOURCE_SHA || null,
-      viewport: { width: 390, height: 844, device: 'iPhone 13 / Chromium', capture: 'full-page mobile layout' },
+      captureSourceSha: process.env.MARKETING_CAPTURE_CAPTURE_SOURCE_SHA || null,
+      deployedAppSha,
+      deploymentId,
+      deployedVersionEvidence: deployedAppSha
+        ? 'exact deployed app SHA supplied independently'
+        : deploymentId
+          ? 'Railway deployment identity recorded; exact deployed app SHA not asserted'
+          : 'deployed app identity not supplied',
+      viewport: {
+        width: viewport?.width || null,
+        height: viewport?.height || null,
+        device: 'iPhone 13 / Chromium',
+        publicationCapture: 'intentional viewport crop above fixed bottom navigation'
+      },
       householdTimeZone: TIME_ZONE,
-      screenshots: required,
+      publicationScreenshots,
+      referenceScreenshots: referenceScreenshots.map(filename => `reference/${filename}`),
+      crops,
       cleanup: cleanupResult
     };
     await fs.writeFile(path.join(OUTPUT_DIR, 'capture-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
