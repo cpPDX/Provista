@@ -1,16 +1,8 @@
 const { test, expect } = require('@playwright/test');
 const { loginAsReactHomeUser } = require('./helpers/login');
 
-async function emulateIOSSafari(page, { visits = 0, standalone = false } = {}) {
+async function prepareInstallGuidance(page, { visits = 0, standalone = false } = {}) {
   await page.addInitScript(({ visits, standalone }) => {
-    Object.defineProperty(navigator, 'userAgent', {
-      configurable: true,
-      get: () => 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
-    });
-    Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'iPhone' });
-    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, get: () => 5 });
-    Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: () => undefined });
-
     const originalMatchMedia = window.matchMedia.bind(window);
     window.matchMedia = query => {
       if (query !== '(display-mode: standalone)') return originalMatchMedia(query);
@@ -41,7 +33,7 @@ async function expectNoInstallDialogAfterDelay(page) {
 
 test.describe('PRO-56 React PWA install guidance', () => {
   test('does not prompt on the first authenticated iOS Safari visit', async ({ page, baseURL }) => {
-    await emulateIOSSafari(page, { visits: 0 });
+    await prepareInstallGuidance(page, { visits: 0 });
     await loginAsReactHomeUser(page, baseURL);
 
     await expect(page.locator('#home-react-title')).toBeVisible();
@@ -50,7 +42,7 @@ test.describe('PRO-56 React PWA install guidance', () => {
   });
 
   test('offers clear iOS Home Screen steps on the second visit and respects remind later', async ({ page, baseURL }) => {
-    await emulateIOSSafari(page, { visits: 1 });
+    await prepareInstallGuidance(page, { visits: 1 });
     await loginAsReactHomeUser(page, baseURL);
 
     const dialog = page.getByRole('dialog', { name: 'Use Provista in the store' });
@@ -71,7 +63,7 @@ test.describe('PRO-56 React PWA install guidance', () => {
   });
 
   test('allows an iOS Safari user to permanently dismiss future guidance', async ({ page, baseURL }) => {
-    await emulateIOSSafari(page, { visits: 1 });
+    await prepareInstallGuidance(page, { visits: 1 });
     await loginAsReactHomeUser(page, baseURL);
 
     const dialog = page.getByRole('dialog', { name: 'Use Provista in the store' });
@@ -86,7 +78,7 @@ test.describe('PRO-56 React PWA install guidance', () => {
   });
 
   test('never prompts when Provista is already running as an installed standalone app', async ({ page, baseURL }) => {
-    await emulateIOSSafari(page, { visits: 4, standalone: true });
+    await prepareInstallGuidance(page, { visits: 4, standalone: true });
     await loginAsReactHomeUser(page, baseURL);
 
     await expect(page.locator('#home-react-title')).toBeVisible();
