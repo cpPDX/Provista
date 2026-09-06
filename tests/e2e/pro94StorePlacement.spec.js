@@ -56,6 +56,61 @@ test.describe('PRO-94 store departments and optional sub-sections', () => {
     await expect(restoredPantry.locator('.react-list-subsection-heading h4')).toHaveText(['Sauces & Condiments', 'Snacks']);
   });
 
+  test('does not recompute a store department layout when buy-here check-off moves an item to the active store', async ({ page }) => {
+    const suffix = `${Date.now()}-${test.info().workerIndex}`;
+    const plannedStore = await createStore(page, `PRO94 Planned ${suffix}`);
+    const activeStore = await createStore(page, `PRO94 Active ${suffix}`);
+
+    const activeItem = await createListItem(page, {
+      name: `PRO94 Active Bananas ${suffix}`,
+      category: 'Produce',
+      storeId: activeStore._id
+    });
+    const movingSnack = await createListItem(page, {
+      name: `PRO94 Moving Chips ${suffix}`,
+      category: 'Snacks',
+      unit: 'oz',
+      storeId: plannedStore._id
+    });
+    await createListItem(page, {
+      name: `PRO94 Staying Chips ${suffix}`,
+      category: 'Snacks',
+      unit: 'oz',
+      storeId: plannedStore._id
+    });
+    await createListItem(page, {
+      name: `PRO94 Ketchup A ${suffix}`,
+      category: 'Condiments & Sauces',
+      unit: 'bottle',
+      storeId: plannedStore._id
+    });
+    await createListItem(page, {
+      name: `PRO94 Ketchup B ${suffix}`,
+      category: 'Condiments & Sauces',
+      unit: 'bottle',
+      storeId: plannedStore._id
+    });
+
+    await page.goto('/app/list');
+    const plannedGroup = page.getByRole('region', { name: `Suggested stop ${plannedStore.name}` });
+    const plannedPantry = plannedGroup.locator('.react-list-section-group[data-section="Pantry / Dry Grocery"]');
+    await expect(plannedPantry.locator('.react-list-subsection-heading h4')).toHaveText(['Sauces & Condiments', 'Snacks']);
+
+    const activeCard = page.locator(`.react-list-item[data-id="${activeItem.listItem._id}"]`);
+    await activeCard.getByRole('button', { name: `Mark as purchased ${activeItem.product.name}` }).click();
+    await expect(activeCard).toHaveClass(/checked/);
+
+    const movingCard = page.locator(`.react-list-item[data-id="${movingSnack.listItem._id}"]`);
+    await movingCard.getByRole('button', { name: `Mark as purchased ${movingSnack.product.name}` }).click();
+    const confirmation = page.getByRole('dialog');
+    await expect(confirmation).toContainText(`This item is planned for ${plannedStore.name}.`);
+    await confirmation.getByRole('button', { name: 'Buy here instead' }).click();
+
+    await expect(page.getByRole('region', { name: `Suggested stop ${activeStore.name}` })
+      .locator(`.react-list-item[data-id="${movingSnack.listItem._id}"]`)).toHaveClass(/checked/);
+    await expect(plannedPantry.locator('.react-list-subsection-heading h4')).toHaveText(['Sauces & Condiments', 'Snacks']);
+  });
+
   test('keeps sparse departments flat instead of adding singleton heading noise', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     await createListItem(page, { name: `PRO94 Frozen Pizza ${suffix}`, category: 'Frozen' });
