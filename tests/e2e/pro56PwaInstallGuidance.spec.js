@@ -9,6 +9,7 @@ async function emulateIOSSafari(page, { visits = 0, standalone = false } = {}) {
     });
     Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'iPhone' });
     Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, get: () => 5 });
+    Object.defineProperty(navigator, 'userAgentData', { configurable: true, get: () => undefined });
 
     const originalMatchMedia = window.matchMedia.bind(window);
     window.matchMedia = query => {
