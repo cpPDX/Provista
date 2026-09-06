@@ -1,120 +1,97 @@
-# Legacy authenticated frontend retirement map
+# Authenticated frontend retirement - PRO-56
 
-PRO-56 retires the authenticated vanilla-JS renderer only after the corresponding React behavior is parity-proven. This document is the dependency map used to decide deletion order. It is intentionally conservative: a file stays until its remaining caller and PWA impact are understood.
+PRO-56 completes Provista's strangler migration by removing the authenticated vanilla-JS application after React parity was proven. This document records the final ownership boundary and the regression gates that make the deletion safe.
 
-## Classification
+## Final ownership boundary
 
-1. **Public/non-React retained** - intentionally outside the authenticated React app.
-2. **Migration dependency** - still reachable from the legacy compatibility renderer or a remaining React-to-legacy path; PRO-56 owns retirement unless another issue is named.
-3. **React replacement complete, deletion candidate** - user-facing replacement exists, but deletion still waits for dependency and Playwright proof.
-4. **Shared behavior to extract/retain** - implementation is not a renderer and may need a React/shared replacement before the legacy file can disappear.
+The authenticated product is React + TypeScript. `server.js` serves the generated Vite shell for `/app` and all authenticated React routes. There is no authenticated HTML fallback and no `window.*` feature-global compatibility layer.
 
-## Entry points and helpers
+The public/non-React surface intentionally retained is small:
 
-| File | Class | Current dependency / ownership | Retirement gate |
-| --- | --- | --- | --- |
-| `public/js/landing.js` | 1 | Public marketing/entry experience (`landing.html`) | Retain unless public-site scope changes |
-| `public/js/vendor/idb.min.js` | 4 | Legacy offline storage dependency and service-worker cache | Keep until final service-worker/offline cleanup proves React no longer depends on this legacy asset |
-| `public/js/auth.js` | 2 | Loaded by legacy authenticated `index.html`; provides `window.appAuth` | Delete with compatibility renderer after all authenticated legacy entries are gone |
-| `public/js/offline.js` | 3 | React List now owns supported offline queueing plus persistent failed-sync Review / Retry / safe Discard recovery | Delete legacy queue/recovery UI after final service-worker/offline regression confirms no remaining runtime caller |
-| `public/js/api.js` | 2 | Legacy authenticated API wrapper | Delete after all compatibility-renderer features are retired |
-| `public/js/ui.js` | 2 | Legacy modal/toast/general DOM helpers | Delete after all legacy feature callers are gone |
-| `public/js/confirmAction.js` | 2 | Legacy confirmation helper | Delete after legacy destructive-action callers are gone |
-| `public/js/autocomplete.js` | 2 | Legacy item/store autocomplete helper | Delete after remaining legacy forms migrate |
-| `public/js/prices.js` | 3 | Price History is React-owned under More → Insights, including best-value guidance, full manual capture, pending correction/approval, barcode initiation, and approved-price deletion | Delete after compatibility Prices entry is unreachable and current PRO-56 price parity tests remain green |
-| `public/js/spend.js` | 3 | Spending is React-owned under More → Insights | Delete after legacy Spending entry is unreachable |
-| `public/js/shoppingList.js` | 3 | List/Shop is React-owned; failed offline sync recovery is also React-owned | Delete only after no authenticated route can enter legacy List and overlapping legacy tests are replaced |
-| `public/js/rapidShoppingCapture.js` | 3 | Dynamically loaded by legacy `app.js`; React List owns rapid capture | Delete with legacy List/app orchestration after parity proof |
-| `public/js/csvImport.js` | 3 | Import prices is React-owned; legacy compatibility renderer still contains the old parser/review UI | Delete after legacy Import entry is unreachable |
-| `public/js/csvImportUnified.js` | 3 | React Import writes directly through `/api/grocery/log`; this legacy override is still dynamically loaded by `householdPeople.js` | Delete after legacy Import/Household compatibility callers are unreachable |
-| `public/js/more.js` | 2 | Legacy compatibility renderer still contains overlapping More renderers | All user-facing More cards are React-owned; retain only until compatibility callers are removed |
-| `public/js/moreInit.js` | 2 | Legacy More routing; dynamically loads catalog and old More behavior | All user-facing More destinations are React-owned; delete after legacy More compatibility entry is unreachable |
-| `public/js/householdPeople.js` | 2 | Legacy compatibility Household enhancement plus dynamic grocery/import overrides | Household and Import are React-owned; retain until remaining compatibility callers are removed |
-| `public/js/groceryEntry.js` | 2 | Dynamically injected by `householdPeople.js` | Delete/extract after remaining legacy grocery-entry callers are gone |
-| `public/js/pantry.js` | 3 | Pantry is React-owned; legacy compatibility renderer still loads this file | Delete after no authenticated route can enter legacy Pantry and parity tests cover the replacement |
-| `public/js/mealPlan.js` | 3 | Plan is React-owned; legacy compatibility renderer still loads this file | Delete after no authenticated route can enter legacy Plan and parity tests cover the replacement |
-| `public/js/home.js` | 3 | Home is React-owned; legacy compatibility renderer still loads this file | Delete with legacy shell once compatibility navigation is gone |
-| `public/js/onboarding.js` | 3 | Server-backed action onboarding and App Tour are React-owned | Delete with compatibility shell after legacy setup entry is unreachable |
-| `public/js/catalog.js` | 3 | Manage Products is React-owned; legacy `moreInit.js` can still dynamically load catalog | Delete after legacy More catalog entry is unreachable and PRO-83 parity remains green |
-| `public/js/storeSections.js` | 3 | React List owns store-section grouping and custom section entry | Delete with legacy List/app orchestration after the legacy caller is removed |
-| `public/js/scanner.js` | 3 | React barcode resolution is complete for List, Pantry, Products, and Price History | Delete after compatibility scanner entry is unreachable; PRO-21 parity remains green |
-| `public/js/scan.js` | 3 | Dormant receipt OCR prototype; not loaded by authenticated HTML | Remove from service-worker cache/docs and delete; future receipt work is owned separately by PRO-37/PRO-39 |
-| `public/js/reactHomeBridge.js` | 2 | Injected only by `serveLegacyApp()` in `server.js` | Delete with the compatibility renderer |
-| `public/js/install-prompt.js` | 3 | React shell now owns iOS Safari Home Screen guidance using the same visit/dismiss/remind keys | Delete after the React PWA guidance regression is green |
-| `public/js/app.js` | 2 | Legacy authenticated bootstrap/navigation; dynamically loads old feature helpers | Last legacy renderer file to retire after feature renderers and compatibility entry points are removed |
+| Asset | Ownership |
+| --- | --- |
+| `public/landing.html`, `public/js/landing.js`, `public/css/landing.css` | Public marketing and entry experience |
+| `public/login.html`, `public/css/auth.css`, `public/css/style.css` | Signed-out authentication/reset/join experience |
+| `public/sw.js`, `public/manifest.json`, icons/brand assets | PWA shell, installability, and static assets |
+| `public/react-preview/*` | Generated Vite production client output |
 
-## Current authenticated legacy entry points
+## Removed authenticated legacy surface
 
-`server.js` still intentionally exposes the compatibility renderer through:
+The final retirement deletes:
 
-- `/app?tab=...`
-- `/app?legacy=1`
-- `/legacy-app`
-- `serveReactApp()` fallback when the built React index is absent outside production/CI
+- `public/index.html`, the old authenticated application shell
+- legacy authenticated bootstrap, routing, API, UI, modal, autocomplete, Home, Plan, List, Pantry, Prices, Spending, More, Household, catalog, Import, onboarding, scanner, and install-prompt JavaScript
+- the legacy IndexedDB helper and legacy offline queue implementation
+- the dormant receipt OCR prototype; future receipt work remains owned by PRO-37/PRO-39
+- `reactHomeBridge.js` and every remaining React-to-legacy bridge
+- authenticated-legacy-only `parentExperience.css` and `rapidShoppingCapture.css`
+- browser specs whose only purpose was exercising `/legacy-app` and the deleted DOM
 
-The React shell no longer creates those URLs. Before final removal, old `/app?tab=...` bookmarks should be redirected to their React equivalents where practical instead of becoming abrupt dead ends.
+React List owns its own IndexedDB queue/recovery implementation in `client/src/list/storage.ts`; deleting `public/js/vendor/idb.min.js` and `public/js/offline.js` does not remove React offline support.
 
-## Completed reopened retirement slices
+## Compatibility redirects
 
-### Help and App Tour
+Migration-era bookmarks no longer render old HTML. `server.js` permanently redirects known destinations into their React equivalents:
 
-- More → Help & About
-- More → App Tour
-- Help → Restart App Tour
-- React unavailable state no longer offers a legacy escape hatch
-- `/app/more/help` hard reload stays in React
+| Old destination | React destination |
+| --- | --- |
+| `/app?tab=home` | `/app` |
+| `/app?tab=list` | `/app/list` |
+| `/app?tab=inventory` | `/app/pantry` |
+| `/app?tab=meal-plan` | `/app/plan` |
+| `/app?tab=prices` | `/app/more/insights/prices` |
+| `/app?tab=spend` | `/app/more/insights/spending` |
+| `/app?tab=more&section=account` | `/app/more/account` |
+| `/app?tab=more&section=household` | `/app/more/household` |
+| `/app?tab=more&section=stores` | `/app/more/stores` |
+| `/app?tab=more&section=items` | `/app/more/products` |
+| `/app?tab=more&section=insights` | `/app/more/insights` |
+| `/app?tab=more&section=about` | `/app/more/help` |
+| `/app?tab=more&action=csv-import` | `/app/more/import` |
+| `/legacy-app` | `/app` |
 
-### More settings
+Unknown migration-era authenticated destinations converge on `/app` rather than reviving the compatibility renderer.
 
-- My Account, including profile, password, account deletion, and barcode preference
-- Household, including roster, planning people, roles/access, invites, settings, and household deletion
-- Stores create/edit/delete
-- direct React hard-refresh routes for account, household, and stores
+## Offline and PWA contract
 
-### Insights and Prices
+`public/sw.js` now uses the React-era `provista-shell-v15` cache and no longer precaches legacy authenticated files.
 
-- More → Insights
-- Price History search/filter/recovery, manual price recording, best-recent-value guidance and price-per-unit sorting
-- admin pending Approve / Reject / Edit & Approve
-- admin deletion of approved price observations
-- new-product size/organic metadata, notes, and React barcode initiation from Prices
-- Spending month navigation, category/store breakdowns, six-month context, and drill-down
-- direct React routes for Insights, Price History, and Spending
+The worker:
 
-### Import prices
+- precaches only public/auth assets that are still intentionally retained
+- dynamically caches the current `/app` shell and its hashed Vite assets
+- deletes prior shell/API caches during activation
+- uses `/app` as the authenticated navigation fallback
+- keeps JS/CSS/API requests network-first so deploys and reconnects take effect promptly
 
-- CSV template and client-side parsing
-- review errors/warnings and explicit fuzzy-match resolution
-- missing item/store creation through transactional `/api/grocery/log`
-- same-item/store/day replacement using server semantics
-- direct React route `/app/more/import`
+React PWA guidance owns the existing `provista_visits`, `installPromptDismissed`, and `installPromptRemindAt` keys, preserving prior user choices across migration. It remains iOS Safari-specific, suppresses itself in standalone mode, and promises only the supported offline List behavior.
 
-### Failed offline List sync recovery
+## Replacement coverage
 
-- failed supported List writes remain visible in React after repeated sync failure
-- Retry makes an explicit new attempt and remains visible if the retry still fails
-- Discard first refreshes the canonical server List, then removes the failed write and reconciles the device cache
-- failed offline CREATE discard also removes dependent queued writes to its temporary local ID
-- successful offline CREATE remaps queued UPDATE/DELETE paths from the temporary `local-*` ID to the real server ID
-- focused Playwright coverage proves retry, discard, reconciliation, and reconnect behavior
+Legacy-only Playwright specs were removed instead of remaining as zombie tests. Their current owners are:
 
-### React PWA install guidance
+| Retired coverage area | Current regression owner |
+| --- | --- |
+| Shell/navigation/user menu | `home.spec.js`, `reactShell.spec.js`, `pro56LegacyDeletion.spec.js` |
+| Help, Account, Household, Stores, Insights, Import | `pro56LegacyRetirement.spec.js` |
+| Price History and recovery states | `pro56PriceParity.spec.js` |
+| List, checkout, rapid capture, destructive List actions | `reactShoppingList.spec.js`, PRO-60/63/64/65/75/82 specs |
+| Pantry and low-stock behavior | `reactPantry.spec.js`, PRO-61/64 specs |
+| Plan and meal workflows | `reactPlan.spec.js`, PRO-64/72/76 specs |
+| Barcode/scanner behavior | `pro21Barcode.spec.js` |
+| Offline queue failure/retry/discard/reconnect | `pro56OfflineSyncRecovery.spec.js` |
+| PWA install guidance | `pro56PwaInstallGuidance.spec.js` |
+| Mobile/keyboard shell accessibility | React-owned `accessibility.spec.js`, `pro72MobileReflow.spec.js`, `reactShell.spec.js` |
 
-This active slice replaces the final user-facing behavior in `public/js/install-prompt.js` without changing service-worker registration:
+`pro56LegacyDeletion.spec.js` is the final retirement guard: old bookmarks must land in React, retired assets must return 404, and the service worker must not cache the deleted shell.
 
-- iOS Safari-only Home Screen guidance after the second authenticated visit
-- standalone-installed suppression
-- the existing `provista_visits`, `installPromptDismissed`, and `installPromptRemindAt` keys are preserved so existing user choices survive the migration
-- Remind me later remains seven days
-- permanent dismissal remains available
-- Android/Chromium native install handling is left to the browser instead of introducing a custom prompt
-- copy only promises supported offline List behavior rather than overclaiming that every Insights surface is offline-capable
+## Closure gates
 
-## Planned deletion order
+PRO-56 can close when the exact final head proves all of the following:
 
-1. Finish and merge React PWA install guidance, making `install-prompt.js` parity-proven.
-2. Delete parity-proven legacy feature renderers in reviewable slices: Home, Plan, List, Pantry, catalog, scanner, Help/Tour, Account, Household, Stores, Prices, Spending, Import, dormant receipt OCR, and their feature-only helpers.
-3. Retire compatibility-only shared helpers and `app.js` after no feature callers remain.
-4. Replace old `/app?tab=...` compatibility bookmarks with React redirects where appropriate, then remove `/legacy-app`, `serveLegacyApp()`, `public/index.html`, and `reactHomeBridge.js`.
-5. Remove obsolete legacy CSS/script entries from the service-worker cache and bump/trim caches for the final React asset pipeline.
-6. Re-run cached-auth, offline reads, supported offline mutations/recovery, reconnect, installability, and update/navigation coverage before closing PRO-56.
+- React client build and API suite are green.
+- React Home, Plan, List, Pantry, More, barcode, cross-workflow state, and onboarding browser suites are green.
+- `pro56LegacyRetirement`, `pro56PriceParity`, `pro56OfflineSyncRecovery`, `pro56PwaInstallGuidance`, and `pro56LegacyDeletion` are green.
+- WebKit runs the React accessibility and PWA install-guidance coverage.
+- Staging deploys the exact approved GitHub SHA through the GitHub-managed deployment workflow.
+- The deployed staging revision matches that GitHub SHA before PRO-56 is marked Done.
