@@ -10,9 +10,18 @@ describe('public landing page', () => {
     expect(res.text).toContain('Know what’s for dinner.');
     expect(res.text).toContain('Grocery planning for real households');
     expect(res.text).toContain('data-open-auth="signup"');
-    expect(res.text).toContain('/screenshots/meal-plan.jpg');
-    expect(res.text).toContain('/screenshots/shopping-list.jpg');
-    expect(res.text).toContain('/screenshots/pantry.jpg');
+    expect(res.text).toContain('/css/marketing-screens.css');
+    expect(res.text).toContain('/screenshots/marketing/home.png');
+    expect(res.text).toContain('/screenshots/marketing/plan.png');
+    expect(res.text).toContain('/screenshots/marketing/list.png');
+    expect(res.text).toContain('/screenshots/marketing/pantry.png');
+    expect(res.text).not.toContain('/screenshots/meal-plan.jpg');
+    expect(res.text).not.toContain('/screenshots/shopping-list.jpg');
+    expect(res.text).not.toContain('/screenshots/pantry.jpg');
+    expect(res.text).toContain('Provista Home showing Chicken fajita bowls planned for tonight and six items on the shopping list');
+    expect(res.text).toContain('Provista Plan focused on Sunday dinner, Chicken fajita bowls, with three meal needs covered by Pantry');
+    expect(res.text).toContain('Provista shopping list for Neighborhood Market with groceries grouped by store section and visible buy quantities');
+    expect(res.text).toContain('Provista Pantry showing Bananas Out, Milk Running low, and Tortillas tracked with an exact count');
     expect(res.text).toContain('Start with what you need right now.');
   });
 
