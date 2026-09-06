@@ -129,13 +129,14 @@
 
 .react-list-item {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 44px;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.45rem;
+  min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: 0.85rem;
   background: var(--surface);
-  padding: 0.65rem;
+  padding: 0.4rem 0.5rem;
   transition: opacity 120ms ease, background 120ms ease;
 }
 
@@ -143,13 +144,13 @@
   background: var(--accent-subtle);
 }
 
-.react-list-item.checked .react-list-item-body h3 {
+.react-list-item.checked .react-list-item-open strong {
   text-decoration: line-through;
   color: var(--text-muted);
 }
 
 .react-list-check,
-.react-list-remove {
+.react-list-quantity-edit {
   min-width: 44px;
   min-height: 44px;
   border: 0;
@@ -178,23 +179,58 @@
   min-width: 0;
 }
 
-.react-list-item-body h3,
-.react-list-item-body p {
-  margin: 0;
+.react-list-item-open {
+  width: 100%;
+  min-height: 48px;
+  display: grid;
+  align-content: center;
+  gap: 0.08rem;
+  border: 0;
+  background: transparent;
+  padding: 0.15rem 0;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
 }
 
-.react-list-item-body h3 {
+.react-list-item-open strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   font-size: 1rem;
 }
 
-.react-list-item-body p,
-.react-list-item-body small {
+.react-list-item-open span,
+.react-list-item-open small {
   color: var(--text-muted);
 }
 
-.react-list-remove {
-  color: var(--danger);
-  font-size: 1rem;
+.react-list-item-open span {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.react-list-item-open small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+}
+
+.react-list-quantity-edit {
+  border-radius: 0.65rem;
+  background: var(--surface-subtle);
+  color: var(--text);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.react-list-quantity-edit::before {
+  content: '×';
+  margin-right: 1px;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .react-list-cart {
@@ -414,6 +450,41 @@
   gap: 0.65rem;
 }
 
+.react-list-item-detail {
+  width: min(100%, 520px);
+}
+
+.react-list-item-detail-content {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 0.85rem;
+}
+
+.react-list-item-detail-content > p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.react-list-detail-section {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.react-list-detail-section h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.react-list-detail-section small {
+  color: var(--text-muted);
+}
+
+.react-list-detail-remove {
+  justify-self: start;
+}
+
 @media (max-width: 620px) {
   .react-list-heading {
     align-items: stretch;
@@ -457,5 +528,20 @@
     max-height: 92vh;
     border-radius: 1rem 1rem 0 0;
     padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .react-list-item {
+    padding: 0.35rem 0.4rem;
+  }
+
+  .react-list-item-open small {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  .react-list-detail-remove {
+    width: 100%;
   }
 }

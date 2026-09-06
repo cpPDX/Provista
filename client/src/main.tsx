@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './app/App';
+import { InteractionStatePersistence } from './app/InteractionStatePersistence';
 import { queryClient } from './app/queryClient';
 import { AuthProvider } from './auth/AuthProvider';
 import { DialogProvider } from './shell/DialogProvider';
@@ -11,6 +12,7 @@ import { ToastProvider } from './shell/ToastProvider';
 import './styles.css';
 import './themeHardening.css';
 import './plan/pro72.css';
+import './mobileHardening.css';
 
 const rootElement = document.getElementById('root');
 
@@ -29,6 +31,7 @@ createRoot(rootElement).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
+          <InteractionStatePersistence />
           <DialogProvider>
             <DirtyStateProvider>
               <ToastProvider>

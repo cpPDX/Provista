@@ -16,10 +16,20 @@ async function registerHousehold(page, label) {
   await page.click('#btn-choose-create-household');
   await expect(page.locator('#step-create')).toBeVisible();
   await page.fill('#household-name', `${label} Household`);
+
+  // Registration redirects to `/` before React onboarding is ready. The
+  // deterministic readiness boundary is the bootstrap request that persists
+  // the new household's onboarding state. Wait for that instead of treating
+  // the URL change as proof the onboarding screen has hydrated.
+  const onboardingStarted = page.waitForResponse(response =>
+    response.url().endsWith('/api/onboarding/start') && response.request().method() === 'POST'
+  );
   await page.click('#btn-create-household');
+  const startResponse = await onboardingStarted;
+  expect(startResponse.ok()).toBeTruthy();
 
   await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('heading', { name: 'Who are we planning for?' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'Who are we planning for?' })).toBeVisible();
   return { email, password };
 }
 
@@ -65,13 +75,44 @@ test.describe('React action-based onboarding', () => {
     await expect(page).toHaveURL(/\/app\/list\?onboarding=1$/);
     await expect(page.getByText('First useful action: build your shopping list')).toBeVisible();
 
+    // Once the item POST succeeds, onboarding completion must not wait for a
+    // secondary List refetch. Hold that refetch open to exercise CI-like latency.
+    let releaseListRefresh = () => {};
+    let markListRefreshFinished = () => {};
+    const listRefreshBlocked = new Promise(resolve => {
+      releaseListRefresh = resolve;
+    });
+    const listRefreshFinished = new Promise(resolve => {
+      markListRefreshFinished = resolve;
+    });
+    await page.route('**/api/shopping-list', async route => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+
+      await listRefreshBlocked;
+      try {
+        await route.continue();
+      } finally {
+        markListRefreshFinished();
+      }
+    });
+
     const input = page.locator('#react-rapid-list-input');
     await input.fill('Milk');
     await page.getByRole('button', { name: 'Add to list' }).click();
 
-    // A single clear catalog match is intentionally added immediately. The
-    // review surface is reserved for batches, ambiguous matches, and unknowns.
-    await expect(page).toHaveURL(/\/app$/, { timeout: 10000 });
+    try {
+      // A single clear catalog match is intentionally added immediately. The
+      // review surface is reserved for batches, ambiguous matches, and unknowns.
+      await expect(page).toHaveURL(/\/app$/, { timeout: 10000 });
+    } finally {
+      releaseListRefresh();
+      await listRefreshFinished;
+      await page.unroute('**/api/shopping-list');
+    }
+
     const needs = page.locator('.home-react-card', { hasText: 'What do we need?' });
     await expect(needs).toContainText('Milk');
 
@@ -105,8 +146,13 @@ test.describe('React action-based onboarding', () => {
 
     await expect(page).toHaveURL(/\/app\/plan\?onboarding=1$/);
     await expect(page.getByText('First useful action: plan tonight')).toBeVisible();
+    await expect.poll(async () => {
+      const response = await page.request.get('/api/onboarding');
+      const onboarding = await response.json();
+      return onboarding.resumeCount;
+    }).toBeGreaterThanOrEqual(1);
+
     const onboarding = await (await page.request.get('/api/onboarding')).json();
-    expect(onboarding.resumeCount).toBeGreaterThanOrEqual(1);
     expect(onboarding.firstAction).toBe('plan');
   });
 });

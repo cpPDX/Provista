@@ -113,6 +113,8 @@ test.describe('React migration shell', () => {
     await createHouseholdSession(page, 'Logout');
 
     await page.goto('/react-preview/');
+    await page.getByRole('button', { name: 'More', exact: true }).click();
+    await expect(page).toHaveURL(/\/app\/more$/);
     await page.getByRole('button', { name: 'Sign out' }).click();
 
     const dialog = page.getByRole('alertdialog');
@@ -141,20 +143,31 @@ test.describe('React migration shell', () => {
     const toggle = page.getByRole('button', { name: 'Switch to dark theme' });
     const moonMetrics = await toggle.evaluate(button => {
       const svg = button.querySelector('svg');
-      const path = svg?.querySelector('path');
+      const path = svg?.querySelector('.shell-theme-moon');
       if (!svg || !path) throw new Error('Theme moon icon is missing');
       const buttonRect = button.getBoundingClientRect();
       const svgRect = svg.getBoundingClientRect();
+      const glyph = path.getBBox();
+      const pathStyle = getComputedStyle(path);
       return {
-        fill: getComputedStyle(path).fill,
+        fill: pathStyle.fill,
+        stroke: pathStyle.stroke,
         dx: Math.abs((buttonRect.left + buttonRect.width / 2) - (svgRect.left + svgRect.width / 2)),
-        dy: Math.abs((buttonRect.top + buttonRect.height / 2) - (svgRect.top + svgRect.height / 2))
+        dy: Math.abs((buttonRect.top + buttonRect.height / 2) - (svgRect.top + svgRect.height / 2)),
+        glyphCenterX: glyph.x + glyph.width / 2,
+        glyphCenterY: glyph.y + glyph.height / 2,
+        glyphWidth: glyph.width,
+        glyphHeight: glyph.height
       };
     });
-    expect(moonMetrics.fill).not.toBe('none');
-    expect(moonMetrics.fill).not.toBe('rgba(0, 0, 0, 0)');
+    expect(moonMetrics.fill).toBe('none');
+    expect(moonMetrics.stroke).not.toBe('none');
     expect(moonMetrics.dx).toBeLessThanOrEqual(1);
     expect(moonMetrics.dy).toBeLessThanOrEqual(1);
+    expect(Math.abs(moonMetrics.glyphCenterX - 12)).toBeLessThanOrEqual(1);
+    expect(Math.abs(moonMetrics.glyphCenterY - 12)).toBeLessThanOrEqual(1);
+    expect(moonMetrics.glyphWidth).toBeGreaterThanOrEqual(17);
+    expect(moonMetrics.glyphHeight).toBeGreaterThanOrEqual(17);
 
     await toggle.click();
 
@@ -203,7 +216,7 @@ test.describe('React migration shell', () => {
     expect(darkColors.dialogText).not.toBe(lightColors.dialogText);
   });
 
-  test('keeps More in the React shell and preserves theme for legacy tools', async ({ page }) => {
+  test('keeps React-owned More tools in the shell and preserves theme', async ({ page }) => {
     await createHouseholdSession(page, 'More');
 
     await page.goto('/app');
@@ -212,12 +225,21 @@ test.describe('React migration shell', () => {
     await expect(page.locator('#more-title')).toHaveText('More');
     await expect(page.locator('.shell-brand')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Switch to dark theme' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'More', exact: true })).toHaveAttribute('aria-current', 'page');
+    const moreNav = page.locator('.shell-bottom-nav').getByRole('button', { name: 'More', exact: true });
+    await expect(moreNav).toHaveAttribute('aria-current', 'page');
 
     await page.getByRole('button', { name: 'Switch to dark theme' }).click();
     await page.getByRole('link', { name: /My Account/ }).click();
-    await expect(page).toHaveURL(/\/app\?tab=more&section=account$/);
-    await expect(page.locator('#section-account')).toBeVisible();
+    await expect(page).toHaveURL(/\/app\/more\/account$/);
+    await expect(page.locator('#account-title')).toHaveText('My Account');
+    await expect(page.locator('#section-account')).toHaveCount(0);
+    await expect(page.locator('.shell-brand')).toBeVisible();
+    await expect(moreNav).toHaveAttribute('aria-current', 'page');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    await page.reload();
+    await expect(page).toHaveURL(/\/app\/more\/account$/);
+    await expect(page.locator('#account-title')).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 

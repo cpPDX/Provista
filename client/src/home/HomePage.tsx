@@ -237,6 +237,7 @@ export function HomePage() {
   const needed = shoppingList.filter(item => !item.checked);
   const todayPlan = plan?.days?.find(day => String(day.date || '').slice(0, 10) === isoDate());
   const dinners = (todayPlan?.meals || []).filter(meal => meal.mealType === 'dinner' && meal.name?.trim());
+  const dinnerActionLabel = dinners.length ? 'View tonight' : 'Plan dinner';
 
   const openLegacy = (tab: string, focus?: string) => {
     void requestNavigation(() => {
@@ -368,7 +369,7 @@ export function HomePage() {
         </div>
         <div className="home-react-quick-actions" aria-label="Quick actions">
           <button type="button" className="shell-button shell-button-secondary" onClick={() => openReact('/app/list')}>Quick add</button>
-          <button type="button" className="shell-button shell-button-primary" onClick={() => openReact('/app/plan?focus=today-dinner')}>Plan dinner</button>
+          <button type="button" className="shell-button shell-button-primary" onClick={() => openReact('/app/plan?focus=today-dinner')}>{dinnerActionLabel}</button>
         </div>
       </section>
 
@@ -377,7 +378,7 @@ export function HomePage() {
           question="What’s for dinner?"
           title={dinners.length ? dinners.map(meal => meal.name).join(' · ') : 'Dinner isn’t planned yet'}
           emptyText={dinners.length ? 'Tonight’s plan is ready.' : 'Choose a meal in a few taps.'}
-          action={dinners.length ? 'View tonight' : 'Plan dinner'}
+          action={dinnerActionLabel}
           onAction={() => openReact('/app/plan?focus=today-dinner')}
           status={planStatus}
           tone="home-react-featured"

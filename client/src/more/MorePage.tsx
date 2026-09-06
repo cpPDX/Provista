@@ -1,35 +1,34 @@
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
+import { useConfirm } from '../shell/DialogProvider';
 import './more.css';
 
-type MoreIconName = 'insights' | 'account' | 'household' | 'products' | 'stores' | 'import' | 'about' | 'tour';
+type MoreIconName = 'insights' | 'account' | 'household' | 'products' | 'stores' | 'import' | 'about' | 'tour' | 'signout';
 
 interface MoreDestination {
   id: string;
   label: string;
   detail: string;
   icon: MoreIconName;
-  section?: string;
-  action?: string;
   adminOnly?: boolean;
+  reactHref?: string;
+  reactAction?: 'tour';
+}
+
+interface MorePageProps {
+  onStartTour: () => void;
 }
 
 const destinations: MoreDestination[] = [
-  { id: 'insights', label: 'Insights', detail: 'Price history and household spending', icon: 'insights', section: 'insights' },
-  { id: 'account', label: 'My Account', detail: 'Profile, password, and personal preferences', icon: 'account', section: 'account' },
-  { id: 'household', label: 'Household', detail: 'People, roles, invitations, and defaults', icon: 'household', section: 'household' },
-  { id: 'products', label: 'Manage products', detail: 'Household grocery catalog and product details', icon: 'products', section: 'items', adminOnly: true },
-  { id: 'stores', label: 'Stores', detail: 'Shopping locations and store sections', icon: 'stores', section: 'stores', adminOnly: true },
-  { id: 'import', label: 'Import prices', detail: 'Bring in household price history from CSV', icon: 'import', action: 'csv-import', adminOnly: true },
-  { id: 'about', label: 'Help & About', detail: 'How Provista works and where to get started', icon: 'about', section: 'about' },
-  { id: 'tour', label: 'App Tour', detail: 'Walk through the household grocery workflow', icon: 'tour', action: 'app-tour' }
+  { id: 'insights', label: 'Insights', detail: 'Price history and household spending', icon: 'insights', reactHref: '/app/more/insights' },
+  { id: 'account', label: 'My Account', detail: 'Profile, password, and personal preferences', icon: 'account', reactHref: '/app/more/account' },
+  { id: 'household', label: 'Household', detail: 'People, roles, invitations, and defaults', icon: 'household', reactHref: '/app/more/household' },
+  { id: 'products', label: 'Manage products', detail: 'Household grocery catalog and product details', icon: 'products', reactHref: '/app/more/products', adminOnly: true },
+  { id: 'stores', label: 'Stores', detail: 'Shopping locations used by your household', icon: 'stores', reactHref: '/app/more/stores', adminOnly: true },
+  { id: 'import', label: 'Import prices', detail: 'Bring in household price history from CSV', icon: 'import', reactHref: '/app/more/import', adminOnly: true },
+  { id: 'about', label: 'Help & About', detail: 'How Provista works and where to get started', icon: 'about', reactHref: '/app/more/help' },
+  { id: 'tour', label: 'App Tour', detail: 'Walk through the household grocery workflow', icon: 'tour', reactAction: 'tour' }
 ];
-
-function legacyHref(destination: MoreDestination) {
-  const params = new URLSearchParams({ tab: 'more' });
-  if (destination.section) params.set('section', destination.section);
-  if (destination.action) params.set('action', destination.action);
-  return `/app?${params.toString()}`;
-}
 
 function MoreIcon({ name }: { name: MoreIconName }) {
   if (name === 'insights') {
@@ -53,12 +52,39 @@ function MoreIcon({ name }: { name: MoreIconName }) {
   if (name === 'tour') {
     return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM8 9h8M8 13h5" /><path d="m15 17 4 4" /></svg>;
   }
+  if (name === 'signout') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10" /></svg>;
+  }
   return <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7h.01" /></svg>;
 }
 
-export function MorePage() {
-  const { isAdmin } = useAuth();
+function DestinationContent({ destination }: { destination: MoreDestination }) {
+  return (
+    <>
+      <span className="more-card-icon"><MoreIcon name={destination.icon} /></span>
+      <span className="more-card-copy">
+        <strong>{destination.label}</strong>
+        <small>{destination.detail}</small>
+      </span>
+      <span className="more-card-arrow" aria-hidden="true">→</span>
+    </>
+  );
+}
+
+export function MorePage({ onStartTour }: MorePageProps) {
+  const { isAdmin, logout } = useAuth();
+  const confirm = useConfirm();
   const visibleDestinations = destinations.filter(destination => !destination.adminOnly || isAdmin);
+
+  const handleLogout = async () => {
+    const confirmed = await confirm({
+      title: 'Sign out?',
+      message: 'You’ll return to the Provista welcome page. Your household data stays saved.',
+      confirmLabel: 'Sign out',
+      cancelLabel: 'Stay signed in'
+    });
+    if (confirmed) await logout();
+  };
 
   return (
     <section className="more-page" aria-labelledby="more-title">
@@ -69,16 +95,28 @@ export function MorePage() {
       </header>
 
       <div className="more-grid">
-        {visibleDestinations.map(destination => (
-          <a className="more-card" href={legacyHref(destination)} key={destination.id}>
-            <span className="more-card-icon"><MoreIcon name={destination.icon} /></span>
-            <span className="more-card-copy">
-              <strong>{destination.label}</strong>
-              <small>{destination.detail}</small>
-            </span>
-            <span className="more-card-arrow" aria-hidden="true">→</span>
-          </a>
-        ))}
+        {visibleDestinations.map(destination => {
+          if (destination.reactAction === 'tour') {
+            return (
+              <button type="button" className="more-card more-card-button" onClick={onStartTour} key={destination.id}>
+                <DestinationContent destination={destination} />
+              </button>
+            );
+          }
+          return (
+            <Link className="more-card" to={destination.reactHref as string} key={destination.id}>
+              <DestinationContent destination={destination} />
+            </Link>
+          );
+        })}
+        <button type="button" className="more-card more-card-button" onClick={() => void handleLogout()}>
+          <span className="more-card-icon"><MoreIcon name="signout" /></span>
+          <span className="more-card-copy">
+            <strong>Sign out</strong>
+            <small>End this session on this device</small>
+          </span>
+          <span className="more-card-arrow" aria-hidden="true">→</span>
+        </button>
       </div>
     </section>
   );

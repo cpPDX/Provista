@@ -1,14 +1,26 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { HomePage } from '../home/HomePage';
 import '../home/home.css';
+import { OfflineSyncRecovery } from '../list/OfflineSyncRecovery';
 import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
-import { PlanPage } from '../plan/PlanPage';
+import { PlanRoute } from '../plan/PlanRoute';
+import { AccountPage } from '../more/AccountPage';
+import { AppTour } from '../more/AppTour';
+import { HelpAboutPage } from '../more/HelpAboutPage';
+import { HouseholdPage } from '../more/HouseholdPage';
+import { ImportPricesPage } from '../more/ImportPricesPage';
+import { InsightsPage } from '../more/InsightsPage';
 import { MorePage } from '../more/MorePage';
+import { PriceHistoryPage } from '../more/PriceHistoryPage';
+import { SpendingPage } from '../more/SpendingPage';
+import { StoresPage } from '../more/StoresPage';
+import { ProductCatalogPage } from '../products/ProductCatalogPage';
 import { useConfirm } from './DialogProvider';
 import { useDirtyState } from './DirtyStateProvider';
+import { InstallGuidance } from './InstallGuidance';
 import { NavIcon } from './NavIcon';
 import { ThemeToggle } from './ThemeToggle';
 import { useToast } from './ToastProvider';
@@ -28,6 +40,7 @@ export function AppShell() {
   const { showToast } = useToast();
   const location = useLocation();
   const navigate = useNavigate();
+  const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
     if (!session?.offlineSession) return;
@@ -46,7 +59,7 @@ export function AppShell() {
       ? 'inventory'
       : location.pathname === '/app/plan'
         ? 'meal-plan'
-        : location.pathname === '/app/more'
+        : location.pathname.startsWith('/app/more')
           ? 'more'
           : 'home';
 
@@ -64,9 +77,6 @@ export function AppShell() {
       void requestNavigation(() => navigate(destination));
       return;
     }
-    void requestNavigation(() => {
-      window.location.assign(`/app?tab=${encodeURIComponent(tab)}`);
-    });
   };
 
   const handleLogout = async () => {
@@ -78,6 +88,28 @@ export function AppShell() {
     });
     if (confirmed) await logout();
   };
+
+  const startTour = () => setTourOpen(true);
+
+  const moreContent = location.pathname === '/app/more/products'
+    ? <ProductCatalogPage />
+    : location.pathname === '/app/more/help'
+      ? <HelpAboutPage onStartTour={startTour} />
+      : location.pathname === '/app/more/account'
+        ? <AccountPage />
+        : location.pathname === '/app/more/household'
+          ? <HouseholdPage />
+          : location.pathname === '/app/more/stores'
+            ? <StoresPage />
+            : location.pathname === '/app/more/import'
+              ? <ImportPricesPage />
+              : location.pathname === '/app/more/insights/prices'
+                ? <PriceHistoryPage />
+                : location.pathname === '/app/more/insights/spending'
+                  ? <SpendingPage />
+                  : location.pathname === '/app/more/insights'
+                    ? <InsightsPage />
+                    : <MorePage onStartTour={startTour} />;
 
   return (
     <div className="shell-app">
@@ -97,7 +129,7 @@ export function AppShell() {
         </div>
         <div className="shell-header-actions">
           <ThemeToggle />
-          <button type="button" className="shell-button shell-button-secondary" onClick={() => void handleLogout()}>
+          <button type="button" className="shell-button shell-button-secondary shell-desktop-signout" onClick={() => void handleLogout()}>
             Sign out
           </button>
         </div>
@@ -105,14 +137,14 @@ export function AppShell() {
 
       <main className="shell-content">
         {currentTab === 'list'
-          ? <ShoppingListPage />
+          ? <><OfflineSyncRecovery /><ShoppingListPage /></>
           : currentTab === 'inventory'
             ? <PantryPage />
             : currentTab === 'meal-plan'
-              ? <PlanPage />
+              ? <PlanRoute />
               : currentTab === 'more'
-                ? <MorePage />
-              : <HomePage />}
+                ? moreContent
+                : <HomePage />}
       </main>
 
       <nav className="shell-bottom-nav" aria-label="Provista sections">
@@ -130,6 +162,9 @@ export function AppShell() {
           </button>
         ))}
       </nav>
+
+      <InstallGuidance />
+      {tourOpen && <AppTour onClose={() => setTourOpen(false)} />}
     </div>
   );
 }

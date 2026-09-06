@@ -122,7 +122,10 @@ export function ThemeToggle() {
     >
       {theme === 'light' ? (
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M20.5 15.5A8.4 8.4 0 0 1 8.5 3.5 8.5 8.5 0 1 0 20.5 15.5Z" />
+          <path
+            className="shell-theme-moon"
+            d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"
+          />
         </svg>
       ) : (
         <svg viewBox="0 0 24 24" aria-hidden="true">

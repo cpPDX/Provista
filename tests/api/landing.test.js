@@ -35,8 +35,8 @@ describe('public landing page', () => {
     expect(robots.text).toContain('User-agent: *');
     expect(robots.text).toContain('Allow: /');
     expect(robots.text).toContain('Disallow: /app');
-    expect(robots.text).toContain('Disallow: /legacy-app');
     expect(robots.text).toContain('Disallow: /api/');
+    expect(robots.text).not.toContain('/legacy-app');
     expect(robots.text).toMatch(/Sitemap: http:\/\/127\.0\.0\.1(?::\d+)?\/sitemap\.xml/);
 
     const sitemap = await request(app).get('/sitemap.xml');
@@ -55,11 +55,29 @@ describe('public landing page', () => {
     expect(res.text).not.toContain('Grocery planning for real households');
   });
 
-  it('keeps explicit feature deep links on the legacy compatibility shell', async () => {
-    const res = await request(app).get('/app?tab=list');
+  it('redirects migration-era authenticated bookmarks into React routes', async () => {
+    const list = await request(app).get('/app?tab=list');
+    expect(list.status).toBe(308);
+    expect(list.headers.location).toBe('/app/list');
 
-    expect(res.status).toBe(200);
-    expect(res.text).toContain('<div id="app">');
-    expect(res.text).toContain('/js/reactHomeBridge.js');
+    const account = await request(app).get('/app?tab=more&section=account');
+    expect(account.status).toBe(308);
+    expect(account.headers.location).toBe('/app/more/account');
+
+    const prices = await request(app).get('/app?tab=prices');
+    expect(prices.status).toBe(308);
+    expect(prices.headers.location).toBe('/app/more/insights/prices');
+
+    const legacy = await request(app).get('/legacy-app');
+    expect(legacy.status).toBe(308);
+    expect(legacy.headers.location).toBe('/app');
+  });
+
+  it('does not serve the retired authenticated shell or its bootstrap', async () => {
+    const legacyIndex = await request(app).get('/index.html');
+    const legacyBootstrap = await request(app).get('/js/app.js');
+
+    expect(legacyIndex.status).toBe(404);
+    expect(legacyBootstrap.status).toBe(404);
   });
 });

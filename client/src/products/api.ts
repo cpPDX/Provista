@@ -7,9 +7,44 @@ import type {
   ProductRef
 } from './types';
 
+export interface CatalogMatchCandidate extends ProductRef {
+  score?: number;
+  matchSource?: string;
+}
+
+export interface CatalogMatchSuggestion {
+  sourceText: string;
+  normalizedText?: string;
+  quantity?: number;
+  unit?: string;
+  matchStatus: 'matched' | 'ambiguous' | 'unmatched';
+  item: ProductRef | null;
+  candidates: CatalogMatchCandidate[];
+}
+
+export interface CatalogMatchResult {
+  parsedCount: number;
+  matchedCount: number;
+  ambiguousCount: number;
+  unmatchedCount: number;
+  suggestions: CatalogMatchSuggestion[];
+}
+
+export async function loadCatalog(): Promise<ProductRef[]> {
+  return apiFetch<ProductRef[]>('/api/items');
+}
+
 export async function searchCatalog(search: string): Promise<ProductRef[]> {
   const query = new URLSearchParams({ search });
   return apiFetch<ProductRef[]>(`/api/items?${query.toString()}`);
+}
+
+export async function matchCatalogText(text: string): Promise<CatalogMatchResult> {
+  return apiFetch<CatalogMatchResult>('/api/items/match', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
 }
 
 export async function createCatalogProduct(input: CatalogProductInput): Promise<ProductRef> {
@@ -18,6 +53,31 @@ export async function createCatalogProduct(input: CatalogProductInput): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input)
   });
+}
+
+export async function updateCatalogProduct(itemId: string, input: Partial<CatalogProductInput>): Promise<ProductRef> {
+  return apiFetch<ProductRef>(`/api/items/${itemId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function mergeCatalogProduct(sourceId: string, targetId: string): Promise<ProductRef> {
+  const result = await apiFetch<{ success: boolean; target: ProductRef }>(`/api/items/${sourceId}/merge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetId })
+  });
+  return result.target;
+}
+
+export async function deleteCatalogProduct(itemId: string): Promise<void> {
+  await apiFetch(`/api/items/${itemId}`, { method: 'DELETE' });
+}
+
+export async function removeCatalogAlias(itemId: string, aliasId: string): Promise<void> {
+  await apiFetch(`/api/items/${itemId}/aliases/${aliasId}`, { method: 'DELETE' });
 }
 
 export async function lookupBarcode(upc: string): Promise<BarcodeLookupResult> {
