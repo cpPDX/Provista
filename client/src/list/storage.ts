@@ -201,7 +201,15 @@ export async function retryFailedShoppingWrite(id: string): Promise<{ synced: nu
   if (!navigator.onLine) throw new Error('Reconnect before retrying this List change.');
   const item = (await queueItems()).find(entry => entry.id === id && entry.collection === SHOPPING_STORE);
   if (!item || item.status !== 'failed') return { synced: 0, failed: 0 };
-  return processShoppingQueue(id);
+
+  const retried = await processShoppingQueue(id);
+  if (!retried.synced) return retried;
+
+  const remaining = await processShoppingQueue();
+  return {
+    synced: retried.synced + remaining.synced,
+    failed: retried.failed + remaining.failed
+  };
 }
 
 export async function discardFailedShoppingWrite(id: string): Promise<ShoppingListItem[]> {
@@ -219,12 +227,20 @@ export async function discardFailedShoppingWrite(id: string): Promise<ShoppingLi
 
   const canonical = await response.json() as ShoppingListItem[];
   const cachedBefore = await readCachedShoppingList();
-  const remaining = allQueued.filter(item => item.id !== id && item.collection === SHOPPING_STORE);
+  const discardIds = new Set([id]);
+  if (target.operation === 'CREATE' && target.localId) {
+    const dependentPath = `/shopping-list/${target.localId}`;
+    allQueued.forEach(item => {
+      if (item.collection === SHOPPING_STORE && item.path === dependentPath) discardIds.add(item.id);
+    });
+  }
+  const remaining = allQueued.filter(item => !discardIds.has(item.id) && item.collection === SHOPPING_STORE);
   const reconciled = applyQueuedOptimism(canonical, cachedBefore, remaining);
 
   const db = await openOfflineDb();
   const transaction = db.transaction([QUEUE_STORE, SHOPPING_STORE, 'metadata'], 'readwrite');
-  transaction.objectStore(QUEUE_STORE).delete(id);
+  const queueStore = transaction.objectStore(QUEUE_STORE);
+  discardIds.forEach(queueId => queueStore.delete(queueId));
   const shoppingStore = transaction.objectStore(SHOPPING_STORE);
   shoppingStore.clear();
   reconciled.forEach(item => shoppingStore.put(item));
