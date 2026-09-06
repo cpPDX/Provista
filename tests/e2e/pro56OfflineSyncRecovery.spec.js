@@ -110,6 +110,7 @@ test.describe('PRO-56 failed List sync recovery', () => {
     await recovery.getByRole('button', { name: 'Retry' }).click();
     await expect(page.locator('.shell-toast-region')).toContainText('still could not sync');
     await expect(recovery).toContainText('1 List change need attention');
+    await expect(recovery.getByRole('button', { name: 'Retry' })).toBeVisible();
     await expect.poll(async () => (await readQueue(page))[0]?.status).toBe('failed');
 
     await page.unroute(`**/api/shopping-list/${listItem._id}`);
@@ -167,7 +168,7 @@ test.describe('PRO-56 failed List sync recovery', () => {
     await expect.poll(async () => (await readQueue(page)).length).toBe(0);
   });
 
-  test('remaps follow-up writes from an offline-created local id to the real server id', async ({ page, context }) => {
+  test('remaps follow-up writes from an offline-created local id to the real server id', async ({ page }) => {
     const item = await createCatalogItem(page, `PRO-56 Local Remap ${Date.now()}`);
     await page.goto('/app/list');
 
@@ -215,9 +216,9 @@ test.describe('PRO-56 failed List sync recovery', () => {
       ]
     });
 
-    await context.setOffline(true);
+    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
     await expect(page.locator('.react-list-offline')).toBeVisible();
-    await context.setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
     await expect(page.locator('.react-list-offline')).toHaveCount(0);
 
     await expect.poll(async () => {
