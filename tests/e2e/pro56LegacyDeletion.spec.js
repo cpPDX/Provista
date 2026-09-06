@@ -19,12 +19,12 @@ test.describe('PRO-56 final legacy shell deletion', () => {
 
     await page.goto('/app?tab=list');
     await expect(page).toHaveURL(/\/app\/list$/);
-    await expect(page.locator('#shopping-list-react-title')).toBeVisible();
+    await expect(page.locator('#react-list-title')).toHaveText('Shopping list');
     await expect(page.locator('#tab-list')).toHaveCount(0);
 
     await page.goto('/app?tab=more&section=items');
     await expect(page).toHaveURL(/\/app\/more\/products$/);
-    await expect(page.locator('#product-catalog-title')).toBeVisible();
+    await expect(page.locator('#catalog-title')).toHaveText('Manage products');
     await expect(page.locator('#section-items')).toHaveCount(0);
 
     await page.goto('/app?tab=more&action=csv-import');
