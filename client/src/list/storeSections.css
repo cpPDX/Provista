@@ -105,6 +105,8 @@
   min-width: 0;
 }
 
+.react-store-section-modal .react-list-modal-heading h2,
+.react-store-section-modal .react-list-modal-heading p,
 .react-store-section-modal .react-list-modal-help,
 .react-store-placement-scope label span,
 .react-store-placement-notice span,
