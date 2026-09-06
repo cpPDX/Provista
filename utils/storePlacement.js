@@ -127,7 +127,7 @@ function inferFrozenSubSection(name) {
   if (has(name, /\b(appetizer|snack|pizza roll|mozzarella stick|taquito|egg roll)\b/)) return 'Appetizers & Snacks';
   if (has(name, /\b(chicken|beef|pork|shrimp|salmon|fish|meat|seafood)\b/)) return 'Meat & Seafood';
   if (has(name, /\b(strawberry|blueberry|berry|berries|mango|pineapple|peach|fruit)\b/)) return 'Fruit';
-  if (has(name, /\b(pea|corn|broccoli|spinach|bean|carrot|vegetable|cauliflower|edamame)\b/)) return 'Vegetables';
+  if (has(name, /\b(peas?|corn|broccoli|spinach|beans?|carrots?|vegetables?|cauliflower|edamame)\b/)) return 'Vegetables';
   return 'Meals & Entrées';
 }
 
