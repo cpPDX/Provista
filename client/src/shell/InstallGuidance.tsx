@@ -31,18 +31,19 @@ function shouldShowInstallGuidance(visits: number) {
 }
 
 export function InstallGuidance() {
-  const initializedRef = useRef(false);
+  const visitsRef = useRef<number | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const laterButtonRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
-
-    const previousVisits = Number.parseInt(localStorage.getItem(VISIT_KEY) || '0', 10) || 0;
-    const visits = previousVisits + 1;
-    localStorage.setItem(VISIT_KEY, String(visits));
+    let visits = visitsRef.current;
+    if (visits === null) {
+      const previousVisits = Number.parseInt(localStorage.getItem(VISIT_KEY) || '0', 10) || 0;
+      visits = previousVisits + 1;
+      visitsRef.current = visits;
+      localStorage.setItem(VISIT_KEY, String(visits));
+    }
 
     if (!shouldShowInstallGuidance(visits)) return;
     const timer = window.setTimeout(() => setOpen(true), 1500);
