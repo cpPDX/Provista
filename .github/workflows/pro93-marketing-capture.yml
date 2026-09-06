@@ -1,0 +1,88 @@
+name: PRO-93 Marketing Screenshot Capture
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cphelan/pro-93-marketing-refresh
+    paths:
+      - .github/workflows/pro93-marketing-capture.yml
+      - playwright.marketing.config.js
+      - tests/marketing/**
+      - package.json
+      - package-lock.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pro93-marketing-capture
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: github.ref == 'refs/heads/cphelan/pro-93-marketing-refresh'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: America/Los_Angeles
+      MARKETING_CAPTURE_BASE_URL: https://provista-staging.up.railway.app
+      MARKETING_CAPTURE_RUN_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
+      MARKETING_CAPTURE_OUTPUT_DIR: tmp/marketing-capture/gha-${{ github.run_id }}-${{ github.run_attempt }}
+      MARKETING_CAPTURE_SOURCE_SHA: ${{ github.sha }}
+
+    steps:
+      - name: Check out capture branch
+        uses: actions/checkout@v4
+        with:
+          ref: cphelan/pro-93-marketing-refresh
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.0'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Capture real staging screens
+        run: npm run marketing:capture
+
+      - name: Publish verified capture batch into the branch
+        run: |
+          set -euo pipefail
+          capture_dir="$MARKETING_CAPTURE_OUTPUT_DIR"
+          for file in home.png plan.png list.png pantry.png capture-manifest.json; do
+            test -s "$capture_dir/$file"
+          done
+
+          mkdir -p public/screenshots/marketing
+          cp "$capture_dir/home.png" public/screenshots/marketing/home.png
+          cp "$capture_dir/plan.png" public/screenshots/marketing/plan.png
+          cp "$capture_dir/list.png" public/screenshots/marketing/list.png
+          cp "$capture_dir/pantry.png" public/screenshots/marketing/pantry.png
+          cp "$capture_dir/capture-manifest.json" public/screenshots/marketing/capture-manifest.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/screenshots/marketing
+          if git diff --cached --quiet; then
+            echo "Capture matches the current committed assets."
+            exit 0
+          fi
+          git commit -m "PRO-93 capture current staging marketing screens"
+          git push origin HEAD:cphelan/pro-93-marketing-refresh
+
+      - name: Upload capture artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pro93-marketing-capture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: tmp/marketing-capture/
+          if-no-files-found: warn
+          retention-days: 7
