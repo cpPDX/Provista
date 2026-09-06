@@ -1,15 +1,14 @@
 const mongoose = require('mongoose');
+const {
+  DEFAULT_DEPARTMENTS,
+  PLACEMENT_PROVENANCE,
+  applyStorePlacementInference
+} = require('../utils/storePlacement');
 
-const STORE_SECTIONS = [
-  'Produce',
-  'Meat & Seafood',
-  'Dairy & Eggs',
-  'Bakery',
-  'Pantry',
-  'Frozen',
-  'Household',
-  'Other'
-];
+// Compatibility export for older callers. PRO-94 replaces the flat section
+// model with departments + optional sub-sections, but retaining this alias
+// avoids breaking code that only needs the familiar department suggestions.
+const STORE_SECTIONS = DEFAULT_DEPARTMENTS;
 
 function normalizeUnit(value) {
   const unit = String(value || '').trim();
@@ -28,6 +27,16 @@ const itemAliasSchema = new mongoose.Schema({
   confirmedAt: { type: Date, default: Date.now }
 }, { _id: true });
 
+const storePlacementOverrideSchema = new mongoose.Schema({
+  // Stable household Store identity. Never key placement by display name.
+  storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store', required: true },
+  department: { type: String, trim: true, maxlength: 80, default: null },
+  subSection: { type: String, trim: true, maxlength: 80, default: null },
+  departmentProvenance: { type: String, enum: PLACEMENT_PROVENANCE, default: null },
+  subSectionProvenance: { type: String, enum: PLACEMENT_PROVENANCE, default: null },
+  updatedAt: { type: Date, default: Date.now }
+}, { _id: false });
+
 const itemSchema = new mongoose.Schema({
   householdId: { type: mongoose.Schema.Types.ObjectId, ref: 'Household', required: true },
   name: { type: String, required: true, trim: true },
@@ -39,10 +48,18 @@ const itemSchema = new mongoose.Schema({
   upc: { type: String, trim: true, default: null },
   upcSource: { type: String, enum: ['scan', 'backfill', 'manual'], default: null },
   upcPendingLookup: { type: Boolean, default: false },
-  // A household-confirmed shopping department. The familiar STORE_SECTIONS
-  // remain suggestions, not a closed taxonomy: households can use a concise
-  // custom label that matches the way their stores are organized.
+
+  // Legacy flat shopping placement. Keep this field readable so existing data
+  // can be migrated conservatively. Unknown legacy values are copied into the
+  // department model as legacy_preserved rather than reclassified.
   storeSection: { type: String, trim: true, maxlength: 80, default: null },
+  storeDepartment: { type: String, trim: true, maxlength: 80, default: null },
+  storeSubSection: { type: String, trim: true, maxlength: 80, default: null },
+  storeDepartmentProvenance: { type: String, enum: PLACEMENT_PROVENANCE, default: null },
+  storeSubSectionProvenance: { type: String, enum: PLACEMENT_PROVENANCE, default: null },
+  storePlacementInferenceVersion: { type: Number, default: null },
+  storePlacementOverrides: { type: [storePlacementOverrideSchema], default: [] },
+
   // Provider-specific product identifiers. UPC remains the preferred shared
   // identifier, but providers can cache their own IDs here when needed.
   externalIds: { type: Map, of: String, default: {} },
@@ -57,9 +74,19 @@ const itemSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+itemSchema.pre('validate', function applyPlacement(next) {
+  try {
+    applyStorePlacementInference(this);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 itemSchema.index({ householdId: 1, name: 1 });
 itemSchema.index({ householdId: 1, upc: 1 }, { sparse: true });
 itemSchema.index({ householdId: 1, 'aliases.normalized': 1 });
+itemSchema.index({ householdId: 1, 'storePlacementOverrides.storeId': 1 });
 
 module.exports = mongoose.model('Item', itemSchema);
 module.exports.STORE_SECTIONS = STORE_SECTIONS;
