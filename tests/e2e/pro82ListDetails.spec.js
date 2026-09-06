@@ -33,7 +33,8 @@ test.describe('PRO-82 compact List item details', () => {
     await expect(card.getByRole('button', { name: `Edit quantity for ${product.name}, currently 5` })).toBeVisible();
     await expect(card.getByRole('button', { name: `Mark as purchased ${product.name}` })).toBeVisible();
     await expect(card).not.toContainText('Store:');
-    await expect(card).not.toContainText('Section:');
+    await expect(card).not.toContainText('Department:');
+    await expect(card).not.toContainText('Sub-section:');
     await expect(card).not.toContainText('Pantry:');
 
     await card.getByRole('button', { name: `Open item details for ${product.name}` }).click();
@@ -41,7 +42,8 @@ test.describe('PRO-82 compact List item details', () => {
     await expect(details).toBeVisible();
     await expect(details).toContainText('Buy 5');
     await expect(details).toContainText('Store preference: Any store');
-    await expect(details).toContainText('Section: Pantry');
+    await expect(details).toContainText('Department: Pantry / Dry Grocery');
+    await expect(details).toContainText('Sub-section: Canned & Jarred');
     await expect(details).toContainText('Not in Pantry');
 
     const rhythm = await details.evaluate(element => {
