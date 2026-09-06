@@ -12,6 +12,9 @@ function isStandalone() {
 }
 
 function isIOSSafari() {
+  const navigatorWithHints = navigator as Navigator & { userAgentData?: unknown };
+  if (navigatorWithHints.userAgentData) return false;
+
   const userAgent = navigator.userAgent;
   const iosDevice = /iPad|iPhone|iPod/.test(userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
