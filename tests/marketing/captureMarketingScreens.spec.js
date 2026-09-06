@@ -4,6 +4,7 @@ const fs = require('fs/promises');
 const path = require('path');
 
 const TIME_ZONE = 'America/Los_Angeles';
+process.env.TZ = TIME_ZONE;
 const RUN_ID = String(process.env.MARKETING_CAPTURE_RUN_ID || `local-${Date.now()}`)
   .replace(/[^a-zA-Z0-9._-]+/g, '-')
   .slice(0, 80);
@@ -208,7 +209,7 @@ async function capture(page, filename) {
   await stabilize(page);
   await page.evaluate(() => window.scrollTo(0, 0));
   const target = path.join(OUTPUT_DIR, filename);
-  await page.screenshot({ path: target, fullPage: false, animations: 'disabled' });
+  await page.screenshot({ path: target, fullPage: true, animations: 'disabled' });
 }
 
 async function loginDisposable(page) {
@@ -339,7 +340,7 @@ test.describe('PRO-93 real marketing screenshots', () => {
       capturedAt: new Date().toISOString(),
       target: baseURL,
       sourceSha: process.env.MARKETING_CAPTURE_SOURCE_SHA || null,
-      viewport: { width: 390, height: 844, device: 'iPhone 13 / Chromium' },
+      viewport: { width: 390, height: 844, device: 'iPhone 13 / Chromium', capture: 'full-page mobile layout' },
       householdTimeZone: TIME_ZONE,
       screenshots: required,
       cleanup: cleanupResult
