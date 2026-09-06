@@ -1,0 +1,23 @@
+{
+  "runId": "gha-34021602167-1",
+  "capturedAt": "2026-09-06T08:22:17.176Z",
+  "target": "https://provista-staging.up.railway.app",
+  "sourceSha": "ac57951743bbdcf9c29888b3a793efbdb8bc863a",
+  "viewport": {
+    "width": 390,
+    "height": 844,
+    "device": "iPhone 13 / Chromium"
+  },
+  "householdTimeZone": "America/Los_Angeles",
+  "screenshots": [
+    "home.png",
+    "plan.png",
+    "list.png",
+    "pantry.png"
+  ],
+  "cleanup": {
+    "householdDeleted": true,
+    "accountDeleted": true,
+    "accountMissing": false
+  }
+}
