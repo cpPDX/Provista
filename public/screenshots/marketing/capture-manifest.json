@@ -1,21 +1,52 @@
 {
-  "runId": "gha-34021787033-1",
-  "capturedAt": "2026-09-06T08:26:10.677Z",
+  "runId": "gha-34047656966-1",
+  "capturedAt": "2026-09-06T17:09:40.013Z",
   "target": "https://provista-staging.up.railway.app",
-  "sourceSha": "950c20d2e80c21da637ffc7449c725f3eae6df88",
+  "captureSourceSha": "c894fce015b1210b14813fac8d23b4b130812f60",
+  "deployedAppSha": null,
+  "deploymentId": "b292c2fd-8e18-4da4-8f05-6ee30e0172ff",
+  "deployedVersionEvidence": "Railway deployment identity recorded; exact deployed app SHA not asserted",
   "viewport": {
     "width": 390,
-    "height": 844,
+    "height": 664,
     "device": "iPhone 13 / Chromium",
-    "capture": "full-page mobile layout"
+    "publicationCapture": "intentional viewport crop above fixed bottom navigation"
   },
   "householdTimeZone": "America/Los_Angeles",
-  "screenshots": [
+  "publicationScreenshots": [
     "home.png",
     "plan.png",
     "list.png",
     "pantry.png"
   ],
+  "referenceScreenshots": [
+    "reference/home-full.png",
+    "reference/plan-full.png",
+    "reference/list-full.png",
+    "reference/pantry-full.png"
+  ],
+  "crops": {
+    "home": {
+      "width": 390,
+      "height": 584,
+      "scrollY": 200
+    },
+    "plan": {
+      "width": 390,
+      "height": 584,
+      "scrollY": 738
+    },
+    "list": {
+      "width": 390,
+      "height": 584,
+      "scrollY": 632
+    },
+    "pantry": {
+      "width": 390,
+      "height": 584,
+      "scrollY": 345
+    }
+  },
   "cleanup": {
     "householdDeleted": true,
     "accountDeleted": true,
