@@ -54,6 +54,11 @@ test.describe('PRO-56 final legacy shell deletion', () => {
       expect(response.status(), path).toBe(404);
     }
 
+    const manifestResponse = await page.request.get('/manifest.json');
+    expect(manifestResponse.ok()).toBeTruthy();
+    const manifest = await manifestResponse.json();
+    expect(manifest.start_url).toBe('/app');
+
     const worker = await page.request.get('/sw.js');
     expect(worker.ok()).toBeTruthy();
     const workerSource = await worker.text();
