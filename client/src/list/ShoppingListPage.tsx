@@ -181,6 +181,16 @@ export function ShoppingListPage() {
   const resolvedDetailItem = detailItem
     ? items.find(item => item._id === detailItem._id) || detailItem
     : null;
+  const detailPlacementStoreId = resolvedDetailItem
+    ? (activeStoreId || plannedStoreId(resolvedDetailItem) || null)
+    : null;
+  const detailPlacementStoreName = detailPlacementStoreId
+    ? (storeName(items, detailPlacementStoreId) || (
+        resolvedDetailItem && plannedStoreId(resolvedDetailItem) === detailPlacementStoreId
+          ? plannedStoreName(resolvedDetailItem)
+          : ''
+      ))
+    : '';
   const storeSections = useStoreSections(items);
   const searchParams = new URLSearchParams(location.search);
   const fromPlan = searchParams.get('from') === 'plan';
@@ -660,13 +670,17 @@ export function ShoppingListPage() {
                 )}
                 <StorePlacementControl
                   item={resolvedDetailItem}
-                  currentPlacement={storeSections.placementFor(resolvedDetailItem)}
+                  currentPlacement={storeSections.placementFor(
+                    detailPlacementStoreId
+                      ? { ...resolvedDetailItem, checked: false, shoppingStoreId: null, storeId: detailPlacementStoreId }
+                      : resolvedDetailItem
+                  )}
                   householdPlacement={storeSections.householdPlacementFor(resolvedDetailItem)}
                   inferredPlacement={storeSections.inferredPlacementFor(resolvedDetailItem)}
                   departmentSuggestions={storeSections.suggestions}
                   subSectionSuggestionsFor={storeSections.suggestionsForDepartment}
-                  currentStoreId={plannedStoreId(resolvedDetailItem) || null}
-                  currentStoreName={plannedStoreName(resolvedDetailItem) === 'Any store' ? '' : plannedStoreName(resolvedDetailItem)}
+                  currentStoreId={detailPlacementStoreId}
+                  currentStoreName={detailPlacementStoreName}
                 />
               </section>
               <section className="react-list-detail-section" aria-labelledby="react-list-price-detail-title">
