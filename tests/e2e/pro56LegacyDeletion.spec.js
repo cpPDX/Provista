@@ -63,10 +63,15 @@ test.describe('PRO-56 final legacy shell deletion', () => {
     expect(worker.ok()).toBeTruthy();
     const workerSource = await worker.text();
     expect(workerSource).toContain("provista-shell-v15");
-    expect(workerSource).not.toContain("'/index.html'");
-    expect(workerSource).not.toContain("'/legacy-app'");
-    expect(workerSource).not.toContain("'/js/app.js'");
-    expect(workerSource).not.toContain("'/js/install-prompt.js'");
-    expect(workerSource).not.toContain("'/js/vendor/idb.min.js'");
+
+    const shellAssetsMatch = workerSource.match(/const SHELL_ASSETS = \[([\s\S]*?)\n\];/);
+    expect(shellAssetsMatch).not.toBeNull();
+    const shellAssetsSource = shellAssetsMatch[1];
+
+    for (const path of [...retired, '/legacy-app']) {
+      expect(shellAssetsSource, `${path} should not be precached`).not.toContain(`'${path}'`);
+    }
+
+    expect(workerSource).toContain("url.pathname === '/legacy-app'");
   });
 });
