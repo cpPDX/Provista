@@ -43,7 +43,7 @@ const publicDirectory = path.join(__dirname, 'public');
 const reactAppIndex = path.join(publicDirectory, 'react-preview', 'index.html');
 const landingTemplate = fs.readFileSync(path.join(publicDirectory, 'landing.html'), 'utf8');
 const SEO_TITLE = 'Provista — Shared Grocery List, Meal Planner & Pantry Tracker';
-const SEO_DESCRIPTION = 'A shared grocery list and meal planning app for households. Organize shopping by store section, track pantry needs, and keep grocery spending together.';
+const SEO_DESCRIPTION = 'A shared grocery list and meal planning app for households. Connect your meal plan, shopping, and Pantry so you know what to buy and what’s at home.';
 
 function resolvePublicOrigin(req) {
   let publicUrl = String(process.env.APP_BASE_URL || '').trim();

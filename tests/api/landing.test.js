@@ -7,13 +7,13 @@ describe('public landing page', () => {
     const res = await request(app).get('/');
 
     expect(res.status).toBe(200);
-    expect(res.text).toContain('Plan meals.');
+    expect(res.text).toContain('Know what’s for dinner.');
     expect(res.text).toContain('Grocery planning for real households');
     expect(res.text).toContain('data-open-auth="signup"');
     expect(res.text).toContain('/screenshots/meal-plan.jpg');
     expect(res.text).toContain('/screenshots/shopping-list.jpg');
     expect(res.text).toContain('/screenshots/pantry.jpg');
-    expect(res.text).toContain('Bring meals, shopping, pantry, and spending');
+    expect(res.text).toContain('Start with what you need right now.');
   });
 
   it('uses non-branded grocery-planning metadata and structured data', async () => {

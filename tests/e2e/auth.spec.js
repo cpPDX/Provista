@@ -4,7 +4,7 @@ test.describe('Authentication', () => {
   test('introduces Provista before opening account access', async ({ page }) => {
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: /Plan meals.*Shop together.*Stay ahead/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Know what’s for dinner.*Know what you need.*Keep the household moving/ })).toBeVisible();
     await expect(page.getByText('Grocery planning for real households')).toBeVisible();
 
     await page.getByRole('button', { name: 'Sign in' }).first().click();
