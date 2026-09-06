@@ -1,0 +1,77 @@
+const { test, expect } = require('@playwright/test');
+
+async function createHouseholdSession(page, suffix) {
+  const response = await page.request.post('/api/auth/register', {
+    data: {
+      name: `PRO-56 deletion ${suffix}`,
+      email: `pro56-deletion-${suffix}-${Date.now()}@test.com`,
+      password: 'password123',
+      action: 'create',
+      householdName: `PRO-56 deletion ${suffix}`
+    }
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
+test.describe('PRO-56 final legacy shell deletion', () => {
+  test('redirects migration-era bookmarks into React without rendering legacy UI', async ({ page }) => {
+    await createHouseholdSession(page, 'redirects');
+
+    await page.goto('/app?tab=list');
+    await expect(page).toHaveURL(/\/app\/list$/);
+    await expect(page.locator('#react-list-title')).toHaveText('Shopping list');
+    await expect(page.locator('#tab-list')).toHaveCount(0);
+
+    await page.goto('/app?tab=more&section=items');
+    await expect(page).toHaveURL(/\/app\/more\/products$/);
+    await expect(page.locator('#catalog-title')).toHaveText('Manage products');
+    await expect(page.locator('#section-items')).toHaveCount(0);
+
+    await page.goto('/app?tab=more&action=csv-import');
+    await expect(page).toHaveURL(/\/app\/more\/import$/);
+    await expect(page.locator('#import-prices-title')).toBeVisible();
+
+    await page.goto('/legacy-app');
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.locator('#home-react-title')).toBeVisible();
+  });
+
+  test('does not expose retired authenticated assets or cache them in the service worker', async ({ page }) => {
+    const retired = [
+      '/index.html',
+      '/js/app.js',
+      '/js/auth.js',
+      '/js/offline.js',
+      '/js/install-prompt.js',
+      '/js/scanner.js',
+      '/js/vendor/idb.min.js',
+      '/css/parentExperience.css',
+      '/css/rapidShoppingCapture.css'
+    ];
+
+    for (const path of retired) {
+      const response = await page.request.get(path);
+      expect(response.status(), path).toBe(404);
+    }
+
+    const manifestResponse = await page.request.get('/manifest.json');
+    expect(manifestResponse.ok()).toBeTruthy();
+    const manifest = await manifestResponse.json();
+    expect(manifest.start_url).toBe('/app');
+
+    const worker = await page.request.get('/sw.js');
+    expect(worker.ok()).toBeTruthy();
+    const workerSource = await worker.text();
+    expect(workerSource).toContain("provista-shell-v15");
+
+    const shellAssetsMatch = workerSource.match(/const SHELL_ASSETS = \[([\s\S]*?)\n\];/);
+    expect(shellAssetsMatch).not.toBeNull();
+    const shellAssetsSource = shellAssetsMatch[1];
+
+    for (const path of [...retired, '/legacy-app']) {
+      expect(shellAssetsSource, `${path} should not be precached`).not.toContain(`'${path}'`);
+    }
+
+    expect(workerSource).toContain("url.pathname === '/legacy-app'");
+  });
+});

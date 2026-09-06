@@ -1,43 +1,17 @@
 // Provista Service Worker
 // Network-first for navigations, JS/CSS, and API data; cache-first for static assets.
 
-const SHELL_CACHE = 'provista-shell-v14';
+const SHELL_CACHE = 'provista-shell-v15';
 const API_CACHE = 'provista-api-v5';
 
 const SHELL_ASSETS = [
   '/',
   '/landing.html',
-  '/index.html',
-  '/legacy-app',
   '/login.html',
   '/css/landing.css',
   '/css/style.css',
   '/css/auth.css',
-  '/css/parentExperience.css',
-  '/css/rapidShoppingCapture.css',
-  '/js/auth.js',
   '/js/landing.js',
-  '/js/api.js',
-  '/js/ui.js',
-  '/js/autocomplete.js',
-  '/js/prices.js',
-  '/js/shoppingList.js',
-  '/js/rapidShoppingCapture.js',
-  '/js/csvImport.js',
-  '/js/spend.js',
-  '/js/more.js',
-  '/js/moreInit.js',
-  '/js/pantry.js',
-  '/js/mealPlan.js',
-  '/js/home.js',
-  '/js/onboarding.js',
-  '/js/reactHomeBridge.js',
-  '/js/scan.js',
-  '/js/scanner.js',
-  '/js/app.js',
-  '/js/vendor/idb.min.js',
-  '/js/offline.js',
-  '/js/install-prompt.js',
   '/brand/provista-mark.svg',
   '/screenshots/meal-plan.jpg',
   '/screenshots/shopping-list.jpg',
@@ -63,11 +37,11 @@ async function cacheReactAppShell(cache) {
     const uniqueAssets = [...new Set(assetPaths)];
     await Promise.all(uniqueAssets.map(asset => cache.add(asset).catch(() => undefined)));
   } catch {
-    // The legacy shell remains available if the React build cannot be cached.
+    // Installation can finish without an authenticated React shell cache.
   }
 }
 
-// Install: pre-cache both the legacy compatibility shell and the current React Home shell.
+// Install: pre-cache the public/auth surfaces plus the current React app shell.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(SHELL_CACHE).then(async (cache) => {
@@ -77,7 +51,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activate: clean up old caches
+// Activate: clean up old caches, including legacy authenticated shell assets.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -90,30 +64,24 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch handler
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Only handle same-origin requests
   if (url.origin !== self.location.origin) return;
 
-  // Navigations should pick up the latest deployed shell when online, while
-  // still falling back to the appropriate cached React or legacy app offline.
   if (request.mode === 'navigate') {
     event.respondWith(networkFirstWithCacheFallback(request));
     return;
   }
 
-  // API requests: network-first with cache fallback
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(networkFirstWithCacheFallback(request));
     return;
   }
 
-  // JS and CSS: network-first so deploys take effect immediately; cache fallback when offline.
-  // Vite emits hashed React assets under /react-preview/assets/; those are also
-  // shell resources even though their filenames are generated at build time.
+  // JS and CSS stay network-first so deploys take effect immediately. Vite's
+  // hashed assets are cached dynamically from the current React shell.
   if (
     url.pathname.startsWith('/js/') ||
     url.pathname.startsWith('/css/') ||
@@ -123,7 +91,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets (images, icons, fonts): cache-first
   event.respondWith(cacheFirstWithNetworkFallback(request));
 });
 
@@ -142,12 +109,10 @@ function cacheNameForRequest(request) {
 
 function navigationFallbackPath(request) {
   const url = new URL(request.url);
-  const legacyFeature = url.pathname === '/legacy-app' ||
-    (url.pathname === '/app' && (url.searchParams.has('tab') || url.searchParams.get('legacy') === '1'));
-  return legacyFeature ? '/legacy-app' : '/app';
+  if (url.pathname === '/legacy-app' || url.pathname.startsWith('/app')) return '/app';
+  return '/';
 }
 
-// Cache-first: serve from cache immediately, fall back to network
 async function cacheFirstWithNetworkFallback(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
@@ -164,7 +129,6 @@ async function cacheFirstWithNetworkFallback(request) {
   }
 }
 
-// Network-first: try network, fall back to cache, then structured error
 async function networkFirstWithCacheFallback(request) {
   const cacheName = cacheNameForRequest(request);
   try {
