@@ -23,7 +23,7 @@ import { ListItemContextControls } from './ListItemContextControls';
 import { ListItemEditDialog } from './ListItemEditDialog';
 import { RapidCapture } from './RapidCapture';
 import { StorePreferenceDialog } from './StorePreferenceDialog';
-import { StoreSectionControl, useStoreSections } from './storeSections';
+import { StorePlacementControl, useStoreSections } from './storeSections';
 import { processShoppingQueue } from './storage';
 import {
   currentShoppingStoreId,
@@ -445,6 +445,46 @@ export function ShoppingListPage() {
     void requestNavigation(() => navigate('/app/pantry'));
   };
 
+  const renderListItem = (item: ShoppingListItem) => {
+    const price = householdPrice(item);
+    const itemId = entityId(item.itemId);
+    const planContext = itemId ? planContextByItem.get(itemId) : null;
+    return (
+      <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
+        <button
+          type="button"
+          className="list-item-check-wrap react-list-check"
+          aria-label={`${item.checked ? 'Uncheck' : 'Mark as purchased'} ${productName(item)}`}
+          aria-pressed={item.checked}
+          onClick={() => void handleCheck(item, !item.checked)}
+        >
+          <span className={`react-list-checkbox ${item.checked ? 'checked' : ''}`} aria-hidden="true">{item.checked ? '✓' : ''}</span>
+        </button>
+        <button
+          type="button"
+          className="react-list-item-body react-list-item-open"
+          aria-label={`Open item details for ${productName(item)}`}
+          onClick={() => setDetailItem(item)}
+        >
+          <strong>{productName(item)}</strong>
+          <span>Buy {intendedPurchaseQuantity(item)}</span>
+          {planContext && (
+            <small>Needed {formatNeededBy(planContext.neededBy)} · {planContext.mealName}{planContext.mealCount > 1 ? ` · ${planContext.mealCount} meals` : ''}</small>
+          )}
+          {!planContext && price !== 'No recent household price' && <small>{price}</small>}
+        </button>
+        <button
+          type="button"
+          className="react-list-quantity-edit"
+          aria-label={`Edit quantity for ${productName(item)}, currently ${intendedPurchaseQuantity(item)}`}
+          onClick={() => setQuantityItem(item)}
+        >
+          {intendedPurchaseQuantity(item)}
+        </button>
+      </article>
+    );
+  };
+
   return (
     <section className="react-list-page" aria-labelledby="react-list-title">
       <header className="react-list-heading">
@@ -545,51 +585,30 @@ export function ShoppingListPage() {
                 <h2>{groupName === 'Any store' ? 'No store preference' : `Suggested: ${groupName}`}</h2>
                 <span>{groupItems.length} item{groupItems.length === 1 ? '' : 's'}</span>
               </div>
-              {storeSections.group(groupItems).map(([sectionName, sectionItems]) => (
-                <div className="react-list-section-group" data-section={sectionName} key={sectionName}>
+              {storeSections.group(groupItems, groupName).map(departmentGroup => (
+                <div className="react-list-section-group" data-section={departmentGroup.department} key={departmentGroup.department}>
                   <div className="react-list-section-heading">
-                    <h3>{sectionName}</h3>
-                    <span>{sectionItems.length}</span>
+                    <h3>{departmentGroup.department}</h3>
+                    <span>{departmentGroup.items.length}</span>
                   </div>
-                  {sectionItems.map(item => {
-                    const price = householdPrice(item);
-                    const itemId = entityId(item.itemId);
-                    const planContext = itemId ? planContextByItem.get(itemId) : null;
-                    return (
-                      <article className={`list-item react-list-item ${item.checked ? 'checked' : ''}`} data-id={item._id} key={item._id}>
-                        <button
-                          type="button"
-                          className="list-item-check-wrap react-list-check"
-                          aria-label={`${item.checked ? 'Uncheck' : 'Mark as purchased'} ${productName(item)}`}
-                          aria-pressed={item.checked}
-                          onClick={() => void handleCheck(item, !item.checked)}
-                        >
-                          <span className={`react-list-checkbox ${item.checked ? 'checked' : ''}`} aria-hidden="true">{item.checked ? '✓' : ''}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="react-list-item-body react-list-item-open"
-                          aria-label={`Open item details for ${productName(item)}`}
-                          onClick={() => setDetailItem(item)}
-                        >
-                          <strong>{productName(item)}</strong>
-                          <span>Buy {intendedPurchaseQuantity(item)}</span>
-                          {planContext && (
-                            <small>Needed {formatNeededBy(planContext.neededBy)} · {planContext.mealName}{planContext.mealCount > 1 ? ` · ${planContext.mealCount} meals` : ''}</small>
-                          )}
-                          {!planContext && price !== 'No recent household price' && <small>{price}</small>}
-                        </button>
-                        <button
-                          type="button"
-                          className="react-list-quantity-edit"
-                          aria-label={`Edit quantity for ${productName(item)}, currently ${intendedPurchaseQuantity(item)}`}
-                          onClick={() => setQuantityItem(item)}
-                        >
-                          {intendedPurchaseQuantity(item)}
-                        </button>
-                      </article>
-                    );
-                  })}
+                  {departmentGroup.subdivided ? (
+                    <>
+                      {departmentGroup.subSections.map(subSectionGroup => (
+                        <div className="react-list-subsection" data-sub-section={subSectionGroup.name} key={subSectionGroup.name}>
+                          <div className="react-list-subsection-heading">
+                            <h4>{subSectionGroup.name}</h4>
+                            <span>{subSectionGroup.items.length}</span>
+                          </div>
+                          {subSectionGroup.items.map(renderListItem)}
+                        </div>
+                      ))}
+                      {departmentGroup.remainder.length > 0 && (
+                        <div className="react-list-subsection-remainder" aria-label={`Remaining ${departmentGroup.department} items`}>
+                          {departmentGroup.remainder.map(renderListItem)}
+                        </div>
+                      )}
+                    </>
+                  ) : departmentGroup.items.map(renderListItem)}
                 </div>
               ))}
             </section>
@@ -627,7 +646,7 @@ export function ShoppingListPage() {
               )}
               <ListItemContextControls item={resolvedDetailItem} online={online} />
               <section className="react-list-detail-section" aria-labelledby="react-list-store-detail-title">
-                <h3 id="react-list-store-detail-title">Store and section</h3>
+                <h3 id="react-list-store-detail-title">Store and department</h3>
                 <button
                   type="button"
                   className="react-list-store-preference"
@@ -639,10 +658,15 @@ export function ShoppingListPage() {
                 {resolvedDetailItem.checked && currentShoppingStoreId(resolvedDetailItem) && (
                   <small>Current trip: {storeName(items, currentShoppingStoreId(resolvedDetailItem)) || 'selected store'}</small>
                 )}
-                <StoreSectionControl
+                <StorePlacementControl
                   item={resolvedDetailItem}
-                  currentSection={storeSections.sectionFor(resolvedDetailItem)}
-                  suggestions={storeSections.suggestions}
+                  currentPlacement={storeSections.placementFor(resolvedDetailItem)}
+                  householdPlacement={storeSections.householdPlacementFor(resolvedDetailItem)}
+                  inferredPlacement={storeSections.inferredPlacementFor(resolvedDetailItem)}
+                  departmentSuggestions={storeSections.suggestions}
+                  subSectionSuggestionsFor={storeSections.suggestionsForDepartment}
+                  currentStoreId={plannedStoreId(resolvedDetailItem) || null}
+                  currentStoreName={plannedStoreName(resolvedDetailItem) === 'Any store' ? '' : plannedStoreName(resolvedDetailItem)}
                 />
               </section>
               <section className="react-list-detail-section" aria-labelledby="react-list-price-detail-title">
