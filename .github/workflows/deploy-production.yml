@@ -1,0 +1,228 @@
+name: Railway Production Release
+
+on:
+  workflow_run:
+    workflows: [App CI]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: '17,47 0-7,20-23 * * *'
+      timezone: America/Los_Angeles
+  workflow_dispatch:
+
+run-name: Railway production release (${{ github.event_name }})
+
+concurrency:
+  group: railway-production-deployment
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+  deployments: write
+
+env:
+  RAILWAY_CLI_VERSION: '5.48.0'
+  RAILWAY_PROJECT_ID: ad0aa81b-a6f1-429f-8b59-454efcef19cd
+  RAILWAY_ENVIRONMENT_ID: 96da4dd2-ed33-4c3e-aee6-9f6977468128
+  RAILWAY_SERVICE_ID: 632e7932-9a99-49d5-ab48-49ab2e8e0605
+  PRODUCTION_HEALTH_URL: https://provista.up.railway.app/api/health/ready
+
+jobs:
+  prepare:
+    name: Resolve current green production head
+    runs-on: ubuntu-latest
+    outputs:
+      action: ${{ steps.prepare.outputs.action }}
+      target_sha: ${{ steps.prepare.outputs.target_sha }}
+      deployment_id: ${{ steps.prepare.outputs.deployment_id }}
+      reason: ${{ steps.prepare.outputs.reason }}
+    steps:
+      - name: Check out deployment policy
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Resolve and record deployment intent
+        id: prepare
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { prepare } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/prepare-production-deployment.cjs`
+            );
+            await prepare({ github, context, core });
+
+  reconcile:
+    name: Reconcile Railway production
+    needs: prepare
+    if: needs.prepare.outputs.action == 'reconcile'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out trusted deployment control
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check out exact production source
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.target_sha }}
+          path: production-source
+          persist-credentials: false
+
+      - name: Revalidate SHA and deployment window
+        id: revalidate
+        uses: actions/github-script@v8
+        env:
+          TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
+          DEPLOYMENT_ID: ${{ needs.prepare.outputs.deployment_id }}
+        with:
+          script: |
+            const { revalidate } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/prepare-production-deployment.cjs`
+            );
+            await revalidate({
+              github,
+              context,
+              core,
+              targetSha: process.env.TARGET_SHA,
+              deploymentId: process.env.DEPLOYMENT_ID
+            });
+
+      - name: Explain a boundary deferral or superseded SHA
+        if: steps.revalidate.outputs.proceed != 'true'
+        env:
+          TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
+          REASON: ${{ steps.revalidate.outputs.reason }}
+        run: |
+          {
+            echo '### Railway production deployment'
+            echo "- SHA: \`${TARGET_SHA}\`"
+            echo '- State: **queued or superseded**'
+            echo "- Detail: ${REASON}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify production deployment credentials
+        if: steps.revalidate.outputs.proceed == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+        run: |
+          if [[ -z "$RAILWAY_TOKEN" ]]; then
+            echo '::error::Missing RAILWAY_PRODUCTION_TOKEN repository secret.'
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        if: steps.revalidate.outputs.proceed == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: '20.19.0'
+
+      - name: Install pinned Railway CLI
+        if: steps.revalidate.outputs.proceed == 'true'
+        run: npm install --global "@railway/cli@${RAILWAY_CLI_VERSION}"
+
+      - name: Mark production deployment in progress
+        if: steps.revalidate.outputs.proceed == 'true'
+        uses: actions/github-script@v8
+        env:
+          DEPLOYMENT_ID: ${{ needs.prepare.outputs.deployment_id }}
+          TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
+        with:
+          script: |
+            const { setManagedDeploymentStatus } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/prepare-production-deployment.cjs`
+            );
+            await setManagedDeploymentStatus({
+              github,
+              context,
+              deploymentId: process.env.DEPLOYMENT_ID,
+              state: 'in_progress',
+              description: `Deploying production ${process.env.TARGET_SHA.slice(0, 7)} to Railway`
+            });
+
+      - name: Deploy exact production commit to Railway
+        if: steps.revalidate.outputs.proceed == 'true'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_PRODUCTION_TOKEN }}
+          TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
+        working-directory: production-source
+        run: |
+          railway up . --ci --path-as-root \
+            --project "$RAILWAY_PROJECT_ID" \
+            --environment "$RAILWAY_ENVIRONMENT_ID" \
+            --service "$RAILWAY_SERVICE_ID" \
+            --message "GitHub production ${TARGET_SHA}"
+
+      - name: Verify production readiness
+        if: steps.revalidate.outputs.proceed == 'true'
+        run: |
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 18 \
+            --retry-all-errors \
+            --retry-delay 10 \
+            --connect-timeout 10 \
+            --max-time 20 \
+            --output "$RUNNER_TEMP/production-health.json" \
+            "$PRODUCTION_HEALTH_URL"
+          node -e "const body = require(process.argv[1]); if (body.status !== 'ready' || body.database !== 'connected') process.exit(1)" \
+            "$RUNNER_TEMP/production-health.json"
+
+      - name: Record successful production deployment
+        if: success() && steps.revalidate.outputs.proceed == 'true'
+        uses: actions/github-script@v8
+        env:
+          DEPLOYMENT_ID: ${{ needs.prepare.outputs.deployment_id }}
+          TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
+          PRODUCTION_HEALTH_URL: ${{ env.PRODUCTION_HEALTH_URL }}
+        with:
+          script: |
+            const { setManagedDeploymentStatus } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/prepare-production-deployment.cjs`
+            );
+            await setManagedDeploymentStatus({
+              github,
+              context,
+              deploymentId: process.env.DEPLOYMENT_ID,
+              state: 'success',
+              description: `Deployed and verified production ${process.env.TARGET_SHA.slice(0, 7)}`,
+              environmentUrl: process.env.PRODUCTION_HEALTH_URL.replace('/api/health/ready', ''),
+              autoInactive: true
+            });
+            core.summary
+              .addHeading('Railway production deployment')
+              .addRaw(`- SHA: \`${process.env.TARGET_SHA}\`\n`)
+              .addRaw('- State: **deployed and verified**\n')
+              .addLink('Production health', process.env.PRODUCTION_HEALTH_URL);
+            await core.summary.write();
+
+      - name: Record failed production deployment
+        if: failure() && steps.revalidate.outputs.proceed == 'true'
+        uses: actions/github-script@v8
+        env:
+          DEPLOYMENT_ID: ${{ needs.prepare.outputs.deployment_id }}
+          TARGET_SHA: ${{ needs.prepare.outputs.target_sha }}
+        with:
+          script: |
+            const { setManagedDeploymentStatus } = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/scripts/prepare-production-deployment.cjs`
+            );
+            await setManagedDeploymentStatus({
+              github,
+              context,
+              deploymentId: process.env.DEPLOYMENT_ID,
+              state: 'failure',
+              description: `Railway production ${process.env.TARGET_SHA.slice(0, 7)} failed; retry remains eligible`
+            });
+            core.summary
+              .addHeading('Railway production deployment')
+              .addRaw(`- SHA: \`${process.env.TARGET_SHA}\`\n`)
+              .addRaw('- State: **failed; eligible for the next allowed-window retry**\n');
+            await core.summary.write();

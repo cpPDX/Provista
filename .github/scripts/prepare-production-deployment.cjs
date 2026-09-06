@@ -1,19 +1,11 @@
 'use strict';
 
-const {
-  formatPacificTime,
-  isDeploymentWindowOpen
-} = require('./staging-deployment-policy.cjs');
+const { formatPacificTime } = require('./staging-deployment-policy.cjs');
 
 const APP_CI_WORKFLOW = 'ci.yml';
-const DEPLOYMENT_ENVIRONMENT = 'railway-staging';
-const STAGING_BRANCH = 'staging';
+const DEPLOYMENT_ENVIRONMENT = 'railway-production';
+const PRODUCTION_BRANCH = 'main';
 const MANAGED_DEPLOYMENT_STATES = new Set(['in_progress', 'pending', 'queued']);
-
-function isExplicitManualReconcile(context) {
-  const runAttempt = Number(process.env.GITHUB_RUN_ATTEMPT || '1');
-  return context.eventName === 'schedule' && Number.isFinite(runAttempt) && runAttempt > 1;
-}
 
 function actionsRunUrl(context) {
   const server = process.env.GITHUB_SERVER_URL || 'https://github.com';
@@ -52,10 +44,10 @@ async function setManagedDeploymentStatus({
   await github.rest.repos.createDeploymentStatus(parameters);
 }
 
-async function currentStagingHead(github, context) {
+async function currentProductionHead(github, context) {
   const response = await github.rest.repos.getBranch({
     ...context.repo,
-    branch: STAGING_BRANCH
+    branch: PRODUCTION_BRANCH
   });
   return response.data.commit.sha;
 }
@@ -64,7 +56,7 @@ async function currentHeadHasGreenPushCi(github, context, targetSha) {
   const response = await github.rest.actions.listWorkflowRuns({
     ...context.repo,
     workflow_id: APP_CI_WORKFLOW,
-    branch: STAGING_BRANCH,
+    branch: PRODUCTION_BRANCH,
     event: 'push',
     status: 'completed',
     per_page: 50
@@ -87,7 +79,6 @@ async function managedDeployments(github, context) {
 async function supersedeOlderDeployments(github, context, deployments, targetSha) {
   for (const deployment of deployments) {
     if (deployment.sha === targetSha) continue;
-
     const status = await latestDeploymentStatus(github, context, deployment.id);
     if (!status || !MANAGED_DEPLOYMENT_STATES.has(status.state)) continue;
 
@@ -96,7 +87,7 @@ async function supersedeOlderDeployments(github, context, deployments, targetSha
       context,
       deploymentId: deployment.id,
       state: 'inactive',
-      description: `Superseded by staging ${targetSha.slice(0, 7)}`
+      description: `Superseded by production ${targetSha.slice(0, 7)}`
     });
   }
 }
@@ -109,9 +100,7 @@ async function reusableDeployment(github, context, deployments, targetSha) {
   const candidatesWithStatuses = [];
   for (const deployment of candidates) {
     const status = await latestDeploymentStatus(github, context, deployment.id);
-    if (status?.state === 'success') {
-      return { deployment, status, complete: true };
-    }
+    if (status?.state === 'success') return { deployment, status, complete: true };
     candidatesWithStatuses.push({ deployment, status });
   }
 
@@ -119,7 +108,6 @@ async function reusableDeployment(github, context, deployments, targetSha) {
   if (latest?.status && MANAGED_DEPLOYMENT_STATES.has(latest.status.state)) {
     return { ...latest, complete: false };
   }
-
   return null;
 }
 
@@ -131,22 +119,21 @@ async function createQueuedDeployment(github, context, targetSha) {
     auto_merge: false,
     required_contexts: [],
     environment: DEPLOYMENT_ENVIRONMENT,
-    description: 'GitHub-managed Railway staging deployment',
-    production_environment: false,
+    description: 'GitHub-managed Railway production deployment',
+    production_environment: true,
     transient_environment: false,
     payload: {
-      managedBy: 'provista-staging-deployment-queue',
+      managedBy: 'provista-production-deployment-queue',
       sourceRunId: process.env.GITHUB_RUN_ID || null
     }
   });
-
   return response.data;
 }
 
 async function summarize(core, { action, targetSha, reason, now }) {
-  core.summary.addHeading('Railway staging deployment');
+  core.summary.addHeading('Railway production deployment');
   core.summary.addRaw(`- State: **${action}**\n`);
-  if (targetSha) core.summary.addRaw(`- Staging SHA: \`${targetSha}\`\n`);
+  if (targetSha) core.summary.addRaw(`- Production SHA: \`${targetSha}\`\n`);
   core.summary.addRaw(`- Pacific time: ${formatPacificTime(now)}\n`);
   core.summary.addRaw(`- Detail: ${reason}\n`);
   await core.summary.write();
@@ -168,29 +155,29 @@ async function prepare({ github, context, core, now = new Date() }) {
     const workflowRun = context.payload.workflow_run;
     if (
       workflowRun.event !== 'push' ||
-      workflowRun.head_branch !== STAGING_BRANCH ||
+      workflowRun.head_branch !== PRODUCTION_BRANCH ||
       workflowRun.conclusion !== 'success'
     ) {
-      reason = 'The triggering run was not a successful staging push CI run.';
+      reason = 'The triggering run was not a successful main push CI run.';
       setPreparationOutputs(core, { action: 'skipped', reason });
       await summarize(core, { action: 'skipped', reason, now });
       return;
     }
     targetSha = workflowRun.head_sha;
   } else {
-    targetSha = await currentStagingHead(github, context);
+    targetSha = await currentProductionHead(github, context);
     const isGreen = await currentHeadHasGreenPushCi(github, context, targetSha);
     if (!isGreen) {
-      reason = 'The current staging head does not have a successful App CI push run.';
+      reason = 'The current main head does not have a successful App CI push run.';
       setPreparationOutputs(core, { action: 'skipped', targetSha, reason });
       await summarize(core, { action: 'skipped', targetSha, reason, now });
       return;
     }
   }
 
-  const branchHead = await currentStagingHead(github, context);
+  const branchHead = await currentProductionHead(github, context);
   if (branchHead !== targetSha) {
-    reason = `Superseded by current staging head ${branchHead.slice(0, 7)}.`;
+    reason = `Superseded by current main head ${branchHead.slice(0, 7)}.`;
     setPreparationOutputs(core, { action: 'superseded', targetSha, reason });
     await summarize(core, { action: 'superseded', targetSha, reason, now });
     return;
@@ -201,7 +188,7 @@ async function prepare({ github, context, core, now = new Date() }) {
 
   let managedDeployment = await reusableDeployment(github, context, deployments, targetSha);
   if (managedDeployment?.complete) {
-    reason = 'GitHub already records this staging SHA as successfully deployed.';
+    reason = 'GitHub already records this production SHA as successfully deployed.';
     setPreparationOutputs(core, {
       action: 'deployed',
       targetSha,
@@ -218,80 +205,28 @@ async function prepare({ github, context, core, now = new Date() }) {
   }
 
   const deploymentId = managedDeployment.deployment.id;
-  const windowOpen = isDeploymentWindowOpen(now);
-  const manualOverride = isExplicitManualReconcile(context);
-  const shouldReconcile = windowOpen || manualOverride;
-
-  if (shouldReconcile) {
-    reason = manualOverride && !windowOpen
-      ? 'An explicit manual rerun is overriding the staging blackout for the current green head.'
-      : eventName === 'workflow_run'
-        ? 'The successful current-head staging CI run is ready for immediate Railway reconciliation.'
-        : 'The current green staging head is ready for Railway reconciliation.';
-    setPreparationOutputs(core, {
-      action: 'reconcile',
-      targetSha,
-      deploymentId,
-      reason
-    });
-    await summarize(core, { action: 'reconcile', targetSha, reason, now });
-    return;
-  }
-
-  reason = 'Deferred during the 8:00 AM–8:00 PM Pacific blackout.';
-  await setManagedDeploymentStatus({
-    github,
-    context,
-    deploymentId,
-    state: 'queued',
-    description: reason
-  });
-  setPreparationOutputs(core, {
-    action: 'queued',
-    targetSha,
-    deploymentId,
-    reason
-  });
-  await summarize(core, { action: 'queued', targetSha, reason, now });
+  reason = 'The current green main head is ready for Railway production reconciliation.';
+  setPreparationOutputs(core, { action: 'reconcile', targetSha, deploymentId, reason });
+  await summarize(core, { action: 'reconcile', targetSha, reason, now });
 }
 
 async function revalidate({ github, context, core, targetSha, deploymentId, now = new Date() }) {
-  const branchHead = await currentStagingHead(github, context);
+  const branchHead = await currentProductionHead(github, context);
   if (branchHead !== targetSha) {
     await setManagedDeploymentStatus({
       github,
       context,
       deploymentId,
       state: 'inactive',
-      description: `Superseded by staging ${branchHead.slice(0, 7)}`
+      description: `Superseded by main ${branchHead.slice(0, 7)}`
     });
     core.setOutput('proceed', 'false');
     core.setOutput('reason', `Superseded by ${branchHead.slice(0, 7)}.`);
     return;
   }
 
-  const windowOpen = isDeploymentWindowOpen(now);
-  const manualOverride = isExplicitManualReconcile(context);
-  if (!windowOpen && !manualOverride) {
-    await setManagedDeploymentStatus({
-      github,
-      context,
-      deploymentId,
-      state: 'queued',
-      description: 'Deferred at the Pacific deployment-window boundary.'
-    });
-    core.setOutput('proceed', 'false');
-    core.setOutput('reason', 'The deployment window closed before Railway reconciliation began.');
-    return;
-  }
-
   core.setOutput('proceed', 'true');
-  core.setOutput(
-    'reason',
-    manualOverride && !windowOpen
-      ? 'The SHA is current and the explicit manual rerun is overriding the staging blackout.'
-      : 'The SHA and Pacific deployment window are still valid.'
-  );
+  core.setOutput('reason', 'The production SHA is still current and eligible for Railway reconciliation.');
 }
 
 module.exports = {
