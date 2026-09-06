@@ -66,6 +66,11 @@ test.describe('PRO-94 store departments and optional sub-sections', () => {
       category: 'Produce',
       storeId: activeStore._id
     });
+    const unassignedItem = await createListItem(page, {
+      name: `PRO94 Unassigned Milk ${suffix}`,
+      category: 'Dairy',
+      unit: 'gal'
+    });
     const movingSnack = await createListItem(page, {
       name: `PRO94 Moving Chips ${suffix}`,
       category: 'Snacks',
@@ -99,6 +104,15 @@ test.describe('PRO-94 store departments and optional sub-sections', () => {
     const activeCard = page.locator(`.react-list-item[data-id="${activeItem.listItem._id}"]`);
     await activeCard.getByRole('button', { name: `Mark as purchased ${activeItem.product.name}` }).click();
     await expect(activeCard).toHaveClass(/checked/);
+
+    const unassignedCard = page.locator(`.react-list-item[data-id="${unassignedItem.listItem._id}"]`);
+    await unassignedCard.getByRole('button', { name: `Open item details for ${unassignedItem.product.name}` }).click();
+    const unassignedDetails = page.getByRole('dialog', { name: unassignedItem.product.name });
+    await unassignedDetails.getByRole('button', { name: /Edit shopping placement/ }).click();
+    const activeStoreEditor = page.getByRole('dialog', { name: 'Department and sub-section' });
+    await expect(activeStoreEditor.getByRole('radio', { name: `This store - ${activeStore.name}` })).toBeChecked();
+    await activeStoreEditor.getByRole('button', { name: 'Close shopping placement' }).click();
+    await unassignedDetails.getByRole('button', { name: 'Close item details' }).click();
 
     const movingCard = page.locator(`.react-list-item[data-id="${movingSnack.listItem._id}"]`);
     await movingCard.getByRole('button', { name: `Mark as purchased ${movingSnack.product.name}` }).click();
