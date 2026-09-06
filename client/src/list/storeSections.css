@@ -88,6 +88,30 @@
   font-weight: 650;
 }
 
+.react-store-section-modal {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.react-store-section-modal form,
+.react-store-section-modal form > label,
+.react-store-section-modal .react-list-modal-heading > div,
+.react-store-placement-scope label,
+.react-store-placement-scope label span,
+.react-store-placement-notice,
+.react-store-placement-notice span,
+.react-store-placement-source {
+  min-width: 0;
+}
+
+.react-store-section-modal .react-list-modal-help,
+.react-store-placement-scope label span,
+.react-store-placement-notice span,
+.react-store-placement-source {
+  overflow-wrap: anywhere;
+}
+
 .react-store-section-modal .react-list-modal-help {
   line-height: 1.45;
 }
