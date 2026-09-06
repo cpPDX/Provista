@@ -208,19 +208,48 @@ async function capturePublicationView(page, filename, anchor) {
   const navBox = await nav.boundingBox();
   if (!navBox) throw new Error('Could not measure fixed bottom navigation');
 
-  const scrollY = await page.evaluate(() => window.scrollY);
   const cropHeight = Math.floor(navBox.y - 12);
   if (cropHeight < 480) {
     throw new Error(`Publication crop is unexpectedly short (${cropHeight}px)`);
   }
 
-  await page.screenshot({
-    path: path.join(OUTPUT_DIR, filename),
-    clip: { x: 0, y: scrollY, width: viewport.width, height: cropHeight },
-    animations: 'disabled'
-  });
+  const viewportPng = await page.screenshot({ fullPage: false, animations: 'disabled' });
+  const dataUrl = `data:image/png;base64,${viewportPng.toString('base64')}`;
+  const croppedDataUrl = await page.evaluate(async ({ src, cropCssHeight, viewportCssWidth }) => {
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    const scale = image.naturalWidth / viewportCssWidth;
+    const cropPixelHeight = Math.round(cropCssHeight * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = cropPixelHeight;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not create image crop context');
+    context.drawImage(
+      image,
+      0,
+      0,
+      image.naturalWidth,
+      cropPixelHeight,
+      0,
+      0,
+      image.naturalWidth,
+      cropPixelHeight
+    );
+    return canvas.toDataURL('image/png');
+  }, { src: dataUrl, cropCssHeight: cropHeight, viewportCssWidth: viewport.width });
 
-  return { width: viewport.width, height: cropHeight, scrollY };
+  await fs.writeFile(
+    path.join(OUTPUT_DIR, filename),
+    Buffer.from(croppedDataUrl.replace(/^data:image\/png;base64,/, ''), 'base64')
+  );
+
+  return {
+    width: viewport.width,
+    height: cropHeight,
+    scrollY: await page.evaluate(() => window.scrollY)
+  };
 }
 
 async function loginDisposable(page) {
