@@ -43,7 +43,7 @@
 .react-list-subsection-heading {
   margin-top: 0.15rem;
   padding: 0.2rem 0.35rem 0.1rem 0.55rem;
-  border-left: 2px solid var(--border-subtle);
+  border-left: 2px solid var(--border);
 }
 
 .react-list-subsection-heading h4 {
@@ -52,6 +52,10 @@
   overflow-wrap: anywhere;
   font-size: 0.78rem;
   font-weight: 750;
+}
+
+.react-list-subsection-heading span {
+  flex: 0 0 auto;
 }
 
 .react-list-subsection-remainder {
