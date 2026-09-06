@@ -1,0 +1,68 @@
+.install-guidance-overlay {
+  z-index: 1200;
+}
+
+.install-guidance-dialog {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.install-guidance-eyebrow {
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.install-guidance-steps {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.install-guidance-steps li {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  align-items: start;
+  gap: 10px;
+}
+
+.install-guidance-steps li > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-subtle);
+  font-weight: 700;
+}
+
+.install-guidance-steps p {
+  margin: 4px 0 0;
+}
+
+.install-guidance-actions {
+  margin-top: 20px;
+}
+
+@media (max-width: 620px) {
+  .install-guidance-dialog {
+    align-self: end;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .install-guidance-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .install-guidance-actions button {
+    min-height: 44px;
+  }
+}

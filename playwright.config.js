@@ -26,11 +26,12 @@ module.exports = defineConfig({
   projects: [
     {
       name: 'chromium-mobile',
+      testIgnore: /pro56PwaInstallGuidance\.spec\.js/,
       use: { ...devices['iPhone 13'], browserName: 'chromium' }
     },
     {
       name: 'webkit-iphone',
-      testMatch: /accessibility\.spec\.js/,
+      testMatch: /(accessibility|pro56PwaInstallGuidance)\.spec\.js/,
       use: { ...devices['iPhone 13'], browserName: 'webkit' }
     }
   ],
