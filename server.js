@@ -41,9 +41,7 @@ app.use('/api/auth/reset-password', passwordLimiter);
 
 const publicDirectory = path.join(__dirname, 'public');
 const reactAppIndex = path.join(publicDirectory, 'react-preview', 'index.html');
-const legacyAppIndex = path.join(publicDirectory, 'index.html');
 const landingTemplate = fs.readFileSync(path.join(publicDirectory, 'landing.html'), 'utf8');
-const legacyAppTemplate = fs.readFileSync(legacyAppIndex, 'utf8');
 const SEO_TITLE = 'Provista — Shared Grocery List, Meal Planner & Pantry Tracker';
 const SEO_DESCRIPTION = 'A shared grocery list and meal planning app for households. Organize shopping by store section, track pantry needs, and keep grocery spending together.';
 
@@ -111,7 +109,7 @@ app.get('/landing.html', (req, res) => {
 
 app.get('/robots.txt', (req, res) => {
   const origin = resolvePublicOrigin(req);
-  const lines = ['User-agent: *', 'Allow: /', 'Disallow: /app', 'Disallow: /legacy-app', 'Disallow: /api/', 'Disallow: /react-preview/'];
+  const lines = ['User-agent: *', 'Allow: /', 'Disallow: /app', 'Disallow: /api/', 'Disallow: /react-preview/'];
   if (origin) lines.push(`Sitemap: ${new URL('/sitemap.xml', origin).href}`);
   res.type('text/plain').send(`${lines.join('\n')}\n`);
 });
@@ -165,18 +163,10 @@ app.get('/reset-password', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-function serveLegacyApp(req, res) {
-  const html = legacyAppTemplate.replace(
-    '</body>',
-    '  <script src="/js/reactHomeBridge.js"></script>\n</body>'
-  );
-  return res.type('html').send(html);
-}
-
 function serveReactApp(req, res) {
-  // Development/test environments can still run the legacy app before the
-  // client build exists. Production and CI build React before starting.
-  if (!fs.existsSync(reactAppIndex)) return serveLegacyApp(req, res);
+  if (!fs.existsSync(reactAppIndex)) {
+    return res.status(503).type('text/plain').send('Provista client build is unavailable');
+  }
   return res.sendFile(reactAppIndex);
 }
 
@@ -187,8 +177,40 @@ function serveReactPreview(req, res) {
   return res.sendFile(reactAppIndex);
 }
 
+function legacyCompatibilityDestination(req) {
+  if (!req.query.tab && req.query.legacy !== '1') return null;
+
+  const tab = String(req.query.tab || 'home');
+  const section = String(req.query.section || '');
+  const action = String(req.query.action || '');
+
+  if (tab === 'more') {
+    if (action === 'csv-import') return '/app/more/import';
+    if (action === 'app-tour') return '/app/more';
+    const moreDestinations = {
+      insights: '/app/more/insights',
+      account: '/app/more/account',
+      household: '/app/more/household',
+      items: '/app/more/products',
+      stores: '/app/more/stores',
+      about: '/app/more/help'
+    };
+    return moreDestinations[section] || '/app/more';
+  }
+
+  const tabDestinations = {
+    home: '/app',
+    prices: '/app/more/insights/prices',
+    list: '/app/list',
+    spend: '/app/more/insights/spending',
+    inventory: '/app/pantry',
+    'meal-plan': '/app/plan'
+  };
+  return tabDestinations[tab] || '/app';
+}
+
 // The public root explains Provista before asking someone to create an account.
-// Returning users with a valid session now enter the migrated React Home.
+// Returning users with a valid session enter the React Home shell.
 app.get('/', (req, res) => {
   try {
     jwt.verify(req.cookies?.token, process.env.JWT_SECRET);
@@ -198,16 +220,13 @@ app.get('/', (req, res) => {
   }
 });
 
-// `/app` without a feature deep link is the migrated React Home. During the
-// strangler migration, explicit `?tab=` links continue to open the legacy
-// feature renderer until that destination moves to React.
+// Preserve old migration-era bookmarks without rendering the retired client.
 app.get('/app', appShellLimiter, (req, res) => {
-  if (req.query.tab || req.query.legacy === '1') return serveLegacyApp(req, res);
+  const compatibilityDestination = legacyCompatibilityDestination(req);
+  if (compatibilityDestination) return res.redirect(308, compatibilityDestination);
   return serveReactApp(req, res);
 });
 
-// Migrated authenticated feature routes. The matching legacy `?tab=` deep
-// links remain available until PRO-56 retires the compatibility renderer.
 app.get('/app/list', appShellLimiter, serveReactApp);
 app.get('/app/pantry', appShellLimiter, serveReactApp);
 app.get('/app/plan', appShellLimiter, serveReactApp);
@@ -221,10 +240,10 @@ app.get('/app/more/import', appShellLimiter, serveReactApp);
 app.get('/app/more/insights', appShellLimiter, serveReactApp);
 app.get('/app/more/insights/prices', appShellLimiter, serveReactApp);
 app.get('/app/more/insights/spending', appShellLimiter, serveReactApp);
+app.get('/app/*', appShellLimiter, serveReactApp);
 
-// Compatibility surface remains available while scanner and legacy
-// authenticated JavaScript are retired under PRO-56 / PRO-21.
-app.get('/legacy-app', serveLegacyApp);
+// Migration-era direct links now converge on the React shell.
+app.get('/legacy-app', (req, res) => res.redirect(308, '/app'));
 
 // Vite's output lives under public/react-preview, but static directory indexes are
 // intentionally disabled for the rest of Provista. Serve only extensionless
@@ -237,9 +256,8 @@ app.get('/react-preview/*', (req, res, next) => {
   return serveReactPreview(req, res);
 });
 
-// SPA fallback
 app.get('*', (req, res) => {
-  res.sendFile(legacyAppIndex);
+  res.status(404).type('text/plain').send('Not found');
 });
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/grocerytracker';
