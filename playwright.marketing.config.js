@@ -18,6 +18,7 @@ module.exports = defineConfig({
     browserName: 'chromium',
     baseURL,
     headless: true,
+    viewport: { width: 390, height: 844 },
     timezoneId: 'America/Los_Angeles',
     locale: 'en-US',
     actionTimeout: 15000,
