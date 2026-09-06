@@ -102,7 +102,7 @@ test.describe('PRO-94 store departments and optional sub-sections', () => {
 
     const movingCard = page.locator(`.react-list-item[data-id="${movingSnack.listItem._id}"]`);
     await movingCard.getByRole('button', { name: `Mark as purchased ${movingSnack.product.name}` }).click();
-    const confirmation = page.getByRole('dialog');
+    const confirmation = page.getByRole('alertdialog');
     await expect(confirmation).toContainText(`This item is planned for ${plannedStore.name}.`);
     await confirmation.getByRole('button', { name: 'Buy here instead' }).click();
 
