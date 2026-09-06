@@ -4,13 +4,17 @@
   min-width: 0;
 }
 
-.react-list-section-heading {
+.react-list-section-heading,
+.react-list-subsection-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.35rem 0.15rem 0;
   color: var(--text-muted);
+}
+
+.react-list-section-heading {
+  padding: 0.35rem 0.15rem 0;
 }
 
 .react-list-section-heading h3 {
@@ -23,14 +27,50 @@
   text-transform: uppercase;
 }
 
-.react-list-section-heading span {
+.react-list-section-heading span,
+.react-list-subsection-heading span {
   flex: 0 0 auto;
   font-size: 0.75rem;
   font-weight: 700;
 }
 
+.react-list-subsection {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.react-list-subsection-heading {
+  margin-top: 0.15rem;
+  padding: 0.2rem 0.35rem 0.1rem 0.55rem;
+  border-left: 2px solid var(--border);
+}
+
+.react-list-subsection-heading h4 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.react-list-subsection-heading span {
+  flex: 0 0 auto;
+}
+
+.react-list-subsection-remainder {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  margin-top: 0.15rem;
+}
+
 .react-list-section-control {
-  min-height: 36px;
+  display: grid;
+  gap: 0.2rem;
+  align-items: center;
+  min-height: 44px;
+  width: 100%;
   margin: 0.1rem 0;
   border: 0;
   background: transparent;
@@ -42,12 +82,123 @@
   text-align: left;
 }
 
+.react-list-section-control small {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.react-store-section-modal {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.react-store-section-modal form,
+.react-store-section-modal form > label,
+.react-store-section-modal .react-list-modal-heading > div,
+.react-store-placement-scope label,
+.react-store-placement-scope label span,
+.react-store-placement-notice,
+.react-store-placement-notice span,
+.react-store-placement-source {
+  min-width: 0;
+}
+
+.react-store-section-modal .react-list-modal-heading h2,
+.react-store-section-modal .react-list-modal-heading p,
+.react-store-section-modal .react-list-modal-help,
+.react-store-placement-scope label span,
+.react-store-placement-notice span,
+.react-store-placement-source {
+  overflow-wrap: anywhere;
+}
+
 .react-store-section-modal .react-list-modal-help {
   line-height: 1.45;
 }
 
+.react-store-placement-scope {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.react-store-placement-scope legend {
+  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.react-store-placement-scope label {
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  min-height: 44px;
+}
+
+.react-store-placement-scope input[type='radio'] {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+}
+
+.react-store-placement-clear {
+  min-height: 44px;
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.react-store-placement-notice {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.react-store-placement-notice span {
+  min-width: 0;
+}
+
+.react-store-placement-notice button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  padding: 0 0.25rem;
+  color: var(--accent-strong);
+  font: inherit;
+  font-weight: 800;
+}
+
+.react-store-placement-source {
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 @media (max-width: 620px) {
-  .react-list-section-heading {
+  .react-list-section-heading,
+  .react-list-subsection-heading {
+    align-items: flex-start;
+  }
+
+  .react-store-placement-notice {
     align-items: flex-start;
   }
 }

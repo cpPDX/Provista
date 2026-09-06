@@ -142,7 +142,7 @@ test.describe('React Shopping List migration', () => {
     }).toBe(store._id);
   });
 
-  test('groups each store by familiar sections and remembers a typed custom section', async ({ page }) => {
+  test('groups each store by departments and remembers a typed custom department', async ({ page }) => {
     const suffix = `${Date.now()}-${test.info().workerIndex}`;
     const storeResponse = await page.request.post('/api/stores', { data: { name: `React Section Store ${suffix}` } });
     expect(storeResponse.ok()).toBeTruthy();
@@ -159,17 +159,18 @@ test.describe('React Shopping List migration', () => {
     const storeGroup = page.getByRole('region', { name: `Suggested stop ${store.name}` });
     await expect(storeGroup.locator('.react-list-section-group[data-section="Produce"]')).toContainText(produce.name);
     await expect(storeGroup.locator('.react-list-section-group[data-section="Dairy & Eggs"]')).toContainText(dairy.name);
-    await expect(storeGroup.locator('.react-list-section-group[data-section="Pantry"]')).toContainText(pantry.name);
+    await expect(storeGroup.locator('.react-list-section-group[data-section="Pantry / Dry Grocery"]')).toContainText(pantry.name);
 
     const dairyCard = page.locator('.react-list-item', { hasText: dairy.name });
     await dairyCard.getByRole('button', { name: `Open item details for ${dairy.name}` }).click();
     const details = page.getByRole('dialog', { name: dairy.name, exact: true });
-    await details.getByRole('button', { name: `Edit store section for ${dairy.name}: Dairy & Eggs` }).click();
-    const dialog = page.getByRole('dialog', { name: 'Store section', exact: true });
-    const input = dialog.getByRole('combobox', { name: 'Section' });
+    await details.getByRole('button', { name: /Edit shopping placement/ }).click();
+    const dialog = page.getByRole('dialog', { name: 'Department and sub-section', exact: true });
+    await expect(dialog.getByRole('radio', { name: `This store - ${store.name}` })).toBeChecked();
+    const input = dialog.getByRole('combobox', { name: 'Department' });
     await expect(input).toHaveAttribute('aria-autocomplete', 'list');
     await input.fill('International Foods');
-    await dialog.getByRole('button', { name: 'Save section' }).click();
+    await dialog.getByRole('button', { name: 'Save placement' }).click();
 
     await expect(dialog).toHaveCount(0);
     await expect(storeGroup.locator('.react-list-section-group[data-section="International Foods"]')).toContainText(dairy.name);
@@ -179,7 +180,7 @@ test.describe('React Shopping List migration', () => {
     await expect(reloadedGroup.locator('.react-list-section-group[data-section="International Foods"]')).toContainText(dairy.name);
 
     const sections = await page.request.get('/api/item-sections').then(response => response.json());
-    expect(sections.suggestions).toContain('International Foods');
+    expect(sections.departmentSuggestions).toContain('International Foods');
   });
 
   test('shows optimistic check-off feedback before a slow write finishes', async ({ page }) => {
