@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthProvider';
 import { HomePage } from '../home/HomePage';
 import '../home/home.css';
+import { OfflineSyncRecovery } from '../list/OfflineSyncRecovery';
 import { ShoppingListPage } from '../list/ShoppingListPage';
 import { PantryPage } from '../pantry/PantryPage';
 import { PlanRoute } from '../plan/PlanRoute';
@@ -135,7 +136,7 @@ export function AppShell() {
 
       <main className="shell-content">
         {currentTab === 'list'
-          ? <ShoppingListPage />
+          ? <><OfflineSyncRecovery /><ShoppingListPage /></>
           : currentTab === 'inventory'
             ? <PantryPage />
             : currentTab === 'meal-plan'
