@@ -158,5 +158,14 @@ jobs:
       - name: Install Chromium and WebKit
         run: npx playwright install --with-deps chromium webkit
 
-      - name: Run critical React household, offline/PWA, Plan, List, Pantry, and mobile accessibility tests
-        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/accessibility.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js tests/e2e/reactPantry.spec.js tests/e2e/reactPlan.spec.js tests/e2e/pro56LegacyRetirement.spec.js tests/e2e/pro56PriceParity.spec.js tests/e2e/pro56OfflineSyncRecovery.spec.js tests/e2e/pro56PwaInstallGuidance.spec.js tests/e2e/pro56LegacyDeletion.spec.js tests/e2e/pro60ListProvenance.spec.js tests/e2e/pro61ProducePlanning.spec.js tests/e2e/pro63WorkingState.spec.js tests/e2e/pro64CrossWorkflow.spec.js tests/e2e/pro72Plan.spec.js tests/e2e/pro72MobileReflow.spec.js tests/e2e/pro21Barcode.spec.js tests/e2e/pro65StoreLoading.spec.js tests/e2e/pro75ListContext.spec.js tests/e2e/pro76Reconciliation.spec.js tests/e2e/pro81HomeState.spec.js tests/e2e/pro82ListDetails.spec.js tests/e2e/pro83ManageProducts.spec.js tests/e2e/reactOnboarding.spec.js
+      - name: Run final legacy deletion regression
+        run: npx playwright test tests/e2e/pro56LegacyDeletion.spec.js
+
+      - name: Run React accessibility regression
+        run: npx playwright test tests/e2e/accessibility.spec.js
+
+      - name: Run PRO-56 parity, offline recovery, and PWA regressions
+        run: npx playwright test tests/e2e/pro56LegacyRetirement.spec.js tests/e2e/pro56PriceParity.spec.js tests/e2e/pro56OfflineSyncRecovery.spec.js tests/e2e/pro56PwaInstallGuidance.spec.js
+
+      - name: Run overlapping React workflow regressions
+        run: npx playwright test tests/e2e/auth.spec.js tests/e2e/home.spec.js tests/e2e/reactShell.spec.js tests/e2e/reactShoppingList.spec.js tests/e2e/reactPantry.spec.js tests/e2e/reactPlan.spec.js tests/e2e/pro60ListProvenance.spec.js tests/e2e/pro61ProducePlanning.spec.js tests/e2e/pro63WorkingState.spec.js tests/e2e/pro64CrossWorkflow.spec.js tests/e2e/pro72Plan.spec.js tests/e2e/pro72MobileReflow.spec.js tests/e2e/pro21Barcode.spec.js tests/e2e/pro65StoreLoading.spec.js tests/e2e/pro75ListContext.spec.js tests/e2e/pro76Reconciliation.spec.js tests/e2e/pro81HomeState.spec.js tests/e2e/pro82ListDetails.spec.js tests/e2e/pro83ManageProducts.spec.js tests/e2e/reactOnboarding.spec.js
