@@ -233,9 +233,12 @@ test.describe('PRO-56 failed List sync recovery', () => {
     await expect(page.getByText('Your list is empty')).toBeVisible();
   });
 
-  test('remaps follow-up writes from an offline-created local id to the real server id', async ({ page }) => {
+  test('remaps follow-up writes from an offline-created local id to the real server id', async ({ page, context }) => {
     const item = await createCatalogItem(page, `PRO-56 Local Remap ${Date.now()}`);
     await page.goto('/app/list');
+
+    await context.setOffline(true);
+    await expect(page.locator('.react-list-offline')).toBeVisible();
 
     const localId = `local-pro56-${Date.now()}`;
     const now = Date.now();
@@ -281,9 +284,7 @@ test.describe('PRO-56 failed List sync recovery', () => {
       ]
     });
 
-    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
-    await expect(page.locator('.react-list-offline')).toBeVisible();
-    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await context.setOffline(false);
     await expect(page.locator('.react-list-offline')).toHaveCount(0);
 
     await expect.poll(async () => {
